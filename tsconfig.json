@@ -1,0 +1,45 @@
+// Type checking configuration. Nothing is compiled from here.
+//
+// The project is free of type errors: `npm run typecheck` (tsc --noEmit) is part of the
+// CI pipeline and must stay green. strict and checkJs are enabled, the types are declared
+// with JSDoc - see the AdapterError and DssResponse typedefs in lib/configUtils.js.
+{
+    "compileOnSave": true,
+    "compilerOptions": {
+        // do not compile anything, this file is just to configure type checking
+        "noEmit": true,
+
+        // check JS files
+        "allowJs": true,
+        "checkJs": true,
+
+        "module": "node16",
+        "moduleResolution": "node16",
+        // this is necessary for the automatic typing of the adapter config
+        "resolveJsonModule": true,
+
+        // The types of the dependencies are not part of this project. Checking them would
+        // only report errors that cannot be fixed here - the project code itself stays
+        // fully checked.
+        "skipLibCheck": true,
+
+        // Without this the mocha/chai globals of the tests are not found
+        "types": ["node", "mocha", "chai"],
+
+        // Set this to false if you want to disable the very strict rules (not recommended)
+        "strict": true,
+        // Or enable some of those features for more fine-grained control
+        // "strictNullChecks": true,
+        // "strictPropertyInitialization": true,
+        // "strictBindCallApply": true,
+        "noImplicitAny": false,
+        // "noUnusedLocals": true,
+        // "noUnusedParameters": true,
+
+        // Node 22 is the minimum supported runtime, so the ES2022 library (Error.cause,
+        // Array.at, ...) is available
+        "target": "es2022"
+    },
+    "include": ["**/*.js", "**/*.d.ts"],
+    "exclude": ["node_modules/**", "admin/**"]
+}

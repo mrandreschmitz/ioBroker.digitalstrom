@@ -1,0 +1,141 @@
+# This is a composition of lint and test scripts
+# Make sure to update this file along with the others
+
+name: Test and Release
+
+# Run this job on all pushes and pull requests
+# as well as tags with a semantic version
+on:
+  push:
+    branches:
+      - '*'
+    tags:
+      # normal versions
+      - "v?[0-9]+.[0-9]+.[0-9]+"
+      # pre-releases
+      - "v?[0-9]+.[0-9]+.[0-9]+-**"
+  pull_request: {}
+
+jobs:
+  # Performs quick checks before the expensive test runs
+  check-and-lint:
+    if: contains(github.event.head_commit.message, '[skip ci]') == false
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [22.x]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Lint code
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Test package files
+        run: npm run test:package
+
+  # Runs adapter tests on all supported node versions and OSes
+  adapter-tests:
+    if: contains(github.event.head_commit.message, '[skip ci]') == false
+
+    needs: [check-and-lint]
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        node-version: [22.x, 24.x]
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:js
+
+      - name: Run integration tests # (linux/osx)
+        if: startsWith(runner.OS, 'windows') == false
+        run: DEBUG=testing:* npm run test:integration
+      - name: Run integration tests # (windows)
+        if: startsWith(runner.OS, 'windows')
+        run: set DEBUG=testing:* & npm run test:integration
+
+  # Deploys the final package to NPM
+  deploy:
+    needs: [check-and-lint, adapter-tests]
+
+    # Trigger this step only when a commit on master is tagged with a version number
+    if: |
+      contains(github.event.head_commit.message, '[skip ci]') == false &&
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    # Write permission is required to create the Github release,
+    # id-token is required for npm Trusted Publishing (OIDC)
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          registry-url: https://registry.npmjs.org
+
+      - name: Extract the version and commit body from the tag
+        id: extract_release
+        # The body may be multiline, therefore newlines and % need to be escaped
+        run: |
+          VERSION="${{ github.ref }}"
+          VERSION=${VERSION##*/v}
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          EOF_MARKER=$(openssl rand -hex 8)
+          {
+            echo "BODY<<$EOF_MARKER"
+            git show -s --format=%b
+            echo "$EOF_MARKER"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      # Requires npm Trusted Publishing (OIDC) to be configured for this package on npmjs.com:
+      # package settings -> Trusted Publisher -> GitHub Actions, with owner "mrandreschmitz",
+      # repository "ioBroker.digitalstrom" and workflow file "test-and-release.yml".
+      # Without that setup this step fails - classic npm tokens were revoked by npm in 2025.
+      # The whole deploy job only runs for a pushed tag "v<version>".
+      - name: Publish package to npm
+        run: npm publish --provenance --access public
+
+      - name: Create Github Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release v${{ steps.extract_release.outputs.VERSION }}
+          draft: false
+          # Prerelease versions create prereleases on Github
+          prerelease: ${{ contains(steps.extract_release.outputs.VERSION, '-') }}
+          body: ${{ steps.extract_release.outputs.BODY }}
