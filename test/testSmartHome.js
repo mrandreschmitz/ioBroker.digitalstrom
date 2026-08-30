@@ -302,11 +302,14 @@ describe('Meter values through the Smart Home API', () => {
     function createStructure(overrides) {
         const written = [];
         const warnings = [];
+        const infoStates = [];
         const struct = /** @type {any} */ (
             new DSSStructure({
                 dss: {},
                 dssQueue: {},
                 adapter: {
+                    isStopping: () => false,
+                    setState: (id, value, ack) => infoStates.push({ id, value, ack }),
                     log: {
                         silly: () => {},
                         debug: () => {},
@@ -322,6 +325,7 @@ describe('Meter values through the Smart Home API', () => {
         struct.setStateSafe = (id, value) => written.push({ id, value });
         struct.written = written;
         struct.warnings = warnings;
+        struct.infoStates = infoStates;
         return struct;
     }
 
@@ -341,7 +345,9 @@ describe('Meter values through the Smart Home API', () => {
 
         struct.updateMeterData((failed, total) => {
             expect(failed, 'no circuit is missing').to.equal(0);
-            expect(total, 'only circuits with a meter count').to.equal(2);
+            // Der Callback speist info.connection. Ein Zyklus, der nur die neue API benutzt
+            // hat, darf ueber die klassische nichts behaupten - deshalb (0, 0).
+            expect(total, 'a Smart Home only cycle judges nothing about the classic API').to.equal(0);
             expect(struct.written).to.deep.equal([
                 { id: 'devices.dsm-a.PowerConsumption', value: 30 },
                 // 3600000 Ws = 1 kWh, exactly the conversion of the classic path
@@ -409,6 +415,82 @@ describe('Meter values through the Smart Home API', () => {
         struct.updateMeterData(() => {
             expect(classicCalls, 'an unusable answer must not silently write nothing').to.equal(1);
             expect(struct.warnings.join(' ')).to.contain('no value for any known circuit');
+            done();
+        });
+    });
+
+    it('reports which API delivered the values', done => {
+        const struct = createStructure({
+            smartHome: {
+                getMeteringValues: async () => ({
+                    values: [
+                        { id: 'dsm-dsm-a-power', attributes: { value: 30 } },
+                        { id: 'dsm-dsm-a-energy', attributes: { value: 3600000 } },
+                        { id: 'dsm-dsm-b-power', attributes: { value: 21 } },
+                        { id: 'dsm-dsm-b-energy', attributes: { value: 7200000 } },
+                    ],
+                }),
+            },
+        });
+        struct.updateMeterData(() => {
+            expect(struct.infoStates).to.deep.equal([{ id: 'info.meteringApi', value: 'smarthome', ack: true }]);
+            done();
+        });
+    });
+
+    // Der Rueckfall darf nicht still passieren - sonst sieht es aus, als liefe der Adapter
+    // weiter auf der neuen API, waehrend in Wahrheit der alte Weg arbeitet
+    it('reports the fallback to the classic API', done => {
+        const struct = createStructure({
+            smartHome: {
+                getMeteringValues: async () => {
+                    throw new Error('gone');
+                },
+            },
+            // Asynchron wie die echte Queue
+            dssQueue: {
+                pushQueryQueue: (dsuid, name, request, prio, cb) =>
+                    setImmediate(() => cb(null, { ok: true, result: { consumption: 5, meterValue: 3600000 } })),
+            },
+        });
+        struct.updateMeterData((failed, total) => {
+            expect(struct.infoStates).to.deep.equal([{ id: 'info.meteringApi', value: 'classic', ack: true }]);
+            expect(struct.written, 'the classic path writes two values per circuit').to.have.lengthOf(4);
+            // Ein gescheiterter Smart-Home-Versuch plus vier klassische Requests
+            expect(total, 'the failed attempt counts as a request').to.equal(5);
+            expect(failed, 'only the Smart Home attempt failed').to.equal(1);
+            done();
+        });
+    });
+
+    it('reports a change of path only once', () => {
+        const struct = createStructure({ smartHome: null });
+        struct.reportMeteringApi('classic');
+        struct.reportMeteringApi('classic');
+        struct.reportMeteringApi('smarthome');
+        struct.reportMeteringApi('smarthome');
+        expect(struct.infoStates.map(entry => entry.value)).to.deep.equal(['classic', 'smarthome']);
+    });
+
+    // Bei einem teilweisen Erfolg arbeitet der klassische Weg mit - dann ist "classic" die
+    // ehrlichere Auskunft als "smarthome"
+    it('reports classic when only some circuits came from the new API', done => {
+        const struct = createStructure({
+            smartHome: {
+                getMeteringValues: async () => ({
+                    values: [
+                        { id: 'dsm-dsm-a-power', attributes: { value: 30 } },
+                        { id: 'dsm-dsm-a-energy', attributes: { value: 3600000 } },
+                    ],
+                }),
+            },
+            dssQueue: {
+                pushQueryQueue: (dsuid, name, request, prio, cb) =>
+                    setImmediate(() => cb(null, { ok: true, result: { consumption: 7, meterValue: 7200000 } })),
+            },
+        });
+        struct.updateMeterData(() => {
+            expect(struct.infoStates.map(entry => entry.value)).to.deep.equal(['classic']);
             done();
         });
     });

@@ -1,8 +1,21 @@
 {
     "common": {
         "name": "digitalstrom",
-        "version": "2.4.16",
+        "version": "2.4.17",
         "news": {
+            "2.4.17": {
+                "en": "New state info.meteringApi shows which API delivered the last meter reading - classic or smarthome. A cycle that only used the Smart Home API no longer claims anything about the classic API in info.connection, because it did not touch it.",
+                "de": "Neuer State info.meteringApi zeigt, welche API die letzten Zählerwerte geliefert hat - classic oder smarthome. Ein Zyklus, der nur die neue API benutzt hat, behauptet in info.connection nichts mehr über die klassische API, weil er sie gar nicht angefasst hat.",
+                "ru": "New state info.meteringApi shows which API delivered the last meter reading - classic or smarthome. A cycle that only used the Smart Home API no longer claims anything about the classic API in info.connection, because it did not touch it.",
+                "pt": "New state info.meteringApi shows which API delivered the last meter reading - classic or smarthome. A cycle that only used the Smart Home API no longer claims anything about the classic API in info.connection, because it did not touch it.",
+                "nl": "New state info.meteringApi shows which API delivered the last meter reading - classic or smarthome. A cycle that only used the Smart Home API no longer claims anything about the classic API in info.connection, because it did not touch it.",
+                "fr": "New state info.meteringApi shows which API delivered the last meter reading - classic or smarthome. A cycle that only used the Smart Home API no longer claims anything about the classic API in info.connection, because it did not touch it.",
+                "it": "New state info.meteringApi shows which API delivered the last meter reading - classic or smarthome. A cycle that only used the Smart Home API no longer claims anything about the classic API in info.connection, because it did not touch it.",
+                "es": "New state info.meteringApi shows which API delivered the last meter reading - classic or smarthome. A cycle that only used the Smart Home API no longer claims anything about the classic API in info.connection, because it did not touch it.",
+                "pl": "New state info.meteringApi shows which API delivered the last meter reading - classic or smarthome. A cycle that only used the Smart Home API no longer claims anything about the classic API in info.connection, because it did not touch it.",
+                "zh-cn": "New state info.meteringApi shows which API delivered the last meter reading - classic or smarthome. A cycle that only used the Smart Home API no longer claims anything about the classic API in info.connection, because it did not touch it.",
+                "uk": "New state info.meteringApi shows which API delivered the last meter reading - classic or smarthome. A cycle that only used the Smart Home API no longer claims anything about the classic API in info.connection, because it did not touch it."
+            },
             "2.4.16": {
                 "en": "The optional Smart Home meter path is now robust: incomplete or invalid value pairs fall back only for the affected circuits, failed API attempts use a bounded 5-60 minute backoff, and the client-side key request is aborted cleanly on shutdown. A newly entered App-Token can be used before saving.",
                 "de": "Der optionale Smart-Home-Zählerpfad ist jetzt robust: Unvollständige oder ungültige Wertepaare werden nur für die betroffenen Klemmen klassisch nachgelesen, fehlgeschlagene API-Versuche erhalten einen begrenzten Backoff von 5 bis 60 Minuten und die clientseitige Key-Anfrage wird beim Beenden sauber abgebrochen. Ein neu eingegebener App-Token kann schon vor dem Speichern verwendet werden.",
@@ -80,32 +93,6 @@
                 "pl": "The configuration dialog of 2.4.10 could not connect to ioBroker and only reported \"Socket connection could not be initialized\". The page did not load the socket library of the admin, which @iobroker/socket-client expects as a global. It is loaded now, and a test checks for it.",
                 "zh-cn": "The configuration dialog of 2.4.10 could not connect to ioBroker and only reported \"Socket connection could not be initialized\". The page did not load the socket library of the admin, which @iobroker/socket-client expects as a global. It is loaded now, and a test checks for it.",
                 "uk": "The configuration dialog of 2.4.10 could not connect to ioBroker and only reported \"Socket connection could not be initialized\". The page did not load the socket library of the admin, which @iobroker/socket-client expects as a global. It is loaded now, and a test checks for it."
-            },
-            "2.4.10": {
-                "en": "New configuration dialog, a React application of its own instead of jsonConfig: light background, raised cards, a header with the icon and tabs with icons. The app token can be revealed and states whether it is stored. All eleven languages were taken over. Binary inputs now name their values: inactive/active, and closed/open/tilted for a window handle.",
-                "de": "Neue Konfigurationsoberfläche als eigene React-Anwendung statt jsonConfig: heller Hintergrund, abgesetzte Karten, Kopfbereich mit Symbol und Reiter mit Symbolen. Der App-Token lässt sich aufdecken und zeigt an, ob er gespeichert ist. Alle elf Sprachen wurden übernommen. Binäreingänge benennen ihre Werte jetzt: inactive/active, bei einem Fenstergriff closed/open/tilted.",
-                "ru": "New configuration dialog, a React application of its own instead of jsonConfig: light background, raised cards, a header with the icon and tabs with icons. The app token can be revealed and states whether it is stored. All eleven languages were taken over. Binary inputs now name their values: inactive/active, and closed/open/tilted for a window handle.",
-                "pt": "New configuration dialog, a React application of its own instead of jsonConfig: light background, raised cards, a header with the icon and tabs with icons. The app token can be revealed and states whether it is stored. All eleven languages were taken over. Binary inputs now name their values: inactive/active, and closed/open/tilted for a window handle.",
-                "nl": "New configuration dialog, a React application of its own instead of jsonConfig: light background, raised cards, a header with the icon and tabs with icons. The app token can be revealed and states whether it is stored. All eleven languages were taken over. Binary inputs now name their values: inactive/active, and closed/open/tilted for a window handle.",
-                "fr": "New configuration dialog, a React application of its own instead of jsonConfig: light background, raised cards, a header with the icon and tabs with icons. The app token can be revealed and states whether it is stored. All eleven languages were taken over. Binary inputs now name their values: inactive/active, and closed/open/tilted for a window handle.",
-                "it": "New configuration dialog, a React application of its own instead of jsonConfig: light background, raised cards, a header with the icon and tabs with icons. The app token can be revealed and states whether it is stored. All eleven languages were taken over. Binary inputs now name their values: inactive/active, and closed/open/tilted for a window handle.",
-                "es": "New configuration dialog, a React application of its own instead of jsonConfig: light background, raised cards, a header with the icon and tabs with icons. The app token can be revealed and states whether it is stored. All eleven languages were taken over. Binary inputs now name their values: inactive/active, and closed/open/tilted for a window handle.",
-                "pl": "New configuration dialog, a React application of its own instead of jsonConfig: light background, raised cards, a header with the icon and tabs with icons. The app token can be revealed and states whether it is stored. All eleven languages were taken over. Binary inputs now name their values: inactive/active, and closed/open/tilted for a window handle.",
-                "zh-cn": "New configuration dialog, a React application of its own instead of jsonConfig: light background, raised cards, a header with the icon and tabs with icons. The app token can be revealed and states whether it is stored. All eleven languages were taken over. Binary inputs now name their values: inactive/active, and closed/open/tilted for a window handle.",
-                "uk": "New configuration dialog, a React application of its own instead of jsonConfig: light background, raised cards, a header with the icon and tabs with icons. The app token can be revealed and states whether it is stored. All eleven languages were taken over. Binary inputs now name their values: inactive/active, and closed/open/tilted for a window handle."
-            },
-            "2.4.9": {
-                "en": "Fixed an invalid admin configuration: the two dividers of the new layout carried a colour of the digitalSTROM palette, but the schema only allows \"primary\" and \"secondary\" there. admin refused the whole jsonConfig with \"digitalstrom has an invalid jsonConfig\" and fell back to a generic dialog. The colour now lives in style/darkStyle. Two tests check the enum constrained properties of the schema from now on\nThe release workflow no longer tries to publish to npm - a pushed tag only creates the GitHub release, with the message of the annotated tag as its text",
-                "de": "Ungültige Admin-Konfiguration behoben: Die beiden Trennlinien des neuen Layouts trugen eine Farbe aus der digitalSTROM-Palette, das Schema erlaubt dort aber nur \"primary\" und \"secondary\". Admin wies die gesamte jsonConfig mit \"digitalstrom has an invalid jsonConfig\" zurück und fiel auf einen generischen Dialog zurück. Die Farbe steht jetzt in style/darkStyle. Zwei Tests prüfen künftig die enum-beschränkten Eigenschaften des Schemas\nDer Release-Workflow versucht nicht mehr auf npm zu veröffentlichen - ein gepushter Tag erzeugt nur noch das GitHub-Release, mit der Nachricht des annotierten Tags als Text",
-                "ru": "Исправлена недопустимая конфигурация админки: цвет разделителей теперь задаётся через style, а не через ограниченное схемой свойство color",
-                "pt": "Corrigida a configuração inválida do admin: a cor dos separadores passa a estar em style em vez da propriedade color limitada pelo esquema",
-                "nl": "Ongeldige adminconfiguratie hersteld: de kleur van de scheidingslijnen staat nu in style in plaats van de door het schema beperkte color-eigenschap",
-                "fr": "Configuration d'administration invalide corrigée : la couleur des séparateurs est désormais dans style et non dans la propriété color limitée par le schéma",
-                "it": "Corretta la configurazione admin non valida: il colore dei divisori ora è in style e non nella proprietà color limitata dallo schema",
-                "es": "Corregida la configuración de admin no válida: el color de los separadores ahora está en style y no en la propiedad color limitada por el esquema",
-                "pl": "Naprawiona nieprawidłowa konfiguracja admina: kolor separatorów jest teraz w style, a nie we właściwości color ograniczonej przez schemat",
-                "zh-cn": "修复了无效的管理配置：分隔线的颜色改为通过 style 设置，而不是受架构限制的 color 属性",
-                "uk": "Виправлено недійсну конфігурацію адмінки: колір роздільників тепер задається через style, а не через обмежену схемою властивість color"
             }
         },
         "titleLang": {
@@ -215,6 +202,23 @@
                 "read": true,
                 "write": false,
                 "def": false
+            },
+            "native": {}
+        },
+        {
+            "_id": "info.meteringApi",
+            "type": "state",
+            "common": {
+                "role": "text",
+                "name": "API used for the last meter reading",
+                "type": "string",
+                "read": true,
+                "write": false,
+                "def": "",
+                "states": {
+                    "classic": "classic JSON API",
+                    "smarthome": "new Smart Home API"
+                }
             },
             "native": {}
         }

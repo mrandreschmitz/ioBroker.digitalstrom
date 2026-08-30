@@ -50,3 +50,19 @@ kWh = value / 3600 / 1000
 
 This path should remain marked experimental until it has been compared on additional dSS hardware and
 firmware versions.
+
+## Which API is working
+
+`info.meteringApi` holds the API that delivered the last meter reading:
+
+| value | meaning |
+| --- | --- |
+| `smarthome` | every circuit came from the Smart Home API, one request per cycle |
+| `classic` | the classic API did the work, either completely or for the circuits the new API left out |
+
+The state changes only when the path changes, so it can be charted without noise. The classic API is
+what serves everything else, so as long as devices, scenes and sensors keep updating it is working.
+
+`info.connection` is deliberately NOT set by a cycle that only used the Smart Home API: such a cycle
+sends no classic request and therefore cannot testify about it. A dSS that is really unreachable still
+turns the connection off, because the new API fails as well and the classic fallback reports it.
