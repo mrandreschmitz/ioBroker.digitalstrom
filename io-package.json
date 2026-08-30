@@ -1,8 +1,21 @@
 {
     "common": {
         "name": "digitalstrom",
-        "version": "2.4.15",
+        "version": "2.4.16",
         "news": {
+            "2.4.16": {
+                "en": "The optional Smart Home meter path is now robust: incomplete or invalid value pairs fall back only for the affected circuits, failed API attempts use a bounded 5-60 minute backoff, and the client-side key request is aborted cleanly on shutdown. A newly entered App-Token can be used before saving.",
+                "de": "Der optionale Smart-Home-Zählerpfad ist jetzt robust: Unvollständige oder ungültige Wertepaare werden nur für die betroffenen Klemmen klassisch nachgelesen, fehlgeschlagene API-Versuche erhalten einen begrenzten Backoff von 5 bis 60 Minuten und die clientseitige Key-Anfrage wird beim Beenden sauber abgebrochen. Ein neu eingegebener App-Token kann schon vor dem Speichern verwendet werden.",
+                "ru": "The optional Smart Home meter path is now robust: incomplete or invalid value pairs fall back only for the affected circuits, failed API attempts use a bounded 5-60 minute backoff, and the client-side key request is aborted cleanly on shutdown. A newly entered App-Token can be used before saving.",
+                "pt": "The optional Smart Home meter path is now robust: incomplete or invalid value pairs fall back only for the affected circuits, failed API attempts use a bounded 5-60 minute backoff, and the client-side key request is aborted cleanly on shutdown. A newly entered App-Token can be used before saving.",
+                "nl": "The optional Smart Home meter path is now robust: incomplete or invalid value pairs fall back only for the affected circuits, failed API attempts use a bounded 5-60 minute backoff, and the client-side key request is aborted cleanly on shutdown. A newly entered App-Token can be used before saving.",
+                "fr": "The optional Smart Home meter path is now robust: incomplete or invalid value pairs fall back only for the affected circuits, failed API attempts use a bounded 5-60 minute backoff, and the client-side key request is aborted cleanly on shutdown. A newly entered App-Token can be used before saving.",
+                "it": "The optional Smart Home meter path is now robust: incomplete or invalid value pairs fall back only for the affected circuits, failed API attempts use a bounded 5-60 minute backoff, and the client-side key request is aborted cleanly on shutdown. A newly entered App-Token can be used before saving.",
+                "es": "The optional Smart Home meter path is now robust: incomplete or invalid value pairs fall back only for the affected circuits, failed API attempts use a bounded 5-60 minute backoff, and the client-side key request is aborted cleanly on shutdown. A newly entered App-Token can be used before saving.",
+                "pl": "The optional Smart Home meter path is now robust: incomplete or invalid value pairs fall back only for the affected circuits, failed API attempts use a bounded 5-60 minute backoff, and the client-side key request is aborted cleanly on shutdown. A newly entered App-Token can be used before saving.",
+                "zh-cn": "The optional Smart Home meter path is now robust: incomplete or invalid value pairs fall back only for the affected circuits, failed API attempts use a bounded 5-60 minute backoff, and the client-side key request is aborted cleanly on shutdown. A newly entered App-Token can be used before saving.",
+                "uk": "The optional Smart Home meter path is now robust: incomplete or invalid value pairs fall back only for the affected circuits, failed API attempts use a bounded 5-60 minute backoff, and the client-side key request is aborted cleanly on shutdown. A newly entered App-Token can be used before saving."
+            },
             "2.4.15": {
                 "en": "The configuration dialog now scrolls by itself. It relied on the surrounding frame doing that, so with a frame that does not scroll everything below the first screen height was unreachable - no amount of bottom spacing could fix that.",
                 "de": "Der Konfigurationsdialog scrollt jetzt selbst. Er hat sich darauf verlassen, dass der umgebende Rahmen das tut - bei einem Rahmen ohne Scrollbereich war damit alles unterhalb der ersten Bildschirmhöhe unerreichbar, und kein Abstand am unteren Rand konnte daran etwas ändern.",

@@ -124,6 +124,9 @@ class Digitalstrom extends utils.Adapter {
         // DSS clients created by the App-Token dialog. They are not part of the normal
         // adapter lifecycle, so they have to be tracked to be closable on unload.
         this.tokenConnections = new Set();
+        // Smart Home key creation also lives outside the normal client lifecycle. Abort every
+        // in-flight flow on unload so it cannot create a late key or answer a closed dialog.
+        this.smartHomeKeyControllers = new Set();
         // Guards against registering the event handlers more than once
         this.eventHandlersRegistered = false;
     }
@@ -216,7 +219,9 @@ class Digitalstrom extends utils.Adapter {
                 if (this.isStopping()) {
                     return;
                 }
-                if (!this.config.appToken) {
+                const messageToken = typeof obj.message.appToken === 'string' ? obj.message.appToken.trim() : '';
+                const appToken = messageToken || this.config.appToken;
+                if (!appToken) {
                     this.sendTo(
                         obj.from,
                         obj.command,
@@ -228,11 +233,14 @@ class Digitalstrom extends utils.Adapter {
                 // Der vorhandene App-Token reicht: er wird zur Session und die erzeugt den
                 // Bearer-Key. Der Benutzer muss also kein Passwort erneut eingeben.
                 this.log.info(`Creating a Smart Home API key for host ${obj.message.host || this.config.host}`);
+                const controller = new AbortController();
+                this.smartHomeKeyControllers.add(controller);
                 DSSSmartHome.createApiKey({
                     host: obj.message.host || this.config.host,
-                    appToken: this.config.appToken,
+                    appToken,
                     validateCertificate: this.config.validateCertificate,
                     name: `ioBroker.digitalstrom.${this.instance}`,
+                    signal: controller.signal,
                     logger: {
                         silly: this.log.silly.bind(this),
                         debug: this.log.debug.bind(this),
@@ -240,21 +248,29 @@ class Digitalstrom extends utils.Adapter {
                         warn: this.log.warn.bind(this),
                         error: this.log.error.bind(this),
                     },
-                }).then(
-                    apiKey => {
-                        this.log.info('Smart Home API key created');
-                        this.sendTo(
-                            obj.from,
-                            obj.command,
-                            { apiKey, native: { smartHomeApiKey: apiKey } },
-                            obj.callback,
-                        );
-                    },
-                    err => {
-                        this.log.warn(`Could not create the Smart Home API key: ${configUtils.errorMessage(err)}`);
-                        this.sendTo(obj.from, obj.command, { error: configUtils.errorMessage(err) }, obj.callback);
-                    },
-                );
+                })
+                    .then(
+                        apiKey => {
+                            if (this.isStopping() || controller.signal.aborted) {
+                                return;
+                            }
+                            this.log.info('Smart Home API key created');
+                            this.sendTo(
+                                obj.from,
+                                obj.command,
+                                { apiKey, native: { smartHomeApiKey: apiKey } },
+                                obj.callback,
+                            );
+                        },
+                        err => {
+                            if (this.isStopping() || controller.signal.aborted) {
+                                return;
+                            }
+                            this.log.warn(`Could not create the Smart Home API key: ${configUtils.errorMessage(err)}`);
+                            this.sendTo(obj.from, obj.command, { error: configUtils.errorMessage(err) }, obj.callback);
+                        },
+                    )
+                    .finally(() => this.smartHomeKeyControllers.delete(controller));
                 return;
             }
             if (obj.command === 'createAppToken') {
@@ -367,6 +383,9 @@ class Digitalstrom extends utils.Adapter {
             }
         });
         this.tokenConnections.clear();
+
+        this.smartHomeKeyControllers?.forEach(controller => controller.abort());
+        this.smartHomeKeyControllers?.clear();
 
         this.dssStruct && this.dssStruct.clearTimeouts();
 
