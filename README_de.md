@@ -169,8 +169,10 @@ Die Geräte sind als „Klemme/dSM"."Geräte-ID" strukturiert, darunter jeweils:
 * Das DSS-System arbeitet überwiegend mit Szenen statt mit echten Gerätewerten. Das Auslesen echter
   Werte ist zudem langsam, weil es über den Bus laufen muss.
 * Werte können leer bleiben, wenn das System sie nicht meldet.
-* Binäreingänge wurden „blind" implementiert, da keine passenden Geräte zum Testen vorlagen. Logs und
-  Rückmeldungen dazu sind willkommen.
+* Binäreingänge wurden ursprünglich ohne passende Geräte zum Testen implementiert. Inzwischen ist
+  belegt, dass sie funktionieren: Bewegungsmelder und Fenstergriffe melden darüber. Der Zustand
+  enthält die Zahl, die der DSS für den Eingang meldet, keinen Wahrheitswert, und diese Zahlen sind
+  noch nicht auf lesbare Texte abgebildet.
 * Sinnvolles Lesen und Schreiben von Ausgangswerten ist bisher nur für Licht (Gelb) und
   Rollladen/Jalousie (Grau) umgesetzt.
 * Das Verhalten mit vDCs konnte bisher nicht geprüft werden. Auch dafür werden Logs und Details
