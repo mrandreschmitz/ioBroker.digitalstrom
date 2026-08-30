@@ -25,7 +25,7 @@
     "url": "git+https://github.com/mrandreschmitz/ioBroker.digitalstrom.git"
   },
   "dependencies": {
-    "@apollon/iobroker-tools": "^0.2.1",
+    "@apollon/iobroker-tools": "^0.3.0",
     "@iobroker/adapter-core": "^3.2.3"
   },
   "devDependencies": {
