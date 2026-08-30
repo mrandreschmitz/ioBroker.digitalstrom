@@ -112,15 +112,31 @@ jobs:
         id: extract_release
         # The release notes are the message of the annotated tag, so they can be written
         # deliberately instead of reusing whatever the last commit message happened to be.
-        # Falls back to the commit body for a lightweight tag.
         run: |
+          set -euo pipefail
           VERSION="${{ github.ref }}"
           VERSION=${VERSION##*/v}
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
-          NOTES=$(git tag -l --format='%(contents)' "v$VERSION")
-          if [ -z "$NOTES" ]; then
-            NOTES=$(git show -s --format=%b)
+
+          # On a tag push actions/checkout fetches the commit and writes it straight to
+          # refs/tags/<tag>, so the tag is lightweight here and the annotated object is
+          # missing. Reading it would then silently yield the commit message instead of
+          # the release notes, which is why the real ref is fetched again.
+          git fetch --force origin "refs/tags/v$VERSION:refs/tags/v$VERSION"
+
+          if [ "$(git cat-file -t "v$VERSION")" = "tag" ]; then
+            # In a raw tag object the message starts after the first empty line.
+            NOTES=$(git cat-file tag "v$VERSION" | sed '1,/^$/d')
+          else
+            echo "::warning::v$VERSION is not an annotated tag, using the commit body"
+            NOTES=$(git log -1 --format=%B)
           fi
+
+          if [ -z "${NOTES//[[:space:]]/}" ]; then
+            echo "::error::refusing to publish a release without notes"
+            exit 1
+          fi
+
           EOF_MARKER=$(openssl rand -hex 8)
           {
             echo "BODY<<$EOF_MARKER"
