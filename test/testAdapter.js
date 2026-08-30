@@ -1096,6 +1096,83 @@ describe('Adapter logic', () => {
         });
     });
 
+    describe('temperature operation mode', () => {
+        // The room temperature control is switched through the scenes of group 48. The
+        // readable OperationMode state has to follow every scene call.
+        function tempContext() {
+            const dss = new DSS({ host: 'localhost', appToken: 'app', logger: silentLog });
+            dss.requestAsync = async () => ({ ok: true });
+            dss.pollEvent = () => {};
+            const ctx = createContext({
+                dss,
+                dssStruct: {
+                    zoneDevices: {},
+                    dssObjects: {
+                        'apartment.0.2.temperatureControl.OperationMode': { common: { type: 'number' } },
+                    },
+                    stateMap: {
+                        '2.48.scenes.1': 'apartment.0.2.48.scenes.HeatingComfort',
+                        '2.48.operationMode': 'apartment.0.2.temperatureControl.OperationMode',
+                    },
+                    apartmentStructure: { zones: [] },
+                },
+            });
+            return { ctx, dss };
+        }
+
+        it('follows a scene call of group 48', done => {
+            const { ctx, dss } = tempContext();
+            Digitalstrom.prototype.registerEventHandlers.call(ctx, ['callScene']);
+            dss.emit('callScene', {
+                name: 'callScene',
+                source: { isGroup: true },
+                properties: { zoneID: '2', groupID: '48', sceneID: '1', callOrigin: '-1' },
+            });
+            setTimeout(() => {
+                expect(ctx.states['apartment.0.2.48.scenes.HeatingComfort'], 'the scene itself').to.equal(true);
+                expect(
+                    ctx.states['apartment.0.2.temperatureControl.OperationMode'],
+                    'the readable mode must follow as a number',
+                ).to.equal(1);
+                dss.stop();
+                done();
+            }, 10);
+        });
+
+        it('does not touch the mode for a scene of another group', done => {
+            const { ctx, dss } = tempContext();
+            ctx.dssStruct.stateMap['2.1.scenes.1'] = 'apartment.0.2.1.scenes.Preset1';
+            Digitalstrom.prototype.registerEventHandlers.call(ctx, ['callScene']);
+            dss.emit('callScene', {
+                name: 'callScene',
+                source: { isGroup: true },
+                properties: { zoneID: '2', groupID: '1', sceneID: '1', callOrigin: '-1' },
+            });
+            setTimeout(() => {
+                expect(ctx.states['apartment.0.2.temperatureControl.OperationMode']).to.equal(undefined);
+                dss.stop();
+                done();
+            }, 10);
+        });
+
+        it('survives a room without temperature control', done => {
+            const { ctx, dss } = tempContext();
+            delete ctx.dssStruct.stateMap['2.48.operationMode'];
+            Digitalstrom.prototype.registerEventHandlers.call(ctx, ['callScene']);
+            expect(() =>
+                dss.emit('callScene', {
+                    name: 'callScene',
+                    source: { isGroup: true },
+                    properties: { zoneID: '2', groupID: '48', sceneID: '1', callOrigin: '-1' },
+                }),
+            ).to.not.throw();
+            setTimeout(() => {
+                dss.stop();
+                done();
+            }, 10);
+        });
+    });
+
     describe('scene resync after the subscription', () => {
         function resyncContext(dss, answers) {
             return createContext({

@@ -133,6 +133,33 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ## Changelog
 
+### 2.4.6 (2026-08-30)
+
+Built from the object export and the debug log of a productive installation.
+
+* **Room temperature control.** Every room the DSS really regulates gets a channel
+  `temperatureControl` with `ControlMode` (which kind of controller), `ControlState` (who
+  owns the set point) and `OperationMode` - a readable, writable mirror of the group 48
+  scenes that follows every scene call. Rooms with `ControlMode: 0` deliberately stay
+  without those objects, so it is visible at a glance which rooms are regulated at all
+* **Set points per operation mode.** They are read with `zone/getTemperatureControlValues`
+  and written with `zone/setTemperatureControlValues`. The field names are taken from the
+  answer instead of being hard coded, and the states are only created when the DSS really
+  answered - a firmware without that endpoint gets no set point objects rather than dead ones
+* `NominalValue` stays writable but only takes effect when the zone is under external
+  control (`ControlState` = external). With the internal controller the DSS overwrites the
+  pushed value - use `OperationMode` or the set points instead
+* **Cluster states.** `cluster.<id>.user_lock` and `cluster.<id>.operation_lock` had no
+  object at all, although the group folder of the cluster exists. They are created below
+  `apartment.groups.<id>.states` now
+* **Group states with a dot in their name.** `status.malfunction` and `status.service` of
+  the ventilation groups were dropped by a pattern that only matched a single segment. They
+  are created as nested states now, including the channel in between
+* The check for rooms that belong to no floor evaluated `isValid` as a plain truthiness
+  check. A real DSS does not send that flag for a zone at all, which silenced the check
+  completely. It now only skips a zone that the DSS explicitly marks as invalid or as not
+  present (`isPresent: false`, e.g. the dS zone 65534 for unassigned devices)
+
 ### 2.4.5 (2026-08-30)
 
 * Redesigned the admin configuration. The options are split into the tabs **Connection**,

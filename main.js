@@ -1005,6 +1005,12 @@ class Digitalstrom extends utils.Adapter {
                 } else {
                     this.setDssState(sceneIdState, null);
                 }
+                // The room temperature control is switched through the scenes of group 48.
+                // Keep the readable operation mode of that room in sync with them.
+                if (value && String(data.properties.groupID) === '48') {
+                    const operationModeState = dssStruct.stateMap[`${data.properties.zoneID}.48.operationMode`];
+                    operationModeState && this.setDssState(operationModeState, data.properties.sceneID);
+                }
             } else {
                 !forwarded && this.log.info('INVALID scenecall');
             }

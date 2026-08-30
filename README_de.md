@@ -203,6 +203,33 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
 
+### 2.4.6 (2026-08-30)
+
+Entstanden aus dem Objekt-Export und dem Debug-Log einer produktiven Installation.
+
+* **Raumtemperaturregelung.** Jeder Raum, den das DSS wirklich regelt, bekommt einen Kanal
+  `temperatureControl` mit `ControlMode` (Art des Reglers), `ControlState` (wer den Sollwert
+  besitzt) und `OperationMode` — einer lesbaren, schaltbaren Entsprechung der Szenen von
+  Gruppe 48, die jedem Szenenaufruf folgt. Räume mit `ControlMode: 0` bleiben bewusst ohne
+  diese Objekte, damit auf einen Blick erkennbar ist, welche Räume überhaupt geregelt werden.
+* **Sollwerte je Betriebsart.** Sie werden über `zone/getTemperatureControlValues` gelesen und
+  über `zone/setTemperatureControlValues` geschrieben. Die Feldnamen kommen aus der Antwort
+  statt fest im Code zu stehen, und die States entstehen nur, wenn das DSS wirklich
+  geantwortet hat — eine Firmware ohne diesen Endpunkt bekommt keine toten Objekte.
+* `NominalValue` bleibt beschreibbar, wirkt aber nur bei externer Regelung
+  (`ControlState` = extern). Beim internen Regler überschreibt das DSS den eingespeisten Wert
+  — dafür sind `OperationMode` und die Sollwerte da.
+* **Cluster-States.** `cluster.<id>.user_lock` und `cluster.<id>.operation_lock` hatten
+  überhaupt kein Objekt, obwohl der Gruppenordner des Clusters existiert. Sie werden jetzt
+  unterhalb von `apartment.groups.<id>.states` angelegt.
+* **Gruppen-States mit Punkt im Namen.** `status.malfunction` und `status.service` der
+  Lüftungsgruppen wurden von einem Muster verworfen, das nur ein Segment erlaubte. Sie
+  entstehen jetzt als verschachtelte States, inklusive des Kanals dazwischen.
+* Die Prüfung auf Räume ohne Etage wertete `isValid` als reine Truthiness aus. Ein echtes DSS
+  sendet dieses Flag bei Zonen gar nicht, wodurch die Prüfung vollständig stumm war. Jetzt wird
+  nur noch eine Zone übersprungen, die das DSS ausdrücklich als ungültig oder als nicht
+  vorhanden meldet (`isPresent: false`, z. B. die dS-Zone 65534 für nicht zugeordnete Geräte).
+
 ### 2.4.5 (2026-08-30)
 
 * Admin-Konfiguration neu gestaltet. Die Optionen liegen jetzt in den Reitern **Verbindung**,

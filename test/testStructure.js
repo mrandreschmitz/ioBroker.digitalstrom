@@ -780,6 +780,53 @@ describe('DSSStructure', () => {
             );
         });
 
+        // A real DSS does not send isValid for a zone at all - a plain truthiness check
+        // silenced the whole check on such an installation
+        it('works even when the DSS reports no isValid for the zones', done => {
+            const warnings = [];
+            const struct = apartmentStructure(warnings);
+            const withoutFlag = id => ({ id, name: `Zone ${id}`, isPresent: true, groups: [], devices: [] });
+            struct.createApartment(
+                {
+                    floors: { 0: { id: 0, name: 'EG', zones: [5] } },
+                    zones: { 5: withoutFlag(5), 9: withoutFlag(9) },
+                    zone0: { groups: [] },
+                    clusters: {},
+                },
+                {},
+                () => {
+                    const extraneous = warnings.filter(w => w.includes('EXTRANOUS'));
+                    expect(extraneous, 'the unassigned zone must still be found').to.have.lengthOf(1);
+                    expect(extraneous[0]).to.contain('9');
+                    struct.clearTimeouts();
+                    done();
+                },
+            );
+        });
+
+        it('stays quiet about a zone the DSS marks as not present', done => {
+            const warnings = [];
+            const struct = apartmentStructure(warnings);
+            struct.createApartment(
+                {
+                    floors: { 0: { id: 0, name: 'EG', zones: [5] } },
+                    zones: {
+                        5: zone(5),
+                        // 65534 is the dS zone for devices that are not assigned to a room
+                        65534: { id: 65534, name: '', isPresent: false, groups: [], devices: [] },
+                    },
+                    zone0: { groups: [] },
+                    clusters: {},
+                },
+                {},
+                () => {
+                    expect(warnings.filter(w => w.includes('EXTRANOUS'))).to.deep.equal([]);
+                    struct.clearTimeouts();
+                    done();
+                },
+            );
+        });
+
         it('still reports a zone that belongs to no floor', done => {
             const warnings = [];
             const struct = apartmentStructure(warnings);
@@ -816,6 +863,216 @@ describe('DSSStructure', () => {
                 const name = dssConstants.outputChannelUnitRoleMap[key].name;
                 expect(seen[name], `${key} shares its name with ${seen[name]}`).to.equal(undefined);
                 seen[name] = key;
+            });
+        });
+    });
+
+    describe('room temperature control', () => {
+        // Real answer of apartment/getTemperatureControlStatus from a productive DSS.
+        // Regulated rooms carry values, rooms without a controller only ControlMode 0.
+        const REGULATED = {
+            id: 2,
+            name: 'Wohnen',
+            ControlMode: 1,
+            ControlState: 0,
+            OperationMode: 0,
+            TemperatureValue: 23.5,
+            NominalValue: 8,
+            ControlValue: 0,
+        };
+        const UNREGULATED = { id: 1, name: 'Flur', ControlMode: 0, ControlState: 0 };
+
+        function tempStructure(setpointAnswer) {
+            const asked = [];
+            const struct = createStructure({
+                dss: new EventEmitter(),
+                dssQueue: {
+                    asked,
+                    pushQueryQueue(circuit, entry, prio, callback) {
+                        asked.push(entry);
+                        if (entry.dssFunction === 'getTemperatureControlValues') {
+                            return setImmediate(() => callback(null, setpointAnswer));
+                        }
+                        setImmediate(() => callback(null, { ok: true }));
+                    },
+                },
+                adapter: { log: silentLogger, config: {}, setState: () => {}, setDssState: () => {} },
+            });
+            return { struct, asked };
+        }
+
+        it('only regulates zones the DSS really controls', () => {
+            const { struct } = tempStructure({ ok: false });
+            expect(struct.hasTemperatureControl(REGULATED), 'ControlMode 1 is a real controller').to.equal(true);
+            expect(struct.hasTemperatureControl(UNREGULATED), 'ControlMode 0 has no values at all').to.equal(false);
+            expect(struct.hasTemperatureControl(undefined)).to.equal(false);
+            expect(struct.hasTemperatureControl({}), 'a zone without ControlMode').to.equal(false);
+        });
+
+        it('creates the controller states with the values of the DSS', done => {
+            const { struct } = tempStructure({ ok: false });
+            struct.createTemperatureControl('apartment.0.2', { id: 2, name: 'Wohnen' }, REGULATED, () => {
+                const base = 'apartment.0.2.temperatureControl';
+                expect(struct.dssObjects[`${base}.ControlMode`].common.write, 'reported by the DSS').to.equal(false);
+                expect(struct.initialObjectValues[`${base}.ControlMode`]).to.equal(1);
+                expect(struct.initialObjectValues[`${base}.ControlState`]).to.equal(0);
+                expect(struct.initialObjectValues[`${base}.OperationMode`]).to.equal(0);
+                expect(
+                    struct.dssObjects[`${base}.OperationMode`].common.states[0],
+                    'the modes are the scenes of group 48',
+                ).to.equal('Heating Off');
+                expect(struct.stateMap['2.48.operationMode'], 'events must find it').to.equal(`${base}.OperationMode`);
+                done();
+            });
+        });
+
+        it('switches the operation mode through a scene of group 48', done => {
+            const { struct, asked } = tempStructure({ ok: false });
+            struct.createTemperatureControl('apartment.0.2', { id: 2, name: 'Wohnen' }, REGULATED, () => {
+                asked.length = 0;
+                struct.dssObjects['apartment.0.2.temperatureControl.OperationMode'].onChange(1);
+                setTimeout(() => {
+                    expect(asked).to.have.lengthOf(1);
+                    expect(asked[0].dssFunction).to.equal('callScene');
+                    expect(asked[0].params).to.deep.equal({ id: 2, groupID: 48, sceneNumber: 1 });
+                    done();
+                }, 10);
+            });
+        });
+
+        it('rejects an operation mode the temperature control does not know', done => {
+            const warnings = [];
+            const { struct, asked } = tempStructure({ ok: false });
+            struct.adapter.log.warn = msg => warnings.push(String(msg));
+            struct.createTemperatureControl('apartment.0.2', { id: 2, name: 'Wohnen' }, REGULATED, () => {
+                asked.length = 0;
+                struct.dssObjects['apartment.0.2.temperatureControl.OperationMode'].onChange(99);
+                setTimeout(() => {
+                    expect(asked, 'nothing may be sent').to.deep.equal([]);
+                    expect(warnings.join(' ')).to.contain('Invalid operation mode');
+                    done();
+                }, 10);
+            });
+        });
+
+        it('creates a writable state per set point the DSS reports', done => {
+            const answer = { ok: true, result: { Off: 6, Comfort: 21, Economy: 18, Night: 16, Holiday: 12 } };
+            const { struct, asked } = tempStructure(answer);
+            struct.createTemperatureControl('apartment.0.2', { id: 2, name: 'Wohnen' }, REGULATED, () => {
+                const base = 'apartment.0.2.temperatureControl.setpoints';
+                expect(struct.initialObjectValues[`${base}.Comfort`]).to.equal(21);
+                expect(struct.initialObjectValues[`${base}.Off`]).to.equal(6);
+                expect(struct.dssObjects[`${base}.Comfort`].common.unit).to.equal('°C');
+
+                asked.length = 0;
+                struct.dssObjects[`${base}.Comfort`].onChange(22);
+                setTimeout(() => {
+                    expect(asked).to.have.lengthOf(1);
+                    expect(asked[0].dssFunction).to.equal('setTemperatureControlValues');
+                    expect(asked[0].params).to.deep.equal({ id: 2, Comfort: 22 });
+                    done();
+                }, 10);
+            });
+        });
+
+        // Not every DSS firmware knows the endpoint - then there must be no dead states
+        it('creates no set point states when the DSS does not support them', done => {
+            const { struct } = tempStructure({ ok: false, message: 'Unknown function' });
+            struct.createTemperatureControl('apartment.0.2', { id: 2, name: 'Wohnen' }, REGULATED, () => {
+                const dead = Object.keys(struct.dssObjects).filter(id => id.includes('.setpoints'));
+                expect(dead, 'no folder and no states').to.deep.equal([]);
+                // The controller states themselves must still exist
+                expect(struct.dssObjects['apartment.0.2.temperatureControl.ControlMode']).to.be.an('object');
+                done();
+            });
+        });
+
+        it('ignores non numeric fields of the set point answer', done => {
+            const answer = { ok: true, result: { Comfort: 21, ControlMode: 'pid', Nothing: null } };
+            const { struct } = tempStructure(answer);
+            struct.createTemperatureControl('apartment.0.2', { id: 2, name: 'Wohnen' }, REGULATED, () => {
+                const ids = Object.keys(struct.dssObjects).filter(id => id.includes('.setpoints.'));
+                expect(ids).to.deep.equal(['apartment.0.2.temperatureControl.setpoints.Comfort']);
+                done();
+            });
+        });
+    });
+
+    describe('group and cluster states', () => {
+        function groupStructure(propertyStates) {
+            const struct = createStructure({
+                dss: new EventEmitter(),
+                dssQueue: {
+                    pushQueryQueue: (...args) => {
+                        const cb = args[args.length - 1];
+                        setImmediate(() => cb && cb(null, { ok: true, result: { scene: 0 } }));
+                    },
+                },
+                adapter: { log: silentLogger, config: {}, setState: () => {}, setDssState: () => {} },
+            });
+            struct.propertyStates = propertyStates;
+            return struct;
+        }
+
+        // Regression: the cluster states of a real installation had no object at all -
+        // the group folders apartment.groups.17 ... exist, but the DSS names their states
+        // "cluster.17.user_lock" instead of "zone.0.group.17.user_lock".
+        it('creates the states of an apartment cluster', done => {
+            const struct = groupStructure([
+                { name: 'cluster.17.user_lock', state: 'inactive' },
+                { name: 'cluster.17.operation_lock', state: 'active' },
+                { name: 'cluster.18.user_lock', state: 'inactive' },
+            ]);
+            const group = { id: 17, name: 'Rollladen Nord', isPresent: true, isValid: true, devices: ['d1'] };
+            struct.processGroup('apartment.groups.17', 0, group, () => {
+                expect(struct.dssObjects['apartment.groups.17.states.user_lock'], 'user_lock').to.be.an('object');
+                expect(struct.dssObjects['apartment.groups.17.states.operation_lock']).to.be.an('object');
+                expect(struct.dssObjects['apartment.groups.17.states.user_lock'].common.type).to.equal('boolean');
+                expect(struct.initialObjectValues['apartment.groups.17.states.operation_lock']).to.equal('active');
+                expect(
+                    struct.dssObjects['apartment.groups.18.states.user_lock'],
+                    'a state of another cluster must not land here',
+                ).to.equal(undefined);
+                done();
+            });
+        });
+
+        it('does not take cluster states into a room group', done => {
+            const struct = groupStructure([{ name: 'cluster.17.user_lock', state: 'inactive' }]);
+            const group = { id: 17, name: 'Licht', isPresent: true, isValid: true, devices: ['d1'] };
+            struct.processGroup('apartment.0.2.17', 2, group, () => {
+                expect(struct.dssObjects['apartment.0.2.17.states.user_lock'], 'clusters are apartment wide').to.equal(
+                    undefined,
+                );
+                done();
+            });
+        });
+
+        // Regression: the group state pattern only matched a single segment, so the
+        // ventilation status states of a room were dropped
+        it('creates a group state whose name contains a dot as a nested state', done => {
+            const struct = groupStructure([
+                { name: 'zone.2.group.10.status.malfunction', state: 'inactive' },
+                { name: 'zone.2.group.10.status.service', state: 'inactive' },
+            ]);
+            const group = { id: 10, name: 'Lüftung', isPresent: true, isValid: true, devices: ['d1'] };
+            struct.processGroup('apartment.0.2.10', 2, group, () => {
+                const base = 'apartment.0.2.10.states';
+                expect(struct.dssObjects[`${base}.status.malfunction`], 'the state itself').to.be.an('object');
+                expect(struct.dssObjects[`${base}.status.service`]).to.be.an('object');
+                expect(struct.dssObjects[`${base}.status`], 'and the folder in between').to.be.an('object');
+                expect(struct.dssObjects[`${base}.status`].type).to.equal('channel');
+                expect(struct.stateMap['zone.2.group.10.status.malfunction']).to.equal(`${base}.status.malfunction`);
+                done();
+            });
+        });
+
+        it('keeps the simple group states working', done => {
+            const struct = groupStructure([{ name: 'zone.2.group.1.heating', state: 'inactive' }]);
+            const group = { id: 1, name: 'Licht', isPresent: true, isValid: true, devices: ['d1'] };
+            struct.processGroup('apartment.0.2.1', 2, group, () => {
+                expect(struct.dssObjects['apartment.0.2.1.states.heating']).to.be.an('object');
+                done();
             });
         });
     });
