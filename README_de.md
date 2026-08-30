@@ -219,6 +219,16 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
 
+### 2.4.11 (2026-08-30)
+
+* **Konfigurationsdialog ohne Verbindung behoben.** Der in 2.4.10 eingeführte React-Dialog
+  meldete nur `Socket connection could not be initialized: Error: Socket library could not be
+  loaded!` und blieb leer. `@iobroker/socket-client` bringt socket.io nicht mit, sondern
+  erwartet, dass die Seite es als globale Variable geladen hat - der Admin liefert es unter
+  `/lib/js/socket.io.js` aus. Die Seite lädt es jetzt und stellt `registerSocketOnLoad` bereit,
+  damit dem Client der Zeitpunkt gemeldet wird, statt dass er darauf pollt. Ein Test prüft
+  beides, denn ohne sie ist der Dialog unbrauchbar und sonst fällt es niemandem auf
+
 ### 2.4.10 (2026-08-30)
 
 * **Die Konfigurationsoberfläche ist jetzt eine eigene React-Anwendung.** jsonConfig beschreibt

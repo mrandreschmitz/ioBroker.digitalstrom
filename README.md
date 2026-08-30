@@ -140,6 +140,16 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ## Changelog
 
+### 2.4.11 (2026-08-30)
+
+* **Fixed a configuration dialog that could not connect.** The React dialog introduced in
+  2.4.10 only reported `Socket connection could not be initialized: Error: Socket library could
+  not be loaded!` and stayed empty. `@iobroker/socket-client` does not bring socket.io along,
+  it expects the page to have loaded it as a global - admin serves it at
+  `/lib/js/socket.io.js`. The page loads it now and offers `registerSocketOnLoad`, so the
+  client is told when the library is there instead of polling for it. A test checks both,
+  because the dialog is unusable without them and nothing else notices
+
 ### 2.4.10 (2026-08-30)
 
 * **The configuration dialog is a React application of its own now.** jsonConfig describes a

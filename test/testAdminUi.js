@@ -35,6 +35,15 @@ describe('Admin interface', () => {
         expect(stored, 'src-admin changed without a rebuild - run "npm run build:admin"').to.equal(hashSources());
     });
 
+    // 2.4.10 shipped a dialog that could not connect at all: @iobroker/socket-client
+    // does not bring socket.io along, it expects the page to have loaded it. Without the
+    // tag below the dialog only says "Socket library could not be loaded!".
+    it('the page loads the socket library of the admin', () => {
+        const html = fs.readFileSync(path.join(root, 'admin', 'index.html'), 'utf8');
+        expect(html, 'the admin serves socket.io at /lib/js/socket.io.js').to.contain('lib/js/socket.io.js');
+        expect(html, 'socket-client uses this hook instead of polling').to.contain('registerSocketOnLoad');
+    });
+
     it('the icon referred to by io-package.json is next to the bundle', () => {
         const ioPackage = readJson('io-package.json');
         expect(fs.existsSync(path.join(root, 'admin', ioPackage.common.icon))).to.be.true;
