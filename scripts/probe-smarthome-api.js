@@ -23,6 +23,12 @@
  *   --seconds <n>        Dauer des Websocket-Mitschnitts (Default 60, 0 = ueberspringen)
  *   --out <dir>          Ausgabeverzeichnis (Default ./ds-probe)
  *   --old-api            zusaetzlich system/version und apartment/getStructure der alten API
+ *   --discover           zweiter Durchgang: sucht nach weiteren Endpunkten und Werten
+ *                        (Gerätesensoren, Binäreingänge, OpenAPI auf dem Gerät) und fragt
+ *                        per OPTIONS ab, welche Methoden erlaubt sind. Nur lesend.
+ *   --probe-write <id>   prüft zusätzlich, ob ein benutzerdefinierter Zustand schreibbar
+ *                        ist. Setzt dazu den AKTUELLEN Wert erneut, ändert also nichts.
+ *                        Bitte trotzdem eine harmlose ID wählen.
  *
  * Das Passwort wird ausschliesslich ueber die Umgebungsvariable DSS_PASSWORD gelesen und
  * niemals geloggt oder gespeichert.
@@ -30,9 +36,6 @@
 
 const https = require('node:https');
 const http = require('node:http');
-const net = require('node:net');
-const tls = require('node:tls');
-const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -88,6 +91,12 @@ function parseArgs(argv) {
                 break;
             case '--old-api':
                 args.oldApi = true;
+                break;
+            case '--discover':
+                args.discover = true;
+                break;
+            case '--probe-write':
+                args.probeWrite = next();
                 break;
             case '--help':
             case '-h':
@@ -154,180 +163,8 @@ async function get(args, apiPath, params) {
 
 /* ------------------------------------------------------------ websocket */
 
-/**
- * Minimaler Websocket-Client. Nur so viel, wie die Probe braucht: Handshake mit
- * eigenem Authorization-Header, Textframes lesen und schreiben, Ping beantworten.
- */
-class MiniWebsocket {
-    constructor(host, port, wsPath, headers, secure) {
-        this.host = host;
-        this.port = port;
-        this.wsPath = wsPath;
-        this.headers = headers || {};
-        this.secure = !!secure;
-        this.buffer = Buffer.alloc(0);
-        /** @type {import('node:net').Socket|null} */
-        this.socket = null;
-        /** @type {(text: string) => void} */
-        this.onMessage = () => {};
-        /** @type {(err: Error) => void} */
-        this.onError = () => {};
-        this.handshakeDone = false;
-    }
-
-    connect() {
-        return new Promise((resolve, reject) => {
-            const key = crypto.randomBytes(16).toString('base64');
-            const connectOptions = { host: this.host, port: this.port, rejectUnauthorized: false };
-            const socket = this.secure ? tls.connect(connectOptions) : net.connect(connectOptions);
-            this.socket = socket;
-            socket.setTimeout(20000, () => {
-                if (!this.handshakeDone) {
-                    // Der close-Handler unten weist die Promise ab
-                    socket.destroy();
-                }
-            });
-            socket.once(this.secure ? 'secureConnect' : 'connect', () => {
-                const headerLines = [
-                    `GET ${this.wsPath} HTTP/1.1`,
-                    `Host: ${this.host}:${this.port}`,
-                    'Upgrade: websocket',
-                    'Connection: Upgrade',
-                    `Sec-WebSocket-Key: ${key}`,
-                    'Sec-WebSocket-Version: 13',
-                    ...Object.entries(this.headers).map(([name, value]) => `${name}: ${value}`),
-                    '',
-                    '',
-                ];
-                socket.write(headerLines.join('\r\n'));
-            });
-            socket.on('error', err => {
-                if (this.handshakeDone) {
-                    this.onError(err);
-                } else {
-                    reject(err);
-                }
-            });
-            socket.on('close', () => {
-                if (!this.handshakeDone) {
-                    reject(new Error('Verbindung wurde geschlossen'));
-                }
-            });
-            socket.on('data', chunk => {
-                this.buffer = Buffer.concat([this.buffer, Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)]);
-                if (!this.handshakeDone) {
-                    const end = this.buffer.indexOf('\r\n\r\n');
-                    if (end === -1) {
-                        return;
-                    }
-                    const head = this.buffer.subarray(0, end).toString('utf8');
-                    this.buffer = this.buffer.subarray(end + 4);
-                    if (!/^HTTP\/1\.1 101/.test(head)) {
-                        return reject(new Error(`Handshake abgelehnt:\n${head}`));
-                    }
-                    this.handshakeDone = true;
-                    socket.setTimeout(0);
-                    resolve(head);
-                }
-                this.drainFrames();
-            });
-        });
-    }
-
-    drainFrames() {
-        for (;;) {
-            if (this.buffer.length < 2) {
-                return;
-            }
-            const first = this.buffer[0];
-            const second = this.buffer[1];
-            const opcode = first & 0x0f;
-            const masked = (second & 0x80) !== 0;
-            let length = second & 0x7f;
-            let offset = 2;
-            if (length === 126) {
-                if (this.buffer.length < offset + 2) {
-                    return;
-                }
-                length = this.buffer.readUInt16BE(offset);
-                offset += 2;
-            } else if (length === 127) {
-                if (this.buffer.length < offset + 8) {
-                    return;
-                }
-                length = Number(this.buffer.readBigUInt64BE(offset));
-                offset += 8;
-            }
-            let maskKey = null;
-            if (masked) {
-                if (this.buffer.length < offset + 4) {
-                    return;
-                }
-                maskKey = this.buffer.subarray(offset, offset + 4);
-                offset += 4;
-            }
-            if (this.buffer.length < offset + length) {
-                return;
-            }
-            let payload = this.buffer.subarray(offset, offset + length);
-            this.buffer = this.buffer.subarray(offset + length);
-            if (maskKey) {
-                payload = Buffer.from(payload.map((byte, idx) => byte ^ maskKey[idx % 4]));
-            }
-            if (opcode === 0x8) {
-                this.close();
-                return;
-            }
-            if (opcode === 0x9) {
-                this.sendFrame(payload, 0x0a);
-                continue;
-            }
-            if (opcode === 0x0 || opcode === 0x1 || opcode === 0x2) {
-                this.onMessage(payload.toString('utf8'));
-            }
-        }
-    }
-
-    sendFrame(payload, opcode) {
-        const data = Buffer.isBuffer(payload) ? payload : Buffer.from(String(payload), 'utf8');
-        const maskKey = crypto.randomBytes(4);
-        const header = [0x80 | opcode];
-        if (data.length < 126) {
-            header.push(0x80 | data.length);
-        } else if (data.length < 65536) {
-            header.push(0x80 | 126, (data.length >> 8) & 0xff, data.length & 0xff);
-        } else {
-            header.push(
-                0x80 | 127,
-                0,
-                0,
-                0,
-                0,
-                (data.length >>> 24) & 0xff,
-                (data.length >>> 16) & 0xff,
-                (data.length >>> 8) & 0xff,
-                data.length & 0xff,
-            );
-        }
-        const masked = Buffer.from(data.map((byte, idx) => byte ^ maskKey[idx % 4]));
-        if (!this.socket) {
-            return;
-        }
-        this.socket.write(Buffer.concat([Buffer.from(header), maskKey, masked]));
-    }
-
-    send(text) {
-        this.sendFrame(Buffer.from(text, 'utf8'), 0x1);
-    }
-
-    close() {
-        try {
-            this.socket && this.socket.destroy();
-        } catch {
-            /* ignorieren */
-        }
-    }
-}
+// Der Websocket-Client liegt in lib/, weil der Adapter ihn ebenfalls braucht
+const MiniWebsocket = require('../lib/websocket');
 
 /* ----------------------------------------------------------------- probe */
 
@@ -525,19 +362,22 @@ async function probeWebsocket(args, outDir) {
     ];
 
     for (const attempt of attempts) {
-        const ws = new MiniWebsocket(
-            args.host,
-            attempt.port,
-            '/api/v1/apartment/notifications',
-            { Authorization: `Bearer ${args.token}` },
-            attempt.secure,
-        );
+        const ws = new MiniWebsocket({
+            host: args.host,
+            port: attempt.port,
+            path: '/api/v1/apartment/notifications',
+            headers: { Authorization: `Bearer ${args.token}` },
+            secure: attempt.secure,
+        });
         const messages = [];
-        ws.onMessage = text => {
+        ws.on('message', text => {
             const stamp = new Date().toISOString();
             messages.push({ stamp, text });
             console.log(`  [${stamp}] ${text.slice(0, 500)}`);
-        };
+        });
+        ws.on('error', () => {
+            /* Fehler nach dem Handshake beenden den Mitschnitt nicht */
+        });
         try {
             await ws.connect();
         } catch (err) {
@@ -561,6 +401,202 @@ async function probeWebsocket(args, outDir) {
         return;
     }
     console.log('  Kein Websocket erreichbar.');
+}
+
+/**
+ * Sends any method to a path of the new API.
+ *
+ * @param {object} args
+ * @param {string} method
+ * @param {string} apiPath
+ * @param {object} [params] query parameters
+ * @param {object} [body] json body
+ * @returns {Promise<object>} the answer of request()
+ */
+function verb(args, method, apiPath, params, body) {
+    const url = apiUrl(args, apiPath, params);
+    const payload = body === undefined ? undefined : JSON.stringify(body);
+    /** @type {Record<string, string|number>} */
+    const headers = { Authorization: `Bearer ${args.token}` };
+    if (payload !== undefined) {
+        headers['Content-Type'] = 'application/json';
+        headers['Content-Length'] = Buffer.byteLength(payload);
+    }
+    return request(
+        {
+            protocol: 'https:',
+            host: args.host,
+            port: args.port,
+            path: `${url.pathname}${url.search}`,
+            method,
+            headers,
+        },
+        payload,
+    );
+}
+
+/**
+ * Second sweep: looks for the values the first sweep did not find - device sensors,
+ * binary inputs - and for a way to WRITE user defined states.
+ *
+ * The first sweep only knew the endpoints of digitalstrom-mqtt. A dSS may well deliver
+ * more per single resource than in the collection, and the official documentation is
+ * offline, so the only way to find out is to ask the device.
+ *
+ * @param {object} args
+ * @param {string} outDir
+ */
+async function discover(args, outDir) {
+    console.log('\n--- Suche nach weiteren Werten und Endpunkten ---');
+
+    // Beispiel-IDs aus der Struktur, damit die Einzelabrufe echte Objekte treffen
+    const apartment = await get(args, '/api/v1/apartment', {
+        include: 'dsDevices,submodules,functionBlocks,zones,userDefinedStates',
+    });
+    const included = (apartment.json && apartment.json.data && apartment.json.data.included) || {};
+    const functionBlocks = included.functionBlocks || [];
+    const withSensors = functionBlocks.find(fb => ((fb.attributes && fb.attributes.sensorInputs) || []).length);
+    const withButtons = functionBlocks.find(fb => ((fb.attributes && fb.attributes.buttonInputs) || []).length);
+    const sample = {
+        device: (withSensors && withSensors.id) || ((included.dsDevices || [])[0] || {}).id,
+        button: (withButtons && withButtons.id) || '',
+        submodule: ((included.submodules || [])[0] || {}).id,
+        zone: ((included.zones || [])[0] || {}).id,
+        state: ((included.userDefinedStates || [])[0] || {}).id,
+    };
+    console.log(`  Beispiel-Gerät ${sample.device}, Zone ${sample.zone}, Zustand ${sample.state}`);
+
+    const paths = [
+        { path: '/api/v1' },
+        { path: `/api/v1/apartment/dsDevices/${sample.device}` },
+        { path: `/api/v1/apartment/dsDevices/${sample.device}/status` },
+        {
+            path: `/api/v1/apartment/dsDevices/${sample.device}/status`,
+            params: { include: 'sensorInputs,binaryInputs,buttonInputs' },
+        },
+        { path: `/api/v1/apartment/dsDevices/${sample.device}/sensorInputs` },
+        { path: `/api/v1/apartment/dsDevices/${sample.device}/binaryInputs` },
+        { path: `/api/v1/apartment/dsDevices/${sample.device}/functionBlocks` },
+        { path: `/api/v1/apartment/functionBlocks/${sample.device}` },
+        { path: `/api/v1/apartment/functionBlocks/${sample.device}/status` },
+        { path: '/api/v1/apartment/functionBlocks/status' },
+        { path: '/api/v1/apartment/submodules/status' },
+        { path: `/api/v1/apartment/submodules/${sample.submodule}/status` },
+        { path: `/api/v1/apartment/zones/${sample.zone}` },
+        { path: `/api/v1/apartment/zones/${sample.zone}/status` },
+        { path: '/api/v1/apartment/sensors' },
+        { path: '/api/v1/apartment/sensorInputs' },
+        { path: '/api/v1/apartment/binaryInputs' },
+        { path: '/api/v1/apartment/buttonInputs' },
+        { path: '/api/v1/apartment/measurements' },
+        { path: '/api/v1/apartment/events' },
+        { path: `/api/v1/apartment/userDefinedStates/${sample.state}` },
+        { path: '/api/v1/apartment/userDefinedStates/status' },
+        { path: '/api/v1/apartment/floors' },
+        { path: '/api/v1/apartment/installation' },
+        // Alles, was der Server an include kennt, auf einmal - unbekannte Namen zeigen sich
+        // entweder als Fehler oder werden stillschweigend ignoriert
+        {
+            path: '/api/v1/apartment/status',
+            params: {
+                include:
+                    'dsDevices,zones,clusters,userDefinedStates,submodules,functionBlocks,sensorInputs,binaryInputs,buttonInputs,scenarios,controllers,meterings,floors,applications,installation,dsServer,apiRevision',
+            },
+        },
+        // Vielleicht liegt die Spezifikation auf dem Geraet selbst
+        { path: '/api/v1/openapi.json' },
+        { path: '/api/v1/swagger.json' },
+        { path: '/api/openapi.json' },
+        { path: '/api/v1/spec' },
+        { path: '/api/v1/docs' },
+    ];
+
+    const findings = [];
+    for (const { path: apiPath, params } of paths) {
+        let res;
+        try {
+            res = await get(args, apiPath, params);
+        } catch (err) {
+            console.log(`  GET ${apiPath.padEnd(58)} FEHLER ${errorText(err)}`);
+            findings.push({ method: 'GET', path: apiPath, params, error: errorText(err) });
+            continue;
+        }
+        const bytes = Buffer.byteLength(res.text || '');
+        const lower = (res.text || '').toLowerCase();
+        const marks = [
+            lower.includes('sensor') ? 'sensor' : '',
+            lower.includes('binaryinput') ? 'binaryInput' : '',
+            lower.includes('buttoninput') ? 'buttonInput' : '',
+        ]
+            .filter(Boolean)
+            .join(' ');
+        const query = params ? `${`?${new URLSearchParams(params).toString()}`.slice(0, 30)}…` : '';
+        console.log(`  GET ${(apiPath + query).padEnd(58)} ${res.status}  ${String(bytes).padStart(7)} B  ${marks}`);
+        findings.push({ method: 'GET', path: apiPath, params, status: res.status, bytes, marks });
+        if (res.status === 200 && res.json) {
+            save(outDir, `discover-${apiPath.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '')}`, res.json);
+        }
+    }
+
+    // Welche Methoden erlaubt der Server? Das beantwortet die Schreibfrage ohne zu schreiben.
+    console.log('\n  Erlaubte Methoden (OPTIONS):');
+    for (const apiPath of [
+        `/api/v1/apartment/userDefinedStates/${sample.state}`,
+        `/api/v1/apartment/userDefinedStates/${sample.state}/status`,
+        `/api/v1/apartment/dsDevices/${sample.device}/status`,
+        `/api/v1/apartment/zones/${sample.zone}/status`,
+    ]) {
+        try {
+            const res = await verb(args, 'OPTIONS', apiPath);
+            const allow = res.headers.allow || res.headers['access-control-allow-methods'] || '-';
+            console.log(`    ${apiPath.padEnd(60)} ${res.status}  ${allow}`);
+            findings.push({ method: 'OPTIONS', path: apiPath, status: res.status, allow });
+        } catch (err) {
+            console.log(`    ${apiPath.padEnd(60)} FEHLER ${errorText(err)}`);
+        }
+    }
+
+    if (args.probeWrite) {
+        console.log(`\n  Schreibtest auf Zustand ${args.probeWrite}`);
+        console.log('  Es wird der AKTUELLE Wert erneut gesetzt, der Zustand ändert sich also nicht.');
+        const status = await get(args, '/api/v1/apartment/status', { include: 'userDefinedStates' });
+        const states =
+            (status.json &&
+                status.json.data &&
+                status.json.data.included &&
+                status.json.data.included.userDefinedStates) ||
+            [];
+        const current = states.find(s => s.id === args.probeWrite);
+        const value = current && current.attributes && current.attributes.status;
+        if (!value) {
+            console.log(`    Zustand ${args.probeWrite} nicht gefunden - Schreibtest übersprungen`);
+        } else {
+            console.log(`    aktueller Wert: ${value}`);
+            const patch = [{ op: 'replace', path: '/status', value }];
+            const attempts = [
+                { method: 'PATCH', path: `/api/v1/apartment/userDefinedStates/${args.probeWrite}/status`, body: patch },
+                { method: 'PATCH', path: `/api/v1/apartment/userDefinedStates/${args.probeWrite}`, body: patch },
+                {
+                    method: 'POST',
+                    path: `/api/v1/apartment/userDefinedStates/${args.probeWrite}/invoke`,
+                    body: { status: value },
+                },
+            ];
+            for (const { method, path: apiPath, body } of attempts) {
+                try {
+                    const res = await verb(args, method, apiPath, undefined, body);
+                    console.log(`    ${method} ${apiPath.padEnd(62)} ${res.status} ${(res.text || '').slice(0, 80)}`);
+                    findings.push({ method, path: apiPath, status: res.status, body: (res.text || '').slice(0, 200) });
+                } catch (err) {
+                    console.log(`    ${method} ${apiPath.padEnd(62)} FEHLER ${errorText(err)}`);
+                }
+            }
+        }
+    }
+
+    save(outDir, '_summary-discover', findings);
+    const ok = findings.filter(f => f.status === 200 && f.method === 'GET');
+    console.log(`\n  ${ok.length} von ${paths.length} Pfaden antworten mit 200.`);
 }
 
 async function probeOldApi(args, outDir) {
@@ -631,6 +667,13 @@ async function main() {
     if (!args.token) {
         console.error('Kein API-Key. Entweder --token <key> oder --create-token angeben.');
         process.exit(1);
+    }
+
+    if (args.discover) {
+        // Zweiter Durchgang: sucht gezielt nach dem, was der erste nicht gefunden hat
+        await discover(args, args.out);
+        console.log(`\nFertig. Alle Rohdaten liegen in ${args.out}`);
+        return;
     }
 
     console.log('--- REST-Endpunkte /api/v1 ---');
