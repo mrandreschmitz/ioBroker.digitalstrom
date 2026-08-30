@@ -204,6 +204,26 @@ describe('Smart Home API client', function () {
             expect(seen.length, 'the stream must not silence the client').to.be.at.least(2);
         });
 
+        // Fuer die Diagnose: wie oft meldet der dSS wirklich, bevor entprellt wird
+        it('reports every single notification before the debouncing', async () => {
+            client = createClient();
+            const raw = [];
+            const debounced = [];
+            client.on('notification', type => raw.push(type));
+            client.on('statusChanged', () => debounced.push(Date.now()));
+            await client.startNotifications();
+            await delay(80);
+
+            for (let i = 0; i < 4; i++) {
+                mock.notify('apartmentStatusChanged');
+                await delay(10);
+            }
+            await delay(200);
+
+            expect(raw, 'every single message').to.have.lengthOf(4);
+            expect(debounced, 'but only one summary').to.have.lengthOf(1);
+        });
+
         it('separates a structure change from a status change', async () => {
             client = createClient();
             const events = [];
@@ -262,6 +282,147 @@ describe('Smart Home API client', function () {
             expect(created, 'exactly one token is created').to.have.lengthOf(1);
             expect(created[0].query.token, 'the session authorizes the creation').to.equal('session-token');
             expect(created[0].body.data.attributes.name).to.equal('ioBroker.digitalstrom');
+        });
+    });
+});
+
+describe('Meter values through the Smart Home API', () => {
+    const DSSStructure = require('../lib/dssStructure');
+
+    const CIRCUITS = [
+        { dSUID: 'dsm-a', name: 'Küche', hasMetering: true },
+        { dSUID: 'dsm-b', name: 'Bad', hasMetering: true },
+        { dSUID: 'dsm-c', name: 'Virtuell', hasMetering: false },
+    ];
+
+    /**
+     * @param {object} overrides
+     * @returns {any} structure with just enough context for updateMeterData
+     */
+    function createStructure(overrides) {
+        const written = [];
+        const warnings = [];
+        const struct = /** @type {any} */ (
+            new DSSStructure({
+                dss: {},
+                dssQueue: {},
+                adapter: {
+                    log: {
+                        silly: () => {},
+                        debug: () => {},
+                        info: () => {},
+                        warn: message => warnings.push(message),
+                        error: () => {},
+                    },
+                },
+                ...overrides,
+            })
+        );
+        struct.apartmentCircuits = CIRCUITS;
+        struct.setStateSafe = (id, value) => written.push({ id, value });
+        struct.written = written;
+        struct.warnings = warnings;
+        return struct;
+    }
+
+    it('reads every circuit with a single request and converts to kWh', done => {
+        const struct = createStructure({
+            smartHome: {
+                getMeteringValues: async () => ({
+                    values: [
+                        { id: 'dsm-dsm-a-power', attributes: { value: 30 } },
+                        { id: 'dsm-dsm-a-energy', attributes: { value: 3600000 } },
+                        { id: 'dsm-dsm-b-power', attributes: { value: 21 } },
+                        { id: 'dsm-dsm-b-energy', attributes: { value: 7200000 } },
+                    ],
+                }),
+            },
+        });
+
+        struct.updateMeterData((failed, total) => {
+            expect(failed, 'no circuit is missing').to.equal(0);
+            expect(total, 'only circuits with a meter count').to.equal(2);
+            expect(struct.written).to.deep.equal([
+                { id: 'devices.dsm-a.PowerConsumption', value: 30 },
+                // 3600000 Ws = 1 kWh, exactly the conversion of the classic path
+                { id: 'devices.dsm-a.EnergyMeterValue', value: 1 },
+                { id: 'devices.dsm-b.PowerConsumption', value: 21 },
+                { id: 'devices.dsm-b.EnergyMeterValue', value: 2 },
+            ]);
+            done();
+        });
+    });
+
+    it('falls back to the classic API when the request fails', done => {
+        const struct = createStructure({
+            smartHome: {
+                getMeteringValues: async () => {
+                    throw new Error('connection refused');
+                },
+            },
+        });
+        let classicCalls = 0;
+        struct.updateMeterDataViaClassicApi = callback => {
+            classicCalls++;
+            callback(0, 2);
+        };
+
+        struct.updateMeterData(() => {
+            expect(classicCalls, 'the classic path has to take over').to.equal(1);
+            expect(struct.written, 'nothing may be written from a failed read').to.have.lengthOf(0);
+            expect(struct.warnings.join(' ')).to.contain('classic API');
+            done();
+        });
+    });
+
+    it('warns about a failure only once', async () => {
+        const struct = createStructure({
+            smartHome: {
+                getMeteringValues: async () => {
+                    throw new Error('still broken');
+                },
+            },
+        });
+        struct.updateMeterDataViaClassicApi = callback => callback(0, 0);
+
+        await struct.updateMeterDataViaSmartHome();
+        await struct.updateMeterDataViaSmartHome();
+        await struct.updateMeterDataViaSmartHome();
+
+        expect(struct.warnings, 'a permanent outage must not flood the log').to.have.lengthOf(1);
+    });
+
+    it('falls back when the answer knows none of the circuits', done => {
+        const struct = createStructure({
+            smartHome: {
+                getMeteringValues: async () => ({
+                    values: [{ id: 'dsm-somewhere-else-power', attributes: { value: 5 } }],
+                }),
+            },
+        });
+        let classicCalls = 0;
+        struct.updateMeterDataViaClassicApi = callback => {
+            classicCalls++;
+            callback(0, 2);
+        };
+
+        struct.updateMeterData(() => {
+            expect(classicCalls, 'an unusable answer must not silently write nothing').to.equal(1);
+            expect(struct.warnings.join(' ')).to.contain('no value for any known circuit');
+            done();
+        });
+    });
+
+    it('uses the classic path when the option is off', done => {
+        const struct = createStructure({ smartHome: null });
+        let classicCalls = 0;
+        struct.updateMeterDataViaClassicApi = callback => {
+            classicCalls++;
+            callback(0, 2);
+        };
+        struct.updateMeterData(() => {
+            expect(classicCalls).to.equal(1);
+            done();
         });
     });
 });

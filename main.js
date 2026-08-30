@@ -22,6 +22,7 @@ const ObjectHelper = require('@apollon/iobroker-tools'); // Get common adapter u
 const DSS = require('./lib/dss');
 const DSSQueue = require('./lib/dssQueue');
 const DSSStructure = require('./lib/dssStructure');
+const DSSSmartHome = require('./lib/dssSmartHome');
 const configUtils = require('./lib/configUtils');
 const dssConstants = require('./lib/constants');
 
@@ -102,6 +103,8 @@ class Digitalstrom extends utils.Adapter {
         this.connected = undefined;
 
         this.dss = null;
+        /** @type {DSSSmartHome|null} Client der neuen API, nur wenn eingeschaltet */
+        this.smartHome = null;
         this.dssQueue = null;
         this.dssStruct = null;
         this.lastScenes = {};
@@ -206,6 +209,54 @@ class Digitalstrom extends utils.Adapter {
      */
     onMessage(obj) {
         if (typeof obj === 'object' && obj.message) {
+            if (obj.command === 'createSmartHomeKey') {
+                if (!obj.callback) {
+                    return;
+                }
+                if (this.isStopping()) {
+                    return;
+                }
+                if (!this.config.appToken) {
+                    this.sendTo(
+                        obj.from,
+                        obj.command,
+                        { error: 'Please create or enter the App-Token first, the API key is derived from it.' },
+                        obj.callback,
+                    );
+                    return;
+                }
+                // Der vorhandene App-Token reicht: er wird zur Session und die erzeugt den
+                // Bearer-Key. Der Benutzer muss also kein Passwort erneut eingeben.
+                this.log.info(`Creating a Smart Home API key for host ${obj.message.host || this.config.host}`);
+                DSSSmartHome.createApiKey({
+                    host: obj.message.host || this.config.host,
+                    appToken: this.config.appToken,
+                    validateCertificate: this.config.validateCertificate,
+                    name: `ioBroker.digitalstrom.${this.instance}`,
+                    logger: {
+                        silly: this.log.silly.bind(this),
+                        debug: this.log.debug.bind(this),
+                        info: this.log.info.bind(this),
+                        warn: this.log.warn.bind(this),
+                        error: this.log.error.bind(this),
+                    },
+                }).then(
+                    apiKey => {
+                        this.log.info('Smart Home API key created');
+                        this.sendTo(
+                            obj.from,
+                            obj.command,
+                            { apiKey, native: { smartHomeApiKey: apiKey } },
+                            obj.callback,
+                        );
+                    },
+                    err => {
+                        this.log.warn(`Could not create the Smart Home API key: ${configUtils.errorMessage(err)}`);
+                        this.sendTo(obj.from, obj.command, { error: configUtils.errorMessage(err) }, obj.callback);
+                    },
+                );
+                return;
+            }
             if (obj.command === 'createAppToken') {
                 if (!obj.callback) {
                     return;
@@ -336,6 +387,7 @@ class Digitalstrom extends utils.Adapter {
             }
             // Closes the agents and aborts still running requests/long-polls
             this.dss && this.dss.stop();
+            this.smartHome && this.smartHome.stop();
             this.log && this.log.info(`cleaned everything up... ${time}`);
             const callbacks = this.stopCallbacks;
             this.stopCallbacks = [];
@@ -459,6 +511,7 @@ class Digitalstrom extends utils.Adapter {
             return;
         }
         this.dss = dss;
+        this.smartHome = this.createSmartHomeClient();
         const dssQueue = new DSSQueue({
             logger: {
                 silly: this.log.silly.bind(this),
@@ -474,6 +527,7 @@ class Digitalstrom extends utils.Adapter {
             dss,
             dssQueue,
             adapter: this,
+            smartHome: this.smartHome,
         });
         this.dssStruct = dssStruct;
 
@@ -670,6 +724,50 @@ class Digitalstrom extends utils.Adapter {
      */
     static looksLikeAppToken(token) {
         return typeof token === 'string' && /^[0-9a-f]{32,}$/i.test(token.trim());
+    }
+
+    /**
+     * Creates the client for the new Smart Home API, if it is switched on and configured.
+     *
+     * Returns null in every other case. The adapter then behaves exactly as before: the
+     * classic API stays the fallback for everything, so a missing key or an unreachable
+     * host must never keep the adapter from starting.
+     *
+     * @returns {DSSSmartHome|null}
+     */
+    createSmartHomeClient() {
+        if (!configUtils.normalizeBoolean(this.config.useSmartHomeApi, false)) {
+            return null;
+        }
+        if (!this.config.smartHomeApiKey) {
+            this.log.warn(
+                'The Smart Home API is switched on but no API key is configured - falling back to the classic API',
+            );
+            return null;
+        }
+        try {
+            const client = new DSSSmartHome({
+                host: this.config.host,
+                apiKey: this.config.smartHomeApiKey,
+                validateCertificate: this.config.validateCertificate,
+                logger: {
+                    silly: this.log.silly.bind(this),
+                    debug: this.log.debug.bind(this),
+                    info: this.log.info.bind(this),
+                    warn: this.log.warn.bind(this),
+                    error: this.log.error.bind(this),
+                },
+            });
+            this.log.info(
+                'Smart Home API is active: the meter values are read with one request instead of two per circuit',
+            );
+            return client;
+        } catch (err) {
+            this.log.warn(
+                `Could not create the Smart Home API client (${configUtils.errorMessage(err)}) - falling back to the classic API`,
+            );
+            return null;
+        }
     }
 
     /**

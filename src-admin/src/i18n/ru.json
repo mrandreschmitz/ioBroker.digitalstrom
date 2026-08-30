@@ -30,5 +30,14 @@
     "token_missing": "No app token stored yet",
     "unit_seconds": "seconds",
     "card_credentials": "Credentials",
-    "token_clear": "Remove token"
+    "token_clear": "Remove token",
+    "section_smartHome": "New Smart Home API (experimental)",
+    "info_smartHome": "Reads the meter values with ONE request instead of two per circuit. This is the only area where the new API is used so far, everything else keeps running through the classic API. If a request fails, the adapter falls back to the previous way automatically.",
+    "label_useSmartHomeApi": "Read meter values through the new API",
+    "help_useSmartHomeApi": "Requires a dSS with firmware 1.19 or newer and an API key.",
+    "label_smartHomeApiKey": "API key",
+    "help_smartHomeApiKey": "Created from the existing app token, no password needed. Visible in the dSS under System > Access Authorization.",
+    "button_createSmartHomeKey": "Create API key",
+    "key_saved": "API key is stored",
+    "key_missing": "No API key stored yet"
 }

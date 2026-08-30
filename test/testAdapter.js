@@ -400,6 +400,9 @@ describe('Adapter logic', () => {
                     log,
                     objectHelper: { loadExistingObjects: cb => cb() },
                     normalizePollInterval: Digitalstrom.normalizePollInterval,
+                    // main() fragt den Client der neuen API an. Ohne konfigurierten
+                    // Schalter liefert die Methode null, der Start laeuft also wie bisher.
+                    createSmartHomeClient: Digitalstrom.prototype.createSmartHomeClient,
                 });
             }
 

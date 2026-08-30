@@ -140,6 +140,20 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ## Changelog
 
+### 2.4.14 (2026-08-30)
+
+* **The meter values can optionally be read through the new Smart Home API.** One request for all
+  circuits instead of two per circuit - measured on a dSS 1.19.13 with six circuits: 12 requests in
+  734 ms become one in 114 ms, which takes the steady load of this adapter from about 8.7 to about
+  2.1 requests per minute
+* The switch is **off by default** and every failure falls back to the classic API, so nothing changes
+  until it is turned on. The API key is created from the EXISTING app token, no password is needed
+  again
+* Values and states stay identical. Both APIs were compared against each other beforehand: five of six
+  circuits matched to the watt second, the sixth differed by exactly the time between the two reads.
+  The unit is watt seconds, so the conversion `value / 3600 / 1000` is unchanged - note that the API
+  declares `Wh`, which is demonstrably wrong and would have been off by a factor of 3600
+
 ### 2.4.13 (2026-08-30)
 
 * **One long-poll instead of nine.** `subscribeEvents()` gave every event name its own

@@ -30,5 +30,14 @@
     "token_missing": "Noch kein App-Token hinterlegt",
     "unit_seconds": "Sekunden",
     "card_credentials": "Anmeldedaten",
-    "token_clear": "Token entfernen"
+    "token_clear": "Token entfernen",
+    "section_smartHome": "Neue Smart Home API (experimentell)",
+    "info_smartHome": "Liest die Zählerwerte mit EINEM Request statt mit zwei je Klemme. Das ist der einzige Bereich, in dem die neue API bisher genutzt wird; alles andere läuft unverändert über die klassische API. Schlägt eine Abfrage fehl, wird automatisch auf den bisherigen Weg zurückgefallen.",
+    "label_useSmartHomeApi": "Zählerwerte über die neue API lesen",
+    "help_useSmartHomeApi": "Benötigt einen dSS mit Firmware 1.19 oder neuer und einen API-Key.",
+    "label_smartHomeApiKey": "API-Key",
+    "help_smartHomeApiKey": "Wird aus dem vorhandenen App-Token erzeugt, ein Passwort ist dafür nicht nötig. Im dSS sichtbar unter System > Zugriffsberechtigung.",
+    "button_createSmartHomeKey": "API-Key erstellen",
+    "key_saved": "API-Key ist hinterlegt",
+    "key_missing": "Noch kein API-Key hinterlegt"
 }

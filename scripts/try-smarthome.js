@@ -20,6 +20,7 @@
  *   --token-file <datei>   Key aus einer Datei lesen
  *   --seconds <n>          Dauer des Mitschnitts (Default 120, 0 = nur lesen)
  *   --debounce <ms>        Entprellung (Default 400)
+ *   --meters <n>           Zaehler alle n Sekunden lesen (Default 30, 0 = aus)
  *   --set <spec>           EIN Schreibtest, Form geraet:ausgang=wert
  *                          z.B. --set 06a440901a4e5c14c0193dc4e96e8cd100:brightness=30
  */
@@ -29,7 +30,7 @@ const fs = require('node:fs');
 const DSSSmartHome = require('../lib/dssSmartHome');
 
 function parseArgs(argv) {
-    const args = { seconds: 120, debounce: 400 };
+    const args = { seconds: 120, debounce: 400, meters: 30 };
     for (let i = 2; i < argv.length; i++) {
         const next = () => argv[++i];
         switch (argv[i]) {
@@ -50,6 +51,9 @@ function parseArgs(argv) {
                 break;
             case '--set':
                 args.set = next();
+                break;
+            case '--meters':
+                args.meters = Number(next());
                 break;
             default:
                 console.error(`Unbekannte Option: ${argv[i]}`);
@@ -117,6 +121,18 @@ function diff(before, after) {
         }
     }
     return lines;
+}
+
+/**
+ * @param {any} values Antwort von getMeteringValues()
+ * @returns {Map<string, number>} Zaehler-ID -> Wert
+ */
+function meterMap(values) {
+    const map = new Map();
+    for (const entry of (values && values.values) || []) {
+        map.set(entry.id, entry.attributes && entry.attributes.value);
+    }
+    return map;
 }
 
 async function main() {
@@ -188,6 +204,7 @@ async function main() {
 
     let events = 0;
     let reads = 0;
+    let rawNotifications = 0;
     client.on('statusChanged', async () => {
         events++;
         const readStarted = Date.now();
@@ -212,15 +229,61 @@ async function main() {
             console.log(`  Status konnte nicht gelesen werden: ${err instanceof Error ? err.message : String(err)}`);
         }
     });
+    client.on('notification', type => {
+        rawNotifications++;
+        // Sofortige Rueckmeldung: so sieht man beim Tasterdruck direkt, ob der dSS ueberhaupt meldet
+        const stamp = new Date().toISOString().slice(11, 23);
+        console.log(`  [${stamp}] Rohmeldung ${rawNotifications}: ${type}`);
+    });
     client.on('structureChanged', () => console.log('  Strukturänderung gemeldet'));
     client.on('notificationConnected', () => console.log('  Websocket verbunden'));
     client.on('notificationClosed', () => console.log('  Websocket getrennt, verbinde neu'));
 
     await client.startNotifications();
+
+    // Zaehler kommen nicht ueber Notifications, die muessen abgefragt werden
+    let meterTimer = null;
+    let meterReads = 0;
+    let meterSnapshot = meterMap(meters);
+    if (args.meters) {
+        meterTimer = setInterval(async () => {
+            try {
+                const values = meterMap(await client.getMeteringValues());
+                meterReads++;
+                const changes = [];
+                for (const [id, value] of values) {
+                    const old = meterSnapshot.get(id);
+                    if (old !== value) {
+                        changes.push(`${id}: ${old} -> ${value}`);
+                    }
+                }
+                meterSnapshot = values;
+                const stamp = new Date().toISOString().slice(11, 19);
+                const power = [...values].filter(([id]) => id.endsWith('-power'));
+                console.log(
+                    `  [${stamp}] Zähler: ${power
+                        .map(([id, value]) => `${id.replace(/^dsm-|-power$/g, '').slice(-6)}=${value}W`)
+                        .join(' ')}`,
+                );
+                if (changes.length) {
+                    console.log(`            ${changes.length} Werte geändert`);
+                }
+            } catch (err) {
+                console.log(`  Zähler nicht lesbar: ${err instanceof Error ? err.message : String(err)}`);
+            }
+        }, args.meters * 1000);
+    }
+
     await new Promise(resolve => setTimeout(resolve, args.seconds * 1000));
+    if (meterTimer) {
+        clearInterval(meterTimer);
+    }
 
     console.log(`\n--- Bilanz ---`);
-    console.log(`  ${events} entprellte Meldungen, ${reads} Statusabfragen in ${args.seconds}s`);
+    console.log(
+        `  ${rawNotifications} Rohmeldungen -> ${events} entprellte Ereignisse, ` +
+            `${reads} Statusabfragen, ${meterReads} Zählerabfragen in ${args.seconds}s`,
+    );
     client.stop();
 }
 

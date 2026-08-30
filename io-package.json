@@ -1,8 +1,21 @@
 {
     "common": {
         "name": "digitalstrom",
-        "version": "2.4.13",
+        "version": "2.4.14",
         "news": {
+            "2.4.14": {
+                "en": "Optional: the meter values can now be read through the new Smart Home API of the dSS - ONE request instead of two per circuit. Switched off by default; a failing request falls back to the classic API automatically. Everything else keeps running exactly as before.",
+                "de": "Optional: Die Zählerwerte können jetzt über die neue Smart Home API des dSS gelesen werden - EIN Request statt zwei je Klemme. Standardmäßig aus; schlägt eine Abfrage fehl, wird automatisch auf die klassische API zurückgefallen. Alles andere läuft unverändert weiter.",
+                "ru": "Optional: the meter values can now be read through the new Smart Home API of the dSS - ONE request instead of two per circuit. Switched off by default; a failing request falls back to the classic API automatically. Everything else keeps running exactly as before.",
+                "pt": "Optional: the meter values can now be read through the new Smart Home API of the dSS - ONE request instead of two per circuit. Switched off by default; a failing request falls back to the classic API automatically. Everything else keeps running exactly as before.",
+                "nl": "Optional: the meter values can now be read through the new Smart Home API of the dSS - ONE request instead of two per circuit. Switched off by default; a failing request falls back to the classic API automatically. Everything else keeps running exactly as before.",
+                "fr": "Optional: the meter values can now be read through the new Smart Home API of the dSS - ONE request instead of two per circuit. Switched off by default; a failing request falls back to the classic API automatically. Everything else keeps running exactly as before.",
+                "it": "Optional: the meter values can now be read through the new Smart Home API of the dSS - ONE request instead of two per circuit. Switched off by default; a failing request falls back to the classic API automatically. Everything else keeps running exactly as before.",
+                "es": "Optional: the meter values can now be read through the new Smart Home API of the dSS - ONE request instead of two per circuit. Switched off by default; a failing request falls back to the classic API automatically. Everything else keeps running exactly as before.",
+                "pl": "Optional: the meter values can now be read through the new Smart Home API of the dSS - ONE request instead of two per circuit. Switched off by default; a failing request falls back to the classic API automatically. Everything else keeps running exactly as before.",
+                "zh-cn": "Optional: the meter values can now be read through the new Smart Home API of the dSS - ONE request instead of two per circuit. Switched off by default; a failing request falls back to the classic API automatically. Everything else keeps running exactly as before.",
+                "uk": "Optional: the meter values can now be read through the new Smart Home API of the dSS - ONE request instead of two per circuit. Switched off by default; a failing request falls back to the classic API automatically. Everything else keeps running exactly as before."
+            },
             "2.4.13": {
                 "en": "All DSS events now share one subscription id, so the adapter keeps ONE long-poll open instead of nine. Nine permanent connections that were re-established every 40 seconds were the biggest steady load the adapter put on the DSS. Unsubscribing on shutdown is also one request instead of nine. The lowest button of a tab needed more room below the save bar than 2.4.12 gave it.",
                 "de": "Alle DSS-Events laufen jetzt über eine subscriptionID, der Adapter hält damit EINEN Long-Poll offen statt neun. Neun Dauerverbindungen, die alle 40 Sekunden neu aufgebaut wurden, waren die größte Grundlast des Adapters auf dem DSS. Auch das Abmelden beim Beenden ist ein Request statt neun. Außerdem braucht der unterste Knopf eines Reiters mehr Platz unter der Speicherleiste, als 2.4.12 ihm gelassen hat.",
@@ -80,19 +93,6 @@
                 "pl": "Uwaga o migracji tokenu usunięta z okna administratora i z readme; wykrywanie nieczytelnego tokenu pozostaje",
                 "zh-cn": "从管理对话框和自述文件中移除了应用令牌迁移提示；对无法读取的令牌的检测保留",
                 "uk": "Примітку про міграцію токена прибрано з діалогу адміністрування та з readme; виявлення нечитабельного токена лишається"
-            },
-            "2.4.7": {
-                "en": "The default data polling interval is 100s instead of 60s. Measured against a real installation a cycle needs about 20s on top of the configured interval and issues two requests per circuit, so 60s resulted in 1.5 requests per minute and circuit - one and a half times what the digitalSTROM rules 8/9 allow. 100s is the first value that really stays within the limit. The minimum stays at 60s, lower values are possible but are documented as exceeding the guideline",
-                "de": "Das Datenabfrageintervall steht standardmäßig auf 100 s statt 60 s. An einer echten Anlage gemessen braucht ein Zyklus rund 20 s zusätzlich zum eingestellten Intervall und erzeugt zwei Anfragen je Klemme - 60 s ergaben damit 1,5 Anfragen pro Minute und Klemme, also das Anderthalbfache dessen, was die digitalSTROM-Regeln 8/9 erlauben. 100 s ist der erste Wert, der die Grenze wirklich einhält. Das Minimum bleibt bei 60 s, kleinere Werte sind weiterhin möglich, die Abweichung ist dokumentiert",
-                "ru": "Интервал опроса по умолчанию 100 с вместо 60 с: цикл выполняет два запроса на контур, поэтому 60 с превышали правила DSS 8/9. Минимум остаётся 60 с",
-                "pt": "Intervalo de consulta predefinido de 100s em vez de 60s: um ciclo faz dois pedidos por circuito, pelo que 60s excedia as regras DSS 8/9. O mínimo mantém-se em 60s",
-                "nl": "Standaard polling-interval 100s in plaats van 60s: een cyclus doet twee verzoeken per circuit, waardoor 60s de DSS-regels 8/9 overschreed. Het minimum blijft 60s",
-                "fr": "Intervalle d'interrogation par défaut de 100s au lieu de 60s : un cycle effectue deux requêtes par circuit, 60s dépassait donc les règles DSS 8/9. Le minimum reste 60s",
-                "it": "Intervallo di polling predefinito di 100s invece di 60s: un ciclo esegue due richieste per circuito, quindi 60s superava le regole DSS 8/9. Il minimo resta 60s",
-                "es": "Intervalo de sondeo predeterminado de 100s en lugar de 60s: un ciclo realiza dos peticiones por circuito, por lo que 60s superaba las reglas DSS 8/9. El mínimo sigue siendo 60s",
-                "pl": "Domyślny interwał odpytywania 100s zamiast 60s: cykl wykonuje dwa żądania na obwód, więc 60s przekraczało reguły DSS 8/9. Minimum pozostaje 60s",
-                "zh-cn": "默认轮询间隔由 60 秒改为 100 秒：每个周期对每个回路发出两次请求，因此 60 秒超出了 DSS 规则 8/9。最小值仍为 60 秒",
-                "uk": "Типовий інтервал опитування 100 с замість 60 с: цикл виконує два запити на контур, тож 60 с перевищували правила DSS 8/9. Мінімум лишається 60 с"
             }
         },
         "titleLang": {
@@ -170,13 +170,17 @@
         "usePresetValues": true,
         "initializeOutputValues": true,
         "deleteUnknownObjects": false,
-        "validateCertificate": false
+        "validateCertificate": false,
+        "useSmartHomeApi": false,
+        "smartHomeApiKey": ""
     },
     "protectedNative": [
-        "appToken"
+        "appToken",
+        "smartHomeApiKey"
     ],
     "encryptedNative": [
-        "appToken"
+        "appToken",
+        "smartHomeApiKey"
     ],
     "objects": [],
     "instanceObjects": [

@@ -107,6 +107,28 @@ export default function Settings({ native, onChange, onSendTo, alive, t, initial
 
     const canCreate = !!native.host && !!credentials.username && !!credentials.password && !tokenState.running;
 
+    const [keyState, setKeyState] = useState({ running: false, error: '', done: false });
+    const [showKey, setShowKey] = useState(false);
+
+    // Der API-Key entsteht aus dem vorhandenen App-Token, deshalb braucht dieser Knopf
+    // keine Anmeldedaten - nur eine laufende Instanz, die den Token entschluesseln kann.
+    const createSmartHomeKey = async () => {
+        setKeyState({ running: true, error: '', done: false });
+        try {
+            const res = await onSendTo('createSmartHomeKey', { host: native.host });
+            if (res && res.error) {
+                setKeyState({ running: false, error: res.error, done: false });
+            } else if (res && res.apiKey) {
+                onChange('smartHomeApiKey', res.apiKey);
+                setKeyState({ running: false, error: '', done: true });
+            } else {
+                setKeyState({ running: false, error: 'no answer from the instance', done: false });
+            }
+        } catch (e) {
+            setKeyState({ running: false, error: (e && e.message) || String(e), done: false });
+        }
+    };
+
     return (
         <Box sx={{ minHeight: '100%', bgcolor: 'background.default' }}>
             {/* Kopfbereich mit Symbol, Name und Kurzbeschreibung */}
@@ -250,6 +272,78 @@ export default function Settings({ native, onChange, onSendTo, alive, t, initial
 
                                 {tokenState.error ? <Alert severity="error">{tokenState.error}</Alert> : null}
                                 {tokenState.done ? <Alert severity="success">{t('token_saved')}</Alert> : null}
+                            </Stack>
+                        </Card>
+
+                        <Card icon={<KeyIcon />} title={t('section_smartHome')}>
+                            <Stack spacing={2.5}>
+                                <Alert severity="info" icon={<InfoOutlinedIcon fontSize="inherit" />}>
+                                    {t('info_smartHome')}
+                                </Alert>
+
+                                <OptionRow
+                                    checked={native.useSmartHomeApi}
+                                    onChange={v => onChange('useSmartHomeApi', v)}
+                                    label={t('label_useSmartHomeApi')}
+                                    help={th('help_useSmartHomeApi')}
+                                />
+
+                                <Box>
+                                    <TextField
+                                        label={t('label_smartHomeApiKey')}
+                                        type={showKey ? 'text' : 'password'}
+                                        value={native.smartHomeApiKey || ''}
+                                        onChange={e => onChange('smartHomeApiKey', e.target.value)}
+                                        helperText={th('help_smartHomeApiKey')}
+                                        sx={{ maxWidth: 560 }}
+                                        InputProps={{
+                                            endAdornment: (
+                                                <InputAdornment position="end">
+                                                    <Button
+                                                        size="small"
+                                                        onClick={() => setShowKey(v => !v)}
+                                                        sx={{ minWidth: 0, color: 'text.secondary' }}
+                                                    >
+                                                        {showKey ? (
+                                                            <VisibilityOffIcon fontSize="small" />
+                                                        ) : (
+                                                            <VisibilityIcon fontSize="small" />
+                                                        )}
+                                                    </Button>
+                                                </InputAdornment>
+                                            ),
+                                        }}
+                                    />
+                                    <Box sx={{ mt: 1 }}>
+                                        <Chip
+                                            size="small"
+                                            variant="outlined"
+                                            color={native.smartHomeApiKey ? 'success' : 'default'}
+                                            icon={native.smartHomeApiKey ? <CheckCircleIcon /> : undefined}
+                                            label={native.smartHomeApiKey ? t('key_saved') : t('key_missing')}
+                                        />
+                                    </Box>
+                                </Box>
+
+                                <Box>
+                                    <Button
+                                        variant="contained"
+                                        disabled={!native.appToken || keyState.running || alive === false}
+                                        onClick={createSmartHomeKey}
+                                        startIcon={
+                                            keyState.running ? (
+                                                <CircularProgress size={16} color="inherit" />
+                                            ) : (
+                                                <KeyIcon />
+                                            )
+                                        }
+                                    >
+                                        {t('button_createSmartHomeKey')}
+                                    </Button>
+                                </Box>
+
+                                {keyState.error ? <Alert severity="error">{keyState.error}</Alert> : null}
+                                {keyState.done ? <Alert severity="success">{t('key_saved')}</Alert> : null}
                             </Stack>
                         </Card>
                     </>

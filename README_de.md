@@ -219,6 +219,20 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
 
+### 2.4.14 (2026-08-30)
+
+* **Die Zählerwerte können optional über die neue Smart Home API gelesen werden.** Ein Request für alle
+  Klemmen statt zwei je Klemme - an einem dSS 1.19.13 mit sechs Klemmen gemessen: aus 12 Requests in
+  734 ms wird einer in 114 ms, die Grundlast des Adapters sinkt damit von rund 8,7 auf rund 2,1
+  Requests pro Minute
+* Der Schalter ist **standardmäßig aus**, und jeder Fehlschlag fällt auf die klassische API zurück -
+  bis er eingeschaltet wird, ändert sich also nichts. Der API-Key entsteht aus dem VORHANDENEN
+  App-Token, ein Passwort ist dafür nicht nötig
+* Werte und States bleiben identisch. Beide APIs wurden vorher gegeneinander verglichen: fünf von sechs
+  Klemmen stimmten auf die Wattsekunde überein, die sechste wich um genau den Zeitversatz zwischen den
+  Abfragen ab. Die Einheit sind Wattsekunden, die Umrechnung `Wert / 3600 / 1000` bleibt deshalb
+  unverändert - die API deklariert `Wh`, was nachweislich falsch ist und um den Faktor 3600 danebenläge
+
 ### 2.4.13 (2026-08-30)
 
 * **Ein Long-Poll statt neun.** `subscribeEvents()` gab jedem Eventnamen eine eigene
