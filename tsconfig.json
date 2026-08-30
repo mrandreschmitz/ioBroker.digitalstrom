@@ -41,5 +41,5 @@
         "target": "es2022"
     },
     "include": ["**/*.js", "**/*.d.ts"],
-    "exclude": ["node_modules/**", "admin/**"]
+    "exclude": ["node_modules/**", "admin/**", "src-admin/**"]
 }

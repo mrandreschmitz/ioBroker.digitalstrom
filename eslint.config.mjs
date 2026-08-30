@@ -3,7 +3,10 @@ import config from '@iobroker/eslint-config';
 export default [
     ...config,
     {
-        ignores: ['node_modules/**', 'admin/**', '.dev-server/**'],
+        // src-admin holds browser sources with JSX. The rules here are type aware and
+        // built for the adapter runtime, they cannot be applied to those files. They are
+        // checked by 'npm run check:admin' (tsc against src-admin/tsconfig.json) instead.
+        ignores: ['node_modules/**', 'admin/**', 'src-admin/**', '.dev-server/**'],
     },
     {
         files: ['test/**/*.js'],

@@ -50,6 +50,21 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
+      - name: Type check the admin sources
+        run: npm run check:admin
+
+      # The admin interface is a built bundle that is committed, because the adapter is
+      # installed straight from this repository. A source change without a rebuild would
+      # ship the previous dialog without anyone noticing, so the build is repeated here
+      # and the result has to match what was committed.
+      - name: The committed admin bundle matches its sources
+        run: |
+          npm run build:admin
+          git diff --exit-code -- admin || {
+            echo "::error::admin/ is out of date - run 'npm run build:admin' and commit the result"
+            exit 1
+          }
+
       - name: Test package files
         run: npm run test:package
 

@@ -211,6 +211,38 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
 
+### 2.4.10 (2026-08-30)
+
+* **Die Konfigurationsoberfläche ist jetzt eine eigene React-Anwendung.** jsonConfig beschreibt
+  ein Formular, es gestaltet keines - Überschriften wurden als vollbreite Balken in der
+  Primärfarbe des Admin-Themes gezeichnet, und die dafür gesetzten Farben erreichten immer nur
+  den Text. Der Dialog ist nun direkt geschrieben: helle Fläche unabhängig vom Admin-Theme,
+  abgesetzte Karten je Thema, Kopfbereich mit Adaptersymbol und Reiter mit Symbolen. Der
+  App-Token lässt sich aufdecken und zeigt an, ob er gespeichert ist. Die Quellen liegen in
+  `src-admin`, das Ergebnis in `admin` und wird mitversioniert, da der Adapter direkt aus
+  diesem Repository installiert wird. Alle elf Sprachen wurden aus der bisherigen
+  `admin/jsonConfig.json` übernommen, nichts wurde neu übersetzt. `npm run build:admin` baut,
+  `npm run dev:admin` liefert `preview.html` zum Ansehen des Layouts, und der Workflow baut das
+  Bündel nach und schlägt fehl, wenn es vom eingecheckten abweicht
+* Damit entfällt auch eine ganze Fehlerklasse: Die Anmeldedaten für die Token-Erstellung liefen
+  bisher durch ein JavaScript-Template in `jsonData`, wo ein Anführungszeichen im Passwort die
+  Nachricht zerbrechen konnte. Sie werden jetzt als gewöhnliches Objekt übergeben. Die 43
+  Tests, die jsonConfig und diese Maskierung absicherten, sind entfallen, 6 neue prüfen die
+  gebaute Oberfläche, die Übereinstimmung der elf Sprachdateien und dass jeder vom Dialog
+  angeforderte Text existiert
+* **Binäreingänge benennen ihre Werte.** Der Zustand enthielt die nackte Zahl des DSS, ein
+  Fenstergriff zeigte also 1, 2 oder 3, ohne dass irgendwo stand, was das bedeutet. An einem
+  EnOcean-Fenstergriff (F6-10-00) beobachtet und jede Stellung einzeln gegen den lesbaren
+  Gerätezustand desselben Griffs geprüft: geschlossen 1, offen 2, gekippt 3. Jeder andere
+  Binäreingang behält zwei Werte, 1 inaktiv und 2 aktiv. Der Typ bleibt `number`, damit
+  vorhandene Verlaufsdaten vergleichbar bleiben
+* Aktualisierte Abhängigkeiten: `@apollon/iobroker-tools` 0.3.0, `actions/checkout` 7,
+  `actions/setup-node` 7, `@types/node` 26, `@types/sinon` 22, `@types/proxyquire` 1.3.31,
+  `@alcalzone/release-script-plugin-license` 5.2.2. chai 6, sinon-chai 4, chai-as-promised 8
+  und TypeScript 7 wurden bewusst nicht übernommen: Die chai-Familie ist reines ESM, was die
+  Typprüfung eines CommonJS-Projekts ablehnt, und `@typescript-eslint` bindet TypeScript auf
+  unter 6.1
+
 ### 2.4.9 (2026-08-30)
 
 * **Ungültige Admin-Konfiguration behoben.** Die beiden Trennlinien des in 2.4.5 eingeführten

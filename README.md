@@ -132,6 +132,35 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ## Changelog
 
+### 2.4.10 (2026-08-30)
+
+* **The configuration dialog is a React application of its own now.** jsonConfig describes a
+  form, it does not design one - headers were rendered as full width bars in the primary colour
+  of the admin theme, and the colours set for them only ever reached the text. The dialog is
+  written directly instead: a light surface independent of the admin theme, raised cards per
+  topic, a header with the adapter icon and tabs with icons. The app token can be revealed and
+  says whether it is stored. Sources live in `src-admin`, the build lands in `admin` and is
+  committed, because the adapter is installed straight from this repository. All eleven
+  languages were taken over from the former `admin/jsonConfig.json`, nothing was translated
+  anew. `npm run build:admin` builds it, `npm run dev:admin` serves `preview.html` for looking
+  at the layout, and the workflow rebuilds the bundle and fails if it differs from the
+  committed one
+* This also removes a whole class of error: the credentials for creating an app token used to
+  travel through a JavaScript template literal in `jsonData`, where a quote in a password could
+  break the message. They are now passed as a plain object. The 43 tests that guarded the
+  jsonConfig and that escaping were dropped, 6 new ones check the built interface, the
+  agreement of the eleven translation files and that every text the dialog asks for exists
+* **Binary inputs name their values.** The state kept the bare number of the DSS, so a window
+  handle read 1, 2 or 3 without anything saying what that meant. Observed on an EnOcean window
+  handle (F6-10-00), each position checked against the readable device state of the same
+  handle: closed 1, open 2, tilted 3. Every other binary input keeps two values, 1 inactive and
+  2 active. The type stays `number`, so existing history data remains comparable
+* Dependency updates: `@apollon/iobroker-tools` 0.3.0, `actions/checkout` 7,
+  `actions/setup-node` 7, `@types/node` 26, `@types/sinon` 22, `@types/proxyquire` 1.3.31,
+  `@alcalzone/release-script-plugin-license` 5.2.2. chai 6, sinon-chai 4, chai-as-promised 8
+  and TypeScript 7 were deliberately not taken: the chai family is ESM only, which the type
+  check of a CommonJS project rejects, and `@typescript-eslint` pins TypeScript below 6.1
+
 ### 2.4.9 (2026-08-30)
 
 * **Fixed an invalid admin configuration.** The two dividers of the layout introduced in 2.4.5
