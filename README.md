@@ -30,6 +30,14 @@ During test phase, or for testing of newer versions (see relevant forum threads)
 
 ## Usage
 
+The configuration dialog with the connection settings and the app token:
+
+![Connection tab of the configuration dialog](docs/admin-connection.png)
+
+The polling interval and the behaviour of the adapter sit on the second tab:
+
+![Settings tab of the configuration dialog](docs/admin-settings.png)
+
 After installing the adapter and creating an instance the admin dialog will appear.
 First of all you need to enter your DSS IP/Hostname. Then you can choose if you already have manually created an App Token in the DSS Web-Interface or not.
 If you do not have an App-Token simply enter your Username and Password to retrieve an App Token automatically.

@@ -13,7 +13,9 @@ import en from './i18n/en.json';
 const dict = { de, en };
 
 function Preview() {
-    const lang = new URLSearchParams(location.search).get('lang') || 'de';
+    const params = new URLSearchParams(location.search);
+    const lang = params.get('lang') || 'de';
+    const initialTab = parseInt(params.get('tab') || '0', 10);
     const words = dict[lang] || dict.en;
     const [native, setNative] = useState({
         host: '10.13.10.4',
@@ -33,6 +35,7 @@ function Preview() {
                 onChange={(attr, value) => setNative(n => ({ ...n, [attr]: value }))}
                 onSendTo={async () => ({ appToken: 'ffffffffffffffffffffffffffffffff' })}
                 alive
+                initialTab={initialTab}
                 t={key => words[key] || key}
             />
         </ThemeProvider>

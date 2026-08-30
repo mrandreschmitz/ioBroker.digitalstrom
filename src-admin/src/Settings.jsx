@@ -63,8 +63,8 @@ function OptionRow({ checked, onChange, label, help }) {
     );
 }
 
-export default function Settings({ native, onChange, onSendTo, alive, t }) {
-    const [tab, setTab] = useState(0);
+export default function Settings({ native, onChange, onSendTo, alive, t, initialTab = 0 }) {
+    const [tab, setTab] = useState(initialTab);
     // Not every field has an explanation. Both this preview and I18n return the key
     // itself when a text is missing, which must not end up on the screen.
     const th = key => (t(key) === key ? '' : t(key));

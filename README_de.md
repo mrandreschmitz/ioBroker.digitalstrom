@@ -30,6 +30,14 @@ https://github.com/mrandreschmitz/ioBroker.digitalstrom.
 
 ## Verwendung
 
+Der Konfigurationsdialog mit den Verbindungsdaten und dem App-Token:
+
+![Reiter „Verbindung" des Konfigurationsdialogs](docs/admin-connection.png)
+
+Abfrageintervall und Verhalten des Adapters liegen im zweiten Reiter:
+
+![Reiter „Einstellungen" des Konfigurationsdialogs](docs/admin-settings.png)
+
 Nach der Installation und dem Anlegen einer Instanz erscheint der Admin-Dialog.
 Zuerst trägst du IP-Adresse oder Hostnamen deines DSS ein. Danach kannst du entweder einen bereits im
 DSS-Webinterface erzeugten App-Token eintragen oder Benutzername und Passwort angeben, damit der
