@@ -83,22 +83,24 @@ jobs:
   deploy:
     needs: [check-and-lint, adapter-tests]
 
-    # Trigger this step only when a commit on master is tagged with a version number
+    # Trigger this step only when a commit is tagged with a version number
     if: |
       contains(github.event.head_commit.message, '[skip ci]') == false &&
       github.event_name == 'push' &&
       startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
 
-    # Write permission is required to create the Github release,
-    # id-token is required for npm Trusted Publishing (OIDC)
+    # Write permission is required to create the Github release. No id-token here:
+    # this fork does not publish to npm, see the note at the release step below.
     permissions:
       contents: write
-      id-token: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # the annotated tag carries the release notes
+          fetch-depth: 0
 
       - name: Use Node.js 22.x
         uses: actions/setup-node@v4
@@ -106,31 +108,30 @@ jobs:
           node-version: 22.x
           registry-url: https://registry.npmjs.org
 
-      - name: Extract the version and commit body from the tag
+      - name: Extract the version and the release notes from the tag
         id: extract_release
-        # The body may be multiline, therefore newlines and % need to be escaped
+        # The release notes are the message of the annotated tag, so they can be written
+        # deliberately instead of reusing whatever the last commit message happened to be.
+        # Falls back to the commit body for a lightweight tag.
         run: |
           VERSION="${{ github.ref }}"
           VERSION=${VERSION##*/v}
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          NOTES=$(git tag -l --format='%(contents)' "v$VERSION")
+          if [ -z "$NOTES" ]; then
+            NOTES=$(git show -s --format=%b)
+          fi
           EOF_MARKER=$(openssl rand -hex 8)
           {
             echo "BODY<<$EOF_MARKER"
-            git show -s --format=%b
+            echo "$NOTES"
             echo "$EOF_MARKER"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Install Dependencies
-        run: npm ci
-
-      # Requires npm Trusted Publishing (OIDC) to be configured for this package on npmjs.com:
-      # package settings -> Trusted Publisher -> GitHub Actions, with owner "mrandreschmitz",
-      # repository "ioBroker.digitalstrom" and workflow file "test-and-release.yml".
-      # Without that setup this step fails - classic npm tokens were revoked by npm in 2025.
-      # The whole deploy job only runs for a pushed tag "v<version>".
-      - name: Publish package to npm
-        run: npm publish --provenance --access public
-
+      # Deliberately NO "npm publish" here. The npm package name iobroker.digitalstrom
+      # belongs to the upstream project (maintainers bluefox and apollon77), so publishing
+      # from this fork is not possible. Installation happens through the GitHub URL:
+      #   iobroker url https://github.com/mrandreschmitz/ioBroker.digitalstrom
       - name: Create Github Release
         uses: softprops/action-gh-release@v2
         with:

@@ -139,6 +139,9 @@ It is published under the same MIT license; the original copyright notice is kep
   `digitalstrom has an invalid jsonConfig` and fell back to a generic dialog. The colour now
   lives in `style`/`darkStyle`, where a free colour is allowed. Two new tests check the enum
   constrained properties of the schema, so this class of error cannot come back unnoticed
+* The release workflow of this fork no longer tries to publish to npm - the package name
+  belongs to the upstream project. A pushed tag `v<version>` now only creates the GitHub
+  release, and its text comes from the message of the annotated tag
 
 ### 2.4.8 (2026-08-30)
 

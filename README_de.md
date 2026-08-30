@@ -210,6 +210,9 @@ Der vollständige Changelog inklusive der Historie von Apollon77 steht in der en
   Die Farbe steht jetzt in `style`/`darkStyle`, wo eine freie Farbe zulässig ist. Zwei neue
   Tests prüfen die enum-beschränkten Eigenschaften des Schemas, damit diese Fehlerklasse nicht
   unbemerkt zurückkommen kann.
+* Der Release-Workflow dieses Forks versucht nicht mehr, auf npm zu veröffentlichen — der
+  Paketname gehört dem Ursprungsprojekt. Ein gepushter Tag `v<Version>` erzeugt jetzt nur noch
+  das GitHub-Release, dessen Text aus der Nachricht des annotierten Tags stammt.
 
 ### 2.4.8 (2026-08-30)
 
