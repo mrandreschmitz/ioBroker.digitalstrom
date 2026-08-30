@@ -1,8 +1,21 @@
 {
     "common": {
         "name": "digitalstrom",
-        "version": "2.4.11",
+        "version": "2.4.12",
         "news": {
+            "2.4.12": {
+                "en": "The app token was decrypted twice when the settings were opened, because it was named in encryptedFields as well as in encryptedNative. That yields the ciphertext again, and saving from there would have stored a token the adapter cannot use. The lowest button also sat underneath the save bar of the admin.",
+                "de": "Der App-Token wurde beim Öffnen der Einstellungen doppelt entschlüsselt, weil er sowohl in encryptedFields als auch in encryptedNative stand. Das ergibt wieder den verschlüsselten Text - ein anschließendes Speichern hätte einen unbrauchbaren Token hinterlegt. Außerdem lag der unterste Knopf unter der Speicherleiste des Admin.",
+                "ru": "The app token was decrypted twice when the settings were opened, because it was named in encryptedFields as well as in encryptedNative. That yields the ciphertext again, and saving from there would have stored a token the adapter cannot use. The lowest button also sat underneath the save bar of the admin.",
+                "pt": "The app token was decrypted twice when the settings were opened, because it was named in encryptedFields as well as in encryptedNative. That yields the ciphertext again, and saving from there would have stored a token the adapter cannot use. The lowest button also sat underneath the save bar of the admin.",
+                "nl": "The app token was decrypted twice when the settings were opened, because it was named in encryptedFields as well as in encryptedNative. That yields the ciphertext again, and saving from there would have stored a token the adapter cannot use. The lowest button also sat underneath the save bar of the admin.",
+                "fr": "The app token was decrypted twice when the settings were opened, because it was named in encryptedFields as well as in encryptedNative. That yields the ciphertext again, and saving from there would have stored a token the adapter cannot use. The lowest button also sat underneath the save bar of the admin.",
+                "it": "The app token was decrypted twice when the settings were opened, because it was named in encryptedFields as well as in encryptedNative. That yields the ciphertext again, and saving from there would have stored a token the adapter cannot use. The lowest button also sat underneath the save bar of the admin.",
+                "es": "The app token was decrypted twice when the settings were opened, because it was named in encryptedFields as well as in encryptedNative. That yields the ciphertext again, and saving from there would have stored a token the adapter cannot use. The lowest button also sat underneath the save bar of the admin.",
+                "pl": "The app token was decrypted twice when the settings were opened, because it was named in encryptedFields as well as in encryptedNative. That yields the ciphertext again, and saving from there would have stored a token the adapter cannot use. The lowest button also sat underneath the save bar of the admin.",
+                "zh-cn": "The app token was decrypted twice when the settings were opened, because it was named in encryptedFields as well as in encryptedNative. That yields the ciphertext again, and saving from there would have stored a token the adapter cannot use. The lowest button also sat underneath the save bar of the admin.",
+                "uk": "The app token was decrypted twice when the settings were opened, because it was named in encryptedFields as well as in encryptedNative. That yields the ciphertext again, and saving from there would have stored a token the adapter cannot use. The lowest button also sat underneath the save bar of the admin."
+            },
             "2.4.11": {
                 "en": "The configuration dialog of 2.4.10 could not connect to ioBroker and only reported \"Socket connection could not be initialized\". The page did not load the socket library of the admin, which @iobroker/socket-client expects as a global. It is loaded now, and a test checks for it.",
                 "de": "Der Konfigurationsdialog aus 2.4.10 konnte sich nicht mit ioBroker verbinden und meldete nur „Socket connection could not be initialized\". Die Seite lud die Socket-Bibliothek des Admin nicht nach, die @iobroker/socket-client als globale Variable erwartet. Sie wird jetzt geladen, ein Test prüft das.",
@@ -80,19 +93,6 @@
                 "pl": "Regulacja temperatury pomieszczenia: kanał temperatureControl z trybem, stanem regulatora i wartościami zadanymi. Tworzone są też stany klastrów i stany grup z kropką w nazwie",
                 "zh-cn": "房间温度调节：新增 temperatureControl 通道，包含调节模式、调节器状态和设定值。集群状态以及名称中带点的组状态现在也会创建",
                 "uk": "Регулювання температури приміщення: канал temperatureControl із режимом, станом регулятора та уставками. Тепер створюються також стани кластерів і групові стани з крапкою в назві"
-            },
-            "2.4.5": {
-                "en": "Redesigned the admin configuration: the options are now split into the tabs \"Connection\", \"Settings\" and \"Notes\" instead of one long page, with section headers, info boxes and switch cards in the digitalSTROM colours\nThe notes tab explains the certificate check\nNo option was renamed - existing instance settings are taken over unchanged",
-                "de": "Admin-Konfiguration neu gestaltet: Die Optionen liegen jetzt in den Reitern „Verbindung“, „Einstellungen“ und „Hinweise“ statt auf einer langen Seite, mit Abschnittsüberschriften, Hinweisboxen und Schalterkarten in den digitalSTROM-Farben\nDer Reiter „Hinweise“ erklärt die Zertifikatsprüfung\nKeine Option wurde umbenannt — bestehende Instanzeinstellungen werden unverändert übernommen",
-                "ru": "Переработана конфигурация в админке: вкладки «Подключение», «Настройки» и «Примечания» в цветах digitalSTROM. Ни одна опция не переименована",
-                "pt": "Configuração do admin redesenhada: separadores «Ligação», «Configurações» e «Notas» nas cores digitalSTROM. Nenhuma opção foi renomeada",
-                "nl": "Adminconfiguratie opnieuw vormgegeven: tabbladen «Verbinding», «Instellingen» en «Opmerkingen» in de digitalSTROM-kleuren. Geen enkele optie is hernoemd",
-                "fr": "Configuration de l'admin repensée : onglets «Connexion», «Paramètres» et «Remarques» aux couleurs digitalSTROM. Aucune option n'a été renommée",
-                "it": "Configurazione admin ridisegnata: schede «Connessione», «Impostazioni» e «Note» nei colori digitalSTROM. Nessuna opzione è stata rinominata",
-                "es": "Configuración del admin rediseñada: pestañas «Conexión», «Ajustes» y «Notas» en los colores de digitalSTROM. Ninguna opción se ha renombrado",
-                "pl": "Przeprojektowana konfiguracja w adminie: zakładki «Połączenie», «Ustawienia» i «Uwagi» w kolorach digitalSTROM. Żadna opcja nie została zmieniona",
-                "zh-cn": "重新设计管理配置界面：采用 digitalSTROM 配色的「连接」「设置」「说明」三个选项卡。没有重命名任何选项",
-                "uk": "Оновлено конфігурацію в адмінці: вкладки «З'єднання», «Налаштування» та «Примітки» у кольорах digitalSTROM. Жодну опцію не перейменовано"
             }
         },
         "titleLang": {

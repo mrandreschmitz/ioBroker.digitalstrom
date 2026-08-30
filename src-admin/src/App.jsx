@@ -11,9 +11,11 @@ export default class App extends GenericApp {
     constructor(props) {
         super(props, {
             translations,
-            // The app token is stored encrypted, io-package.json lists it in
-            // encryptedNative and protectedNative.
-            encryptedFields: ['appToken'],
+            // Deliberately no encryptedFields here. io-package.json already lists appToken
+            // in encryptedNative, and GenericApp.onPrepareLoad decrypts both its own list
+            // AND the fields of encryptedNative. Naming the token in both would decrypt it
+            // twice, which returns the ciphertext again - saving from that state would
+            // store a value the adapter cannot use.
             bottomButtons: true,
             sentryDSN: '',
         });

@@ -219,6 +219,18 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
 
+### 2.4.12 (2026-08-30)
+
+* **Der App-Token wurde doppelt entschlüsselt.** Er stand in der Option `encryptedFields` von
+  `GenericApp` und gleichzeitig in `encryptedNative` der io-package.json - und `onPrepareLoad`
+  entschlüsselt die eigene Liste zusätzlich zu den Feldern aus `encryptedNative`. Zweimaliges
+  Entschlüsseln ergibt wieder den verschlüsselten Text, der Dialog hätte also einen
+  unbrauchbaren Wert angezeigt, und ein Speichern von dort hätte einen Token hinterlegt, mit
+  dem der Adapter nichts anfangen kann. Maßgeblich ist jetzt allein `encryptedNative`, und ein
+  Test stellt sicher, dass das Feld nicht wieder an beiden Stellen steht
+* Der unterste Knopf eines Reiters lag direkt unter der Speicherleiste des Admin, die am
+  unteren Rand fixiert ist. Der Inhalt hält jetzt Abstand davon
+
 ### 2.4.11 (2026-08-30)
 
 * **Konfigurationsdialog ohne Verbindung behoben.** Der in 2.4.10 eingeführte React-Dialog

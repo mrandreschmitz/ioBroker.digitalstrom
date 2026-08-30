@@ -137,7 +137,9 @@ export default function Settings({ native, onChange, onSendTo, alive, t, initial
                 </Tabs>
             </Box>
 
-            <Box sx={{ px: { xs: 2, sm: 4 }, py: 3, maxWidth: 1080 }}>
+            {/* The save bar of the admin sits fixed at the bottom edge, so the content
+                keeps room below it - otherwise the last button ends up underneath it. */}
+            <Box sx={{ px: { xs: 2, sm: 4 }, pt: 3, pb: 12, maxWidth: 1080 }}>
                 {tab === 0 ? (
                     <>
                         <Card icon={<RouterIcon />} title={t('section_server')}>

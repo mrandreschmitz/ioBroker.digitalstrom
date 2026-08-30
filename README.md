@@ -140,6 +140,17 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ## Changelog
 
+### 2.4.12 (2026-08-30)
+
+* **The app token was decrypted twice.** It was named in the `encryptedFields` option of
+  `GenericApp` and, at the same time, in `encryptedNative` of io-package.json - and
+  `onPrepareLoad` decrypts its own list plus the fields of `encryptedNative`. Decrypting twice
+  returns the ciphertext, so the dialog would have shown an unusable value and saving from
+  there would have stored a token the adapter cannot use. `encryptedNative` alone is
+  authoritative now, and a test makes sure the field is not declared in both places again
+* The lowest button of a tab sat directly underneath the save bar of the admin, which is fixed
+  to the bottom edge. The content keeps room below it now
+
 ### 2.4.11 (2026-08-30)
 
 * **Fixed a configuration dialog that could not connect.** The React dialog introduced in

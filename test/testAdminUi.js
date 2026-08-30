@@ -44,6 +44,19 @@ describe('Admin interface', () => {
         expect(html, 'socket-client uses this hook instead of polling').to.contain('registerSocketOnLoad');
     });
 
+    // GenericApp.onPrepareLoad decrypts the fields of its own encryptedFields option and
+    // additionally those of encryptedNative. A field named in both is decrypted twice,
+    // which yields the ciphertext again - and saving from there stores a token the adapter
+    // cannot use. encryptedNative alone is what counts.
+    it('the app token is declared for decryption exactly once', () => {
+        const ioPackage = readJson('io-package.json');
+        expect(ioPackage.encryptedNative, 'belongs at the root, not into common').to.include('appToken');
+
+        const app = fs.readFileSync(path.join(root, 'src-admin', 'src', 'App.jsx'), 'utf8');
+        const active = app.split('\n').filter(line => !line.trim().startsWith('//'));
+        expect(active.join('\n'), 'encryptedNative already covers it').to.not.contain('encryptedFields:');
+    });
+
     it('the icon referred to by io-package.json is next to the bundle', () => {
         const ioPackage = readJson('io-package.json');
         expect(fs.existsSync(path.join(root, 'admin', ioPackage.common.icon))).to.be.true;
