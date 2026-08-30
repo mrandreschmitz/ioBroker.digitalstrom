@@ -421,15 +421,10 @@ describe('DSS', () => {
                 sent.push(path);
                 return connectionError();
             };
-            dss.subscriptions.eventA = {
-                subscriptionId: 42,
-                timeout: 10,
-                errorCount: 0,
-                retryTimer: null,
-                polling: false,
-            };
+            dss.subscriptions.eventA = { subscriptionId: 42, timeout: 10 };
+            dss.ensureChannel(42, 10);
             dss.scheduleEventRetry = () => {}; // no timers in the test
-            dss.pollEvent('eventA');
+            dss.pollChannel(42);
             await new Promise(resolve => setTimeout(resolve, 40));
             expect(sent.length, 'event/get must be sent exactly once').to.equal(1);
             dss.stop();
@@ -460,6 +455,9 @@ describe('DSS', () => {
             dss.subscribeEvents(['eventA'], errs => {
                 expect(errs).to.equal(null);
                 expect(dss.subscriptions).to.have.property('eventA');
+                expect(dss.getChannel(dss.subScriptionId), 'the channel of the subscription id exists').to.not.equal(
+                    null,
+                );
                 dss.stop();
                 done();
             });
@@ -483,6 +481,214 @@ describe('DSS', () => {
                 dss.stop();
                 done();
             }, 30);
+        });
+
+        // All event names share ONE subscription id, so the DSS only has to keep one
+        // long-poll open instead of one per event name. Before this the adapter opened
+        // nine permanent connections and re-established each of them every 40 seconds.
+        it('subscribes every event on one subscription id and polls exactly once', done => {
+            const dss = createDss();
+            const subscribed = [];
+            let polls = 0;
+            dss.requestAsync = async (dssClass, dssFunction, params) => {
+                if (dssFunction === 'subscribe') {
+                    subscribed.push({ id: params.subscriptionID, name: params.name });
+                    return { ok: true };
+                }
+                if (dssFunction === 'get') {
+                    polls++;
+                    return new Promise(() => {}); // long-poll stays pending
+                }
+                return { ok: true };
+            };
+
+            const eventNames = ['callScene', 'buttonClick', 'stateChange', 'deviceSensorValue'];
+            dss.subscribeEvents(eventNames, errs => {
+                expect(errs).to.equal(null);
+                expect(subscribed.map(entry => entry.name)).to.deep.equal(eventNames);
+                const usedIds = [...new Set(subscribed.map(entry => entry.id))];
+                expect(usedIds, 'one subscription id for all events').to.deep.equal([dss.subScriptionId]);
+                expect(Object.keys(dss.eventChannels), 'exactly one channel').to.have.lengthOf(1);
+                setTimeout(() => {
+                    expect(polls, 'exactly one long-poll for all events').to.equal(1);
+                    dss.stop();
+                    done();
+                }, 20);
+            });
+        });
+
+        // A poll that is already running when a name is added would not have to deliver
+        // its events, so the poll waits for the last subscription.
+        it('starts the poll only after the last subscription', done => {
+            const dss = createDss();
+            let pending = 0;
+            let polls = 0;
+            const releases = [];
+            dss.requestAsync = (dssClass, dssFunction) => {
+                if (dssFunction === 'subscribe') {
+                    pending++;
+                    return new Promise(resolve => releases.push(() => resolve({ ok: true })));
+                }
+                polls++;
+                return new Promise(() => {});
+            };
+
+            dss.subscribeEvents(['eventA', 'eventB'], () => {});
+            setTimeout(() => {
+                expect(pending, 'both subscriptions are in flight').to.equal(2);
+                releases[0]();
+                setTimeout(() => {
+                    expect(polls, 'no poll while a subscription is still open').to.equal(0);
+                    releases[1]();
+                    setTimeout(() => {
+                        expect(polls, 'the poll starts after the last subscription').to.equal(1);
+                        dss.stop();
+                        done();
+                    }, 20);
+                }, 20);
+            }, 20);
+        });
+
+        it('does not poll when every subscription failed', done => {
+            const dss = createDss();
+            let polls = 0;
+            dss.requestAsync = async (dssClass, dssFunction) => {
+                if (dssFunction === 'get') {
+                    polls++;
+                    return new Promise(() => {});
+                }
+                throw new Error('subscribe failed');
+            };
+            dss.subscribeEvents(['eventA', 'eventB'], errs => {
+                expect(errs).to.be.an('array').with.lengthOf(2);
+                setTimeout(() => {
+                    expect(polls, 'nothing to poll without a channel').to.equal(0);
+                    expect(dss.getChannel(dss.subScriptionId)).to.equal(null);
+                    dss.stop();
+                    done();
+                }, 20);
+            });
+        });
+
+        it('delivers the events of every subscribed name through the one poll', done => {
+            const dss = createDss();
+            let answered = false;
+            dss.requestAsync = async (dssClass, dssFunction) => {
+                if (dssFunction === 'subscribe') {
+                    return { ok: true };
+                }
+                if (answered) {
+                    return new Promise(() => {});
+                }
+                answered = true;
+                return {
+                    ok: true,
+                    result: {
+                        events: [
+                            { name: 'callScene', source: { dSUID: 'dev1' }, properties: { sceneID: 5 } },
+                            { name: 'buttonClick', source: { dSUID: 'dev2' }, properties: { clickType: 0 } },
+                        ],
+                    },
+                };
+            };
+
+            const received = [];
+            dss.on('callScene', () => received.push('callScene'));
+            dss.on('buttonClick', () => received.push('buttonClick'));
+
+            dss.subscribeEvents(['callScene', 'buttonClick'], () => {
+                setTimeout(() => {
+                    expect(received).to.deep.equal(['callScene', 'buttonClick']);
+                    dss.stop();
+                    done();
+                }, 30);
+            });
+        });
+
+        // The DSS loses the whole subscription id, e.g. after a restart. Re-subscribing
+        // only the name whose poll failed would silently drop all other events.
+        it('registers every name of the channel again on a re-subscribe', async () => {
+            const clock = sinon.useFakeTimers({ shouldAdvanceTime: false });
+            try {
+                const dss = createDss();
+                const resubscribed = [];
+                let subscribeCalls = 0;
+                dss.requestAsync = async (dssClass, dssFunction, params) => {
+                    if (dssFunction === 'subscribe') {
+                        subscribeCalls++;
+                        if (subscribeCalls > 3) {
+                            resubscribed.push(params.name);
+                        }
+                        return { ok: true };
+                    }
+                    /** @type {import('../lib/configUtils').AdapterError} */
+                    const err = new Error('HTTP 500 for /json/event/get');
+                    err.status = 500;
+                    throw err;
+                };
+                dss.on('eventError', () => {});
+
+                dss.subscribeEvents(['eventA', 'eventB', 'eventC'], () => {});
+                await clock.tickAsync(10);
+                // First failure already asks for a re-subscribe because of the HTTP 500
+                await clock.tickAsync(5000);
+
+                expect(resubscribed.sort(), 'all names are registered again').to.deep.equal([
+                    'eventA',
+                    'eventB',
+                    'eventC',
+                ]);
+                dss.stop();
+            } finally {
+                clock.restore();
+            }
+        });
+
+        it('unsubscribes once per subscription id, not once per event name', done => {
+            const dss = createDss();
+            const unsubscribes = [];
+            dss.requestAsync = async (dssClass, dssFunction, params) => {
+                if (dssFunction === 'unsubscribe') {
+                    unsubscribes.push(params);
+                    return { ok: true };
+                }
+                if (dssFunction === 'get') {
+                    return new Promise(() => {});
+                }
+                return { ok: true };
+            };
+
+            dss.subscribeEvents(['eventA', 'eventB', 'eventC'], () => {
+                dss.unsubscribeAllEvents(() => {
+                    expect(unsubscribes, 'one request for the whole subscription').to.have.lengthOf(1);
+                    expect(unsubscribes[0].subscriptionID).to.equal(dss.subScriptionId);
+                    expect(dss.subscriptions).to.deep.equal({});
+                    expect(dss.eventChannels).to.deep.equal({});
+                    dss.stop();
+                    done();
+                });
+            });
+        });
+
+        // The DSS drops the whole subscription id, so the client must not pretend that the
+        // other names are still delivered.
+        it('drops the whole channel when one event is unsubscribed', done => {
+            const dss = createDss();
+            dss.requestAsync = async (dssClass, dssFunction) => {
+                if (dssFunction === 'get') {
+                    return new Promise(() => {});
+                }
+                return { ok: true };
+            };
+            dss.subscribeEvents(['eventA', 'eventB'], () => {
+                dss.unsubscribeEvent('eventA', err => {
+                    expect(err).to.equal(null);
+                    expect(dss.subscriptions, 'no name of that channel is left').to.deep.equal({});
+                    expect(dss.getChannel(dss.subScriptionId)).to.equal(null);
+                    dss.stop();
+                    done();
+                });
+            });
         });
 
         it('calls back without error when unsubscribing an unknown event', done => {
@@ -535,7 +741,8 @@ describe('DSS', () => {
                 }
                 return response;
             };
-            dss.subscriptions.testEvent = { subscriptionId: 42, timeout: 100, errorCount: 0, retryTimer: null };
+            dss.subscriptions.testEvent = { subscriptionId: 42, timeout: 100 };
+            dss.ensureChannel(42, 100);
             return dss;
         }
 
@@ -561,7 +768,7 @@ describe('DSS', () => {
             const onRejection = err => (rejected = err);
             process.once('unhandledRejection', onRejection);
 
-            dss.pollEvent('testEvent');
+            dss.pollChannel(42);
             setTimeout(() => {
                 process.removeListener('unhandledRejection', onRejection);
                 expect(rejected, 'no unhandled rejection').to.equal(null);
@@ -585,12 +792,13 @@ describe('DSS', () => {
                 }
                 return { ok: true, result: { events: [{ name: 'callScene', source: {}, properties: {} }] } };
             };
-            dss.subscriptions.testEvent = { subscriptionId: 42, timeout: 100, errorCount: 0, retryTimer: null };
+            dss.subscriptions.testEvent = { subscriptionId: 42, timeout: 100 };
+            dss.ensureChannel(42, 100);
             dss.on('callScene', () => {
                 throw new Error('handler exploded');
             });
 
-            dss.pollEvent('testEvent');
+            dss.pollChannel(42);
             setTimeout(() => {
                 expect(polls, 'poll loop must continue').to.be.above(1);
                 dss.stop();
@@ -617,12 +825,13 @@ describe('DSS', () => {
                 attempts[dssFunction] = (attempts[dssFunction] || 0) + 1;
                 throw new Error(`${dssFunction} failed`);
             };
-            dss.subscriptions.testEvent = { subscriptionId: 42, timeout: 100, errorCount: 0, retryTimer: null };
+            dss.subscriptions.testEvent = { subscriptionId: 42, timeout: 100 };
+            dss.ensureChannel(42, 100);
 
             const errors = [];
             dss.on('eventError', (name, count, message) => errors.push({ name, count, message }));
 
-            dss.pollEvent('testEvent');
+            dss.pollChannel(42);
             // Walk through the whole backoff chain
             for (let i = 0; i < 10; i++) {
                 await clock.tickAsync(70000);
@@ -631,7 +840,7 @@ describe('DSS', () => {
             expect(errors.length, 'eventError exactly once').to.equal(1);
             expect(errors[0].name).to.equal('testEvent');
             expect(attempts.subscribe, 're-subscribe must have been attempted').to.be.above(0);
-            expect(dss.subscriptions.testEvent.retryTimer, 'no retry timer left').to.equal(null);
+            expect(dss.getChannel(42).retryTimer, 'no retry timer left').to.equal(null);
             dss.stop();
         });
 
@@ -640,14 +849,15 @@ describe('DSS', () => {
             dss.requestAsync = async () => {
                 throw new Error('always fails');
             };
-            dss.subscriptions.testEvent = { subscriptionId: 42, timeout: 100, errorCount: 0, retryTimer: null };
-            dss.pollEvent('testEvent');
+            dss.subscriptions.testEvent = { subscriptionId: 42, timeout: 100 };
+            dss.ensureChannel(42, 100);
+            dss.pollChannel(42);
             await clock.tickAsync(1);
-            const firstTimer = dss.subscriptions.testEvent.retryTimer;
+            const firstTimer = dss.getChannel(42).retryTimer;
             expect(firstTimer, 'a retry must be scheduled').to.not.equal(null);
             // A second failure must replace, not add, a timer
-            dss.handleEventFailure('testEvent', new Error('again'), 'polling');
-            expect(dss.subscriptions.testEvent.retryTimer).to.not.equal(firstTimer);
+            dss.handleEventFailure(42, new Error('again'), 'polling');
+            expect(dss.getChannel(42).retryTimer).to.not.equal(firstTimer);
             dss.stop();
         });
 
@@ -658,8 +868,9 @@ describe('DSS', () => {
                 calls++;
                 throw new Error('fails');
             };
-            dss.subscriptions.testEvent = { subscriptionId: 42, timeout: 100, errorCount: 0, retryTimer: null };
-            dss.pollEvent('testEvent');
+            dss.subscriptions.testEvent = { subscriptionId: 42, timeout: 100 };
+            dss.ensureChannel(42, 100);
+            dss.pollChannel(42);
             await clock.tickAsync(1);
             const callsBeforeStop = calls;
 
@@ -684,12 +895,13 @@ describe('DSS', () => {
                 err.status = 500;
                 throw err;
             };
-            dss.subscriptions.testEvent = { subscriptionId: 42, timeout: 100, errorCount: 0, retryTimer: null };
+            dss.subscriptions.testEvent = { subscriptionId: 42, timeout: 100 };
+            dss.ensureChannel(42, 100);
 
             const errors = [];
             dss.on('eventError', (name, count, message) => errors.push({ name, count, message }));
 
-            dss.pollEvent('testEvent');
+            dss.pollChannel(42);
             for (let i = 0; i < 20; i++) {
                 await clock.tickAsync(70000);
             }
@@ -698,7 +910,7 @@ describe('DSS', () => {
             expect(errors[0].name).to.equal('testEvent');
             expect(attempts.subscribe, 're-subscribing must not loop forever').to.be.below(10);
             expect(attempts.get, 'polling must stop after the limit').to.be.below(10);
-            expect(dss.subscriptions.testEvent.retryTimer, 'no retry timer left').to.equal(null);
+            expect(dss.getChannel(42).retryTimer, 'no retry timer left').to.equal(null);
             dss.stop();
         });
 
@@ -710,23 +922,25 @@ describe('DSS', () => {
                 }
                 throw new Error('event/get down');
             };
-            dss.subscriptions.testEvent = { subscriptionId: 42, timeout: 100, errorCount: 3, retryTimer: null };
+            dss.subscriptions.testEvent = { subscriptionId: 42, timeout: 100 };
+            dss.ensureChannel(42, 100).errorCount = 3;
             // Isolates the subscribe: the poll it starts is tested separately
-            dss.pollEvent = () => {};
+            dss.pollChannel = () => {};
 
             await new Promise(resolve => dss.subscribeEvent('testEvent', 42, 100, resolve));
-            expect(dss.subscriptions.testEvent.errorCount, 'a subscribe alone proves nothing').to.equal(3);
+            expect(dss.getChannel(42).errorCount, 'a subscribe alone proves nothing').to.equal(3);
             dss.stop();
         });
 
         it('clears the error counter after a successful event/get', async () => {
             const dss = createDss();
             dss.requestAsync = async () => ({ ok: true, result: { events: [] } });
-            dss.subscriptions.testEvent = { subscriptionId: 42, timeout: 100, errorCount: 4, retryTimer: null };
+            dss.subscriptions.testEvent = { subscriptionId: 42, timeout: 100 };
+            dss.ensureChannel(42, 100).errorCount = 4;
 
-            dss.pollEvent('testEvent');
+            dss.pollChannel(42);
             await clock.tickAsync(1);
-            expect(dss.subscriptions.testEvent.errorCount, 'a real poll resets the counter').to.equal(0);
+            expect(dss.getChannel(42).errorCount, 'a real poll resets the counter').to.equal(0);
             dss.stop();
         });
 
@@ -743,10 +957,11 @@ describe('DSS', () => {
                 err.status = 500;
                 throw err;
             };
-            dss.subscriptions.testEvent = { subscriptionId: 42, timeout: 100, errorCount: 0, retryTimer: null };
+            dss.subscriptions.testEvent = { subscriptionId: 42, timeout: 100 };
+            dss.ensureChannel(42, 100);
             dss.on('eventError', () => {});
 
-            dss.pollEvent('testEvent');
+            dss.pollChannel(42);
             for (let i = 0; i < 20; i++) {
                 await clock.tickAsync(70000);
             }

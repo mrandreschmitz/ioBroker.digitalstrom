@@ -221,6 +221,20 @@ describe('Integration against a local mock DSS', function () {
             expect(ctx.states[sceneStateId], 'the event must have been applied').to.equal(true);
         });
 
+        // The load on the DSS comes from the permanently open long-polls. All nine events
+        // the adapter uses must therefore end up on ONE subscription id with ONE event/get.
+        it('opens exactly one long-poll for all subscribed events', async () => {
+            await nodeCallbackPromise(done => ctx.dssStruct.init(done));
+            ctx.dssStruct.objectsReady = true;
+
+            await nodeCallbackPromise(done => Digitalstrom.prototype.initializeSubscriptions.call(ctx, done));
+            await delay(200);
+
+            expect(mock.subscribedEvents().length, 'several events are subscribed').to.be.above(1);
+            expect(mock.subscriptionIds(), 'all of them on one subscription id').to.have.lengthOf(1);
+            expect(mock.pathsCalled('event/get').length, 'exactly one long-poll').to.equal(1);
+        });
+
         it('registers every handler only once', async () => {
             await nodeCallbackPromise(done => ctx.dssStruct.init(done));
             await callbackPromise(done => Digitalstrom.prototype.initializeSubscriptions.call(ctx, done));

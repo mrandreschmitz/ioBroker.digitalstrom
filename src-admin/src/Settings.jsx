@@ -29,6 +29,17 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 
 import { cardSx, DS_GREEN } from './theme.js';
 
+/**
+ * Space that stays free below the content, in theme units (1 = 8px).
+ *
+ * The save bar of the admin is not part of the page: adapter-react-v5 renders it with
+ * position absolute over the dialog. It is a MUI toolbar, so 64 px high, and in the old
+ * admin iframe it additionally sits 38 px above the bottom edge - together 102 px that
+ * cover the content and cannot be scrolled away either. 16 units = 128 px therefore keep
+ * the last button of a tab reachable in both cases.
+ */
+const SAVE_BAR_SPACE = 16;
+
 /** One raised card with an icon and a title. */
 function Card({ icon, title, children }) {
     return (
@@ -137,9 +148,9 @@ export default function Settings({ native, onChange, onSendTo, alive, t, initial
                 </Tabs>
             </Box>
 
-            {/* The save bar of the admin sits fixed at the bottom edge, so the content
-                keeps room below it - otherwise the last button ends up underneath it. */}
-            <Box sx={{ px: { xs: 2, sm: 4 }, pt: 3, pb: 12, maxWidth: 1080 }}>
+            {/* The admin lays its save bar OVER the content, so the space below has to be
+                kept free here - see SAVE_BAR_SPACE. */}
+            <Box sx={{ px: { xs: 2, sm: 4 }, pt: 3, pb: SAVE_BAR_SPACE, maxWidth: 1080 }}>
                 {tab === 0 ? (
                     <>
                         <Card icon={<RouterIcon />} title={t('section_server')}>

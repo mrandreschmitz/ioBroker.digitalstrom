@@ -24,7 +24,7 @@ function createMockDss(options = {}) {
     const pendingEvents = new Map();
     /** open long-polls, per subscription id */
     const openPolls = new Map();
-    /** subscription id -> event name */
+    /** subscription id -> set of event names (the DSS allows many names per id) */
     const subscriptions = new Map();
     /** last value written per device output, for the superseded tests */
     const writtenOutputValues = [];
@@ -162,9 +162,13 @@ function createMockDss(options = {}) {
             return { ok: true };
         },
         'event/subscribe': query => {
-            subscriptions.set(String(query.subscriptionID), query.name);
+            const id = String(query.subscriptionID);
+            const names = subscriptions.get(id) || new Set();
+            names.add(query.name);
+            subscriptions.set(id, names);
             return { ok: true };
         },
+        // Like the real DSS: unsubscribing one name drops the whole subscription id
         'event/unsubscribe': query => {
             subscriptions.delete(String(query.subscriptionID));
             return { ok: true };
@@ -241,11 +245,11 @@ function createMockDss(options = {}) {
          * @param {object} event
          */
         emitEvent(eventName, event) {
-            const id = [...subscriptions.entries()].find(([, name]) => name === eventName);
-            if (!id) {
+            const entry = [...subscriptions.entries()].find(([, names]) => names.has(eventName));
+            if (!entry) {
                 throw new Error(`Not subscribed to ${eventName}`);
             }
-            const subscriptionId = id[0];
+            const subscriptionId = entry[0];
             const open = openPolls.get(subscriptionId);
             if (open) {
                 openPolls.delete(subscriptionId);
@@ -259,7 +263,14 @@ function createMockDss(options = {}) {
         },
 
         subscribedEvents() {
-            return [...subscriptions.values()];
+            return [...subscriptions.values()].flatMap(names => [...names]);
+        },
+
+        /**
+         * @returns {string[]} the subscription ids the adapter uses
+         */
+        subscriptionIds() {
+            return [...subscriptions.keys()];
         },
 
         pathsCalled(path) {

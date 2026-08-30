@@ -140,6 +140,27 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ## Changelog
 
+### 2.4.13 (2026-08-30)
+
+* **One long-poll instead of nine.** `subscribeEvents()` gave every event name its own
+  subscription id, so nine `event/get` long-polls were open at the same time, each of them
+  re-established every 40 seconds. The DSS allows many event names on ONE subscription id -
+  that is what openHAB and the Home Assistant integrations do - and answers all of them
+  through a single `event/get`. All events now share the id from the configuration (42 by
+  default), which removes the biggest steady load the adapter put on the DSS. Nothing about
+  the events themselves changes
+* Two details follow from that: a re-subscribe after a failed poll registers **every** name of
+  the channel again, because the DSS loses the whole subscription id and not just the one name
+  whose poll failed; and the polling only starts after the last subscription, so no event can
+  be missed while a subscription is still on its way. Unsubscribing at the end is one request
+  instead of nine
+* The lowest button of a tab needed more room below the save bar of the admin than 2.4.12 gave
+  it. The design preview (`npm run dev:admin`, `preview.html`) now shows a stand-in of that bar
+  so the spacing can be checked without the admin
+* New: `scripts/probe-smarthome-api.js` reads a DSS through the new Smart Home API
+  (`/api/v1` plus the notification websocket) and writes every answer to a directory. It is the
+  groundwork for the decision whether the adapter can be moved to that API
+
 ### 2.4.12 (2026-08-30)
 
 * **The app token was decrypted twice.** It was named in the `encryptedFields` option of

@@ -774,11 +774,11 @@ class Digitalstrom extends utils.Adapter {
     /**
      * Registers all event handlers on the DSS client.
      *
-     * This must happen BEFORE the first subscription is created: subscribeEvents()
-     * subscribes all events in parallel and every subscription starts its own long-poll
-     * as soon as it succeeded. Registering the handlers only in the completion callback
-     * would silently drop every event that a fast subscription already delivers while a
-     * slower one is still pending - those events are consumed on the DSS and lost for good.
+     * This must happen BEFORE subscribeEvents() is called: all events share one
+     * subscription id, and its long-poll starts as soon as the last subscription
+     * succeeded - before subscribeEvents() answers its own callback. Registering the
+     * handlers only in that callback would silently drop the events of the first poll,
+     * and those events are consumed on the DSS and lost for good.
      *
      * Idempotent: a second call must not add a second set of listeners.
      *

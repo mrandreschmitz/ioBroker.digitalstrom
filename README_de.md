@@ -219,6 +219,27 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
 
+### 2.4.13 (2026-08-30)
+
+* **Ein Long-Poll statt neun.** `subscribeEvents()` gab jedem Eventnamen eine eigene
+  subscriptionID, es standen also neun `event/get`-Long-Polls gleichzeitig offen, jeder davon
+  alle 40 Sekunden neu aufgebaut. Der DSS erlaubt viele Eventnamen auf EINER subscriptionID -
+  so machen es openHAB und die Home-Assistant-Integrationen - und beantwortet sie alle über ein
+  einziges `event/get`. Alle Events teilen sich jetzt die ID aus der Konfiguration
+  (Standard 42). Das nimmt dem DSS die größte Grundlast des Adapters, an den Events selbst
+  ändert sich nichts
+* Zwei Konsequenzen daraus: Ein Neuanmelden nach einem fehlgeschlagenen Poll registriert
+  **alle** Namen des Kanals erneut, denn der DSS verliert die ganze subscriptionID und nicht
+  nur den einen Namen, dessen Poll gescheitert ist; und der Poll startet erst nach der letzten
+  Anmeldung, damit kein Event verlorengeht, während eine Anmeldung noch unterwegs ist. Das
+  Abmelden am Ende ist ein Request statt neun
+* Der unterste Knopf eines Reiters brauchte mehr Platz unter der Speicherleiste des Admin, als
+  2.4.12 ihm gelassen hat. Die Entwurfsvorschau (`npm run dev:admin`, `preview.html`) zeigt die
+  Leiste jetzt nach, damit sich der Abstand ohne Admin prüfen lässt
+* Neu: `scripts/probe-smarthome-api.js` liest einen DSS über die neue Smart Home API
+  (`/api/v1` samt Notification-Websocket) aus und legt alle Antworten in einem Verzeichnis ab.
+  Das ist die Grundlage für die Entscheidung, ob der Adapter auf diese API umziehen kann
+
 ### 2.4.12 (2026-08-30)
 
 * **Der App-Token wurde doppelt entschlüsselt.** Er stand in der Option `encryptedFields` von

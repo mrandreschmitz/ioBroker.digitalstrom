@@ -552,7 +552,7 @@ describe('Adapter logic', () => {
             const dss = new DSS({ host: 'localhost', appToken: 'app', logger: silentLog });
             dss.requestAsync = async () => ({ ok: true });
             // no real polling in this test
-            dss.pollEvent = () => {};
+            dss.pollChannel = () => {};
 
             const ctx = createContext({
                 dss,
@@ -631,7 +631,7 @@ describe('Adapter logic', () => {
                 }
                 return { ok: true };
             };
-            dss.pollEvent = () => {};
+            dss.pollChannel = () => {};
 
             const ctx = createContext({ dss, dssStruct: { stateMap: {}, zoneDevices: {} } });
             Digitalstrom.prototype.initializeSubscriptions.call(ctx, err => {
@@ -646,7 +646,7 @@ describe('Adapter logic', () => {
         it('reports no error when all subscriptions succeed', done => {
             const dss = new DSS({ host: 'localhost', appToken: 'app', logger: silentLog });
             dss.requestAsync = async () => ({ ok: true });
-            dss.pollEvent = () => {};
+            dss.pollChannel = () => {};
             const ctx = createContext({ dss, dssStruct: { stateMap: {}, zoneDevices: {} } });
             Digitalstrom.prototype.initializeSubscriptions.call(ctx, err => {
                 expect(err).to.equal(null);
@@ -677,7 +677,8 @@ describe('Adapter logic', () => {
         it('answers every caller exactly once', done => {
             const dss = new DSS({ host: 'localhost', appToken: 'app', logger: silentLog });
             dss.requestAsync = async () => ({ ok: true });
-            dss.subscriptions.eventA = { subscriptionId: 42, timeout: 100, errorCount: 0, retryTimer: null };
+            dss.subscriptions.eventA = { subscriptionId: 42, timeout: 100 };
+            dss.ensureChannel(42, 100);
             const ctx = stoppableContext(dss);
 
             let firstCalls = 0;
@@ -699,7 +700,8 @@ describe('Adapter logic', () => {
         it('closes the DSS client even when unsubscribing hangs', done => {
             const dss = new DSS({ host: 'localhost', appToken: 'app', logger: silentLog });
             dss.requestAsync = () => new Promise(() => {}); // unsubscribe never returns
-            dss.subscriptions.eventA = { subscriptionId: 42, timeout: 100, errorCount: 0, retryTimer: null };
+            dss.subscriptions.eventA = { subscriptionId: 42, timeout: 100 };
+            dss.ensureChannel(42, 100);
             const ctx = stoppableContext(dss);
 
             Digitalstrom.prototype.stopAdapter.call(ctx, () => {
@@ -842,7 +844,7 @@ describe('Adapter logic', () => {
             const dss = new DSS({ host: 'localhost', appToken: 'app', logger: silentLog });
             let emitted = false;
             const slowSubscribes = [];
-            dss.pollEvent = () => {};
+            dss.pollChannel = () => {};
             dss.requestAsync = async (dssClass, dssFunction, params) => {
                 if (dssFunction !== 'subscribe') {
                     return { ok: true };
@@ -884,7 +886,7 @@ describe('Adapter logic', () => {
         it('registers the handlers before the first subscription is sent', done => {
             const dss = new DSS({ host: 'localhost', appToken: 'app', logger: silentLog });
             let listenersAtFirstSubscribe = -1;
-            dss.pollEvent = () => {};
+            dss.pollChannel = () => {};
             dss.requestAsync = async (dssClass, dssFunction) => {
                 if (dssFunction === 'subscribe' && listenersAtFirstSubscribe === -1) {
                     listenersAtFirstSubscribe = dss.listenerCount('callScene');
@@ -902,7 +904,7 @@ describe('Adapter logic', () => {
         it('registers no listener twice when called again', done => {
             const dss = new DSS({ host: 'localhost', appToken: 'app', logger: silentLog });
             dss.requestAsync = async () => ({ ok: true });
-            dss.pollEvent = () => {};
+            dss.pollChannel = () => {};
             const ctx = eventContext(dss);
             Digitalstrom.prototype.initializeSubscriptions.call(ctx, () => {
                 const afterFirst = dss.listenerCount('callScene');
@@ -920,7 +922,7 @@ describe('Adapter logic', () => {
         function sceneContext(config) {
             const dss = new DSS({ host: 'localhost', appToken: 'app', logger: silentLog });
             dss.requestAsync = async () => ({ ok: true });
-            dss.pollEvent = () => {};
+            dss.pollChannel = () => {};
             const deviceEvents = [];
             const ctx = createContext({
                 dss,
@@ -1027,7 +1029,7 @@ describe('Adapter logic', () => {
         function buttonContext() {
             const dss = new DSS({ host: 'localhost', appToken: 'app', logger: silentLog });
             dss.requestAsync = async () => ({ ok: true });
-            dss.pollEvent = () => {};
+            dss.pollChannel = () => {};
             const ctx = createContext({
                 dss,
                 dssStruct: {
@@ -1111,7 +1113,7 @@ describe('Adapter logic', () => {
         function tempContext() {
             const dss = new DSS({ host: 'localhost', appToken: 'app', logger: silentLog });
             dss.requestAsync = async () => ({ ok: true });
-            dss.pollEvent = () => {};
+            dss.pollChannel = () => {};
             const ctx = createContext({
                 dss,
                 dssStruct: {
@@ -1212,7 +1214,7 @@ describe('Adapter logic', () => {
         it('applies a scene that changed while the adapter was starting', done => {
             const dss = new DSS({ host: 'localhost', appToken: 'app', logger: silentLog });
             dss.requestAsync = async () => ({ ok: true });
-            dss.pollEvent = () => {};
+            dss.pollChannel = () => {};
             const ctx = resyncContext(dss, { 5.1: 5, 5.2: 0 });
             Digitalstrom.prototype.initializeSubscriptions.call(ctx, () => {
                 Digitalstrom.prototype.resyncSceneStates.call(ctx, () => {
@@ -1234,7 +1236,7 @@ describe('Adapter logic', () => {
         it('changes nothing when no scene changed', done => {
             const dss = new DSS({ host: 'localhost', appToken: 'app', logger: silentLog });
             dss.requestAsync = async () => ({ ok: true });
-            dss.pollEvent = () => {};
+            dss.pollChannel = () => {};
             const ctx = resyncContext(dss, { 5.1: 17, 5.2: 0 });
             Digitalstrom.prototype.initializeSubscriptions.call(ctx, () => {
                 Digitalstrom.prototype.resyncSceneStates.call(ctx, () => {

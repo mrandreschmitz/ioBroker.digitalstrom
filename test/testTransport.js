@@ -46,12 +46,13 @@ describe('DSS transport', () => {
         const port = fake.server.address().port;
         dss = new DSS({ host: `http://127.0.0.1:${port}`, appToken: 'tok', logger: silentLogger });
 
-        // Start all 9 event long-polls the adapter uses
+        // Several long-polls at once. The adapter itself only opens one (all events share
+        // a subscription id), but the agent separation must hold for more than one as well.
         const eventCount = 9;
         for (let i = 0; i < eventCount; i++) {
-            const name = `event${i}`;
-            dss.subscriptions[name] = { subscriptionId: 40 + i, timeout: 40000, errorCount: 0 };
-            dss.pollEvent(name);
+            dss.subscriptions[`event${i}`] = { subscriptionId: 40 + i, timeout: 40000 };
+            dss.ensureChannel(40 + i, 40000);
+            dss.pollChannel(40 + i);
         }
         // Give the polls time to actually occupy their sockets
         await new Promise(resolve => setTimeout(resolve, 300));
@@ -70,12 +71,8 @@ describe('DSS transport', () => {
     it('uses separate agents for API calls and event polls', () => {
         dss = new DSS({ host: 'http://127.0.0.1:1', appToken: 'tok', logger: silentLogger });
         expect(dss.apiAgent).to.not.equal(dss.eventAgent);
-        // The event agent must be able to serve every parallel long-poll
-        const dssConstants = require('../lib/constants');
-        const activeEvents = Object.keys(dssConstants.availableEvents).filter(
-            name => dssConstants.availableEvents[name],
-        ).length;
-        expect(dss.eventAgent.maxSockets).to.be.at.least(activeEvents);
+        // Long-poll plus a re-subscribe running next to it must both fit
+        expect(dss.eventAgent.maxSockets).to.be.at.least(2);
     });
 
     describe('request timeouts', () => {
@@ -139,15 +136,16 @@ describe('DSS transport', () => {
         this.timeout(20000);
         const port = fake.server.address().port;
         dss = new DSS({ host: `http://127.0.0.1:${port}`, appToken: 'tok', logger: silentLogger });
-        dss.subscriptions.eventA = { subscriptionId: 42, timeout: 40000, errorCount: 0 };
-        dss.pollEvent('eventA');
+        dss.subscriptions.eventA = { subscriptionId: 42, timeout: 40000 };
+        dss.ensureChannel(42, 40000);
+        dss.pollChannel(42);
         await new Promise(resolve => setTimeout(resolve, 200));
 
         let pollsAfterStop = 0;
-        const originalPoll = dss.pollEvent.bind(dss);
-        dss.pollEvent = name => {
+        const originalPoll = dss.pollChannel.bind(dss);
+        dss.pollChannel = subscriptionId => {
             pollsAfterStop++;
-            return originalPoll(name);
+            return originalPoll(subscriptionId);
         };
 
         dss.stop();

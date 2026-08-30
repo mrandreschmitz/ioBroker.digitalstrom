@@ -13,7 +13,12 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const sourceDir = path.join(root, 'src-admin');
 
-/** Files that end up in the bundle. preview.* is a development aid and is not built. */
+/**
+ * Collects the files that end up in the bundle. preview.* is a development aid and is not built.
+ *
+ * @param dir directory to walk through
+ * @param collected files found so far, used by the recursion
+ */
 function collectSources(dir, collected = []) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
         if (entry.name === 'node_modules' || entry.name.startsWith('preview.')) {
