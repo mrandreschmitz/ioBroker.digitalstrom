@@ -92,12 +92,6 @@ Empfehlungen, in dieser Reihenfolge:
 Der App-Token wird verschlüsselt gespeichert (`encryptedNative`), nicht an andere Adapter
 weitergegeben (`protectedNative`), nicht ins Log geschrieben und im Admin-Dialog maskiert dargestellt.
 
-> **Bis Version 2.4.3 stimmte das nicht.** Beide Deklarationen standen innerhalb von `common` statt
-> in der Wurzel der io-package.json, wodurch keine von beiden griff und der Token im Klartext lag.
-> Behoben in 2.4.4. Ein von einer älteren Version gespeicherter Token lässt sich danach nicht mehr
-> entschlüsseln — öffne einmal die Adapter-Konfiguration, trage den App-Token erneut ein und
-> speichere. Der Adapter erkennt den Fall und weist im Log darauf hin.
-
 Nach dem Eintragen des App-Tokens und dem Speichern startet der Adapter automatisch neu.
 
 Stimmen die Daten, liest der Adapter die Wohnungs- und Gerätestruktur aus und legt sie als
@@ -207,6 +201,14 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
 
+### 2.4.8 (2026-08-30)
+
+* Der Hinweis zur App-Token-Migration wurde aus dem Admin-Dialog und aus dem Readme entfernt.
+  Keine veröffentlichte Version enthielt die falsch platzierte `encryptedNative`-Deklaration —
+  ein dauerhafter Hinweis auf eine Migration, die niemand durchführen muss, würde nur verwirren.
+  Der Adapter erkennt weiterhin einen Token, den er nicht zurücklesen kann, und meldet das im
+  Log, jetzt ohne Bezug auf eine Versionshistorie.
+
 ### 2.4.7 (2026-08-30)
 
 * **Das Datenabfrageintervall steht standardmäßig auf 100 s statt 60 s.** An einer produktiven
@@ -252,8 +254,7 @@ Entstanden aus dem Objekt-Export und dem Debug-Log einer produktiven Installatio
   **Einstellungen** und **Hinweise** statt auf einer langen Seite — mit Abschnittsüberschriften,
   Hinweisboxen und Schalterkarten in den digitalSTROM-Farben (`#00662E` / `#7FC241`, aus dem Logo
   entnommen).
-* Der neue Reiter **Hinweise** erklärt die Zertifikatsprüfung und das einmalige Neueintragen des
-  App-Tokens nach dem Update auf 2.4.4.
+* Der neue Reiter **Hinweise** erklärt die Zertifikatsprüfung.
 * Keine Option wurde umbenannt oder entfernt — bestehende Instanzeinstellungen werden unverändert
   übernommen. Ein Test prüft jetzt, dass jede Option aus `native` weiterhin ein Bedienelement hat.
 

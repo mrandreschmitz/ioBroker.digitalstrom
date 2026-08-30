@@ -55,8 +55,6 @@ Recommendations, in this order:
 
 The App-Token is stored encrypted (`encryptedNative`), is not passed on to other adapters (`protectedNative`), is not written to the log and is shown masked in the admin dialog.
 
-> **Up to version 2.4.3 this was not true.** Both declarations sat inside `common` instead of at the root of io-package.json, so neither took effect and the token was kept in plain text. This is fixed in 2.4.4. A token that was saved by an older version cannot be decrypted afterwards - open the adapter configuration once, enter the App-Token again and save. The adapter detects the case and says so in the log.
-
 After providing an App token and saving the settings the adapter will restart automatically.
 
 When data are correct the adapter read out the apartment and devices structure and create them as ioBroker Objects. This can take some time (depending on the number of devices and floors/zones/groups and the performance of your system several seconds). Please be patient. And I really mean it that way ... Several thousand objects are easy to reach here! Give the adapter time please!
@@ -133,6 +131,13 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ## Changelog
 
+### 2.4.8 (2026-08-30)
+
+* Removed the App-Token migration note from the admin dialog and from the readme. No public
+  release ever shipped the misplaced `encryptedNative` declaration, so a permanent hint about
+  a migration nobody has to do would only confuse. The adapter still detects a token it cannot
+  read back and says so in the log, now without referring to a version history
+
 ### 2.4.7 (2026-08-30)
 
 * **The default data polling interval is 100s instead of 60s.** Measured against a productive
@@ -177,8 +182,7 @@ Built from the object export and the debug log of a productive installation.
 * Redesigned the admin configuration. The options are split into the tabs **Connection**,
   **Settings** and **Notes** instead of one long page, with section headers, info boxes and
   switch cards in the digitalSTROM colours (`#00662E` / `#7FC241`, taken from the logo)
-* The new **Notes** tab explains the certificate check and the one time re-entry of the
-  App-Token after the update to 2.4.4
+* The new **Notes** tab explains the certificate check
 * No option was renamed and none was dropped - existing instance settings are taken over
   unchanged. A test now asserts that every option of `native` still has a control
 

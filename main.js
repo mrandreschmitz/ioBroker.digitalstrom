@@ -429,12 +429,10 @@ class Digitalstrom extends utils.Adapter {
             return;
         }
         if (!Digitalstrom.looksLikeAppToken(this.config.appToken)) {
-            // Almost always the one time migration effect described at looksLikeAppToken()
             this.log.error(
-                'The stored App-Token does not look like a valid digitalSTROM token. Since version 2.4.4 the ' +
-                    'token is really stored encrypted - a token that was saved by an older version is read back ' +
-                    'as garbage. Please open the adapter configuration, enter the App-Token again (or create a ' +
-                    'new one with your DSS login) and save. The adapter tries to log in anyway.',
+                'The stored App-Token does not look like a valid digitalSTROM token (expected a long hex ' +
+                    'string). Please open the adapter configuration, enter the App-Token again or create a new ' +
+                    'one with your DSS login, and save. The adapter tries to log in anyway.',
             );
         }
         let dss;
@@ -660,11 +658,9 @@ class Digitalstrom extends utils.Adapter {
     /**
      * True when the value looks like a digitalSTROM application token.
      *
-     * The DSS issues a long hex string. This is used to recognize a token that js-controller
-     * could not decrypt: up to version 2.4.3 the adapter declared encryptedNative in the wrong
-     * place of io-package.json, so existing installations hold the token in plain text. After
-     * the fix js-controller decrypts that plain text into garbage and the login would only fail
-     * with "Login failed", which gives the user no clue what to do.
+     * The DSS issues a long hex string. A stored value that does not look like one usually
+     * means js-controller could not decrypt it, and the login would fail with nothing but
+     * "Login failed" - which gives the user no clue what to do.
      *
      * Deliberately only a plausibility check - it never blocks the login, it only produces a
      * helpful message.

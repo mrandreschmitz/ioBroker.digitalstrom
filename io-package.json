@@ -1,8 +1,21 @@
 {
     "common": {
         "name": "digitalstrom",
-        "version": "2.4.7",
+        "version": "2.4.8",
         "news": {
+            "2.4.8": {
+                "en": "Removed the App-Token migration note from the admin dialog and from the readme. No public release ever shipped the misplaced encryptedNative declaration, so a permanent hint about it would only confuse. The adapter still detects a token it cannot read back and says so in the log, now without referring to a version history",
+                "de": "Der Hinweis zur App-Token-Migration wurde aus dem Admin-Dialog und aus dem Readme entfernt. Keine veröffentlichte Version enthielt die falsch platzierte encryptedNative-Deklaration, ein dauerhafter Hinweis darauf würde nur verwirren. Der Adapter erkennt weiterhin einen nicht lesbaren Token und meldet das im Log, jetzt ohne Bezug auf eine Versionshistorie",
+                "ru": "Примечание о миграции токена удалено из диалога администратора и из readme; проверка нечитаемого токена сохранена",
+                "pt": "Nota de migração do token removida do diálogo de administração e do readme; a deteção de um token ilegível mantém-se",
+                "nl": "Migratienotitie voor het token verwijderd uit de admindialoog en de readme; de detectie van een onleesbaar token blijft",
+                "fr": "Note de migration du jeton retirée du dialogue d'administration et du readme ; la détection d'un jeton illisible est conservée",
+                "it": "Nota di migrazione del token rimossa dalla finestra di amministrazione e dal readme; il rilevamento di un token illeggibile resta",
+                "es": "Nota de migración del token eliminada del diálogo de administración y del readme; se mantiene la detección de un token ilegible",
+                "pl": "Uwaga o migracji tokenu usunięta z okna administratora i z readme; wykrywanie nieczytelnego tokenu pozostaje",
+                "zh-cn": "从管理对话框和自述文件中移除了应用令牌迁移提示；对无法读取的令牌的检测保留",
+                "uk": "Примітку про міграцію токена прибрано з діалогу адміністрування та з readme; виявлення нечитабельного токена лишається"
+            },
             "2.4.7": {
                 "en": "The default data polling interval is 100s instead of 60s. Measured against a real installation a cycle needs about 20s on top of the configured interval and issues two requests per circuit, so 60s resulted in 1.5 requests per minute and circuit - one and a half times what the digitalSTROM rules 8/9 allow. 100s is the first value that really stays within the limit. The minimum stays at 60s, lower values are possible but are documented as exceeding the guideline",
                 "de": "Das Datenabfrageintervall steht standardmäßig auf 100 s statt 60 s. An einer echten Anlage gemessen braucht ein Zyklus rund 20 s zusätzlich zum eingestellten Intervall und erzeugt zwei Anfragen je Klemme - 60 s ergaben damit 1,5 Anfragen pro Minute und Klemme, also das Anderthalbfache dessen, was die digitalSTROM-Regeln 8/9 erlauben. 100 s ist der erste Wert, der die Grenze wirklich einhält. Das Minimum bleibt bei 60 s, kleinere Werte sind weiterhin möglich, die Abweichung ist dokumentiert",
@@ -30,8 +43,8 @@
                 "uk": "Регулювання температури приміщення: канал temperatureControl із режимом, станом регулятора та уставками. Тепер створюються також стани кластерів і групові стани з крапкою в назві"
             },
             "2.4.5": {
-                "en": "Redesigned the admin configuration: the options are now split into the tabs \"Connection\", \"Settings\" and \"Notes\" instead of one long page, with section headers, info boxes and switch cards in the digitalSTROM colours\nThe notes tab explains the certificate check and the one time re-entry of the App-Token after the update to 2.4.4\nNo option was renamed - existing instance settings are taken over unchanged",
-                "de": "Admin-Konfiguration neu gestaltet: Die Optionen liegen jetzt in den Reitern „Verbindung“, „Einstellungen“ und „Hinweise“ statt auf einer langen Seite, mit Abschnittsüberschriften, Hinweisboxen und Schalterkarten in den digitalSTROM-Farben\nDer Reiter „Hinweise“ erklärt die Zertifikatsprüfung und das einmalige Neueintragen des App-Tokens nach dem Update auf 2.4.4\nKeine Option wurde umbenannt — bestehende Instanzeinstellungen werden unverändert übernommen",
+                "en": "Redesigned the admin configuration: the options are now split into the tabs \"Connection\", \"Settings\" and \"Notes\" instead of one long page, with section headers, info boxes and switch cards in the digitalSTROM colours\nThe notes tab explains the certificate check\nNo option was renamed - existing instance settings are taken over unchanged",
+                "de": "Admin-Konfiguration neu gestaltet: Die Optionen liegen jetzt in den Reitern „Verbindung“, „Einstellungen“ und „Hinweise“ statt auf einer langen Seite, mit Abschnittsüberschriften, Hinweisboxen und Schalterkarten in den digitalSTROM-Farben\nDer Reiter „Hinweise“ erklärt die Zertifikatsprüfung\nKeine Option wurde umbenannt — bestehende Instanzeinstellungen werden unverändert übernommen",
                 "ru": "Переработана конфигурация в админке: вкладки «Подключение», «Настройки» и «Примечания» в цветах digitalSTROM. Ни одна опция не переименована",
                 "pt": "Configuração do admin redesenhada: separadores «Ligação», «Configurações» e «Notas» nas cores digitalSTROM. Nenhuma opção foi renomeada",
                 "nl": "Adminconfiguratie opnieuw vormgegeven: tabbladen «Verbinding», «Instellingen» en «Opmerkingen» in de digitalSTROM-kleuren. Geen enkele optie is hernoemd",

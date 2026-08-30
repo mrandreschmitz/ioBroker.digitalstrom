@@ -597,38 +597,6 @@
                         "zh-cn": "证书验证",
                         "uk": "Перевірка сертифіката"
                     }
-                },
-                "_infoMig": {
-                    "type": "infoBox",
-                    "boxType": "warning",
-                    "newLine": true,
-                    "sm": 12,
-                    "text": {
-                        "en": "Up to version 2.4.3 the App-Token was stored in plain text. Since 2.4.4 it is really stored encrypted, so a token that was saved by an older version can no longer be read. In that case enter the token above once more and save - the adapter reports this in the log as well.",
-                        "de": "Bis Version 2.4.3 wurde der App-Token im Klartext gespeichert. Seit 2.4.4 wird er wirklich verschlüsselt abgelegt, ein von einer älteren Version gespeicherter Token lässt sich daher nicht mehr lesen. Trage ihn in diesem Fall oben einmalig neu ein und speichere — der Adapter weist im Log ebenfalls darauf hin.",
-                        "ru": "До версии 2.4.3 токен приложения хранился в открытом виде. Начиная с 2.4.4 он действительно хранится в зашифрованном виде, поэтому токен, сохранённый более старой версией, больше не читается. В этом случае введите токен выше ещё раз и сохраните — адаптер также сообщает об этом в журнале.",
-                        "pt": "Até à versão 2.4.3 o token de aplicação era guardado em texto simples. Desde a 2.4.4 é realmente guardado encriptado, por isso um token gravado por uma versão mais antiga já não pode ser lido. Nesse caso introduza o token acima novamente e guarde — o adaptador também o indica no registo.",
-                        "nl": "Tot versie 2.4.3 werd het app-token in platte tekst opgeslagen. Sinds 2.4.4 wordt het echt versleuteld opgeslagen, waardoor een token van een oudere versie niet meer leesbaar is. Voer het token in dat geval hierboven opnieuw in en sla op — de adapter meldt dit ook in het logboek.",
-                        "fr": "Jusqu'à la version 2.4.3, le jeton d'application était enregistré en clair. Depuis la 2.4.4, il est réellement chiffré, un jeton enregistré par une version antérieure n'est donc plus lisible. Dans ce cas, saisissez-le à nouveau ci-dessus et enregistrez — l'adaptateur le signale aussi dans le journal.",
-                        "it": "Fino alla versione 2.4.3 il token app veniva salvato in chiaro. Dalla 2.4.4 viene davvero memorizzato cifrato, quindi un token salvato da una versione precedente non è più leggibile. In tal caso inseriscilo di nuovo qui sopra e salva — l'adattatore lo segnala anche nel log.",
-                        "es": "Hasta la versión 2.4.3 el token de aplicación se guardaba en texto plano. Desde la 2.4.4 se almacena realmente cifrado, por lo que un token guardado por una versión anterior ya no se puede leer. En ese caso introdúzcalo de nuevo arriba y guarde — el adaptador también lo indica en el registro.",
-                        "pl": "Do wersji 2.4.3 token aplikacji był zapisywany jawnym tekstem. Od 2.4.4 jest naprawdę szyfrowany, więc token zapisany przez starszą wersję nie jest już czytelny. W takim przypadku wprowadź go ponownie powyżej i zapisz — adapter informuje o tym również w dzienniku.",
-                        "zh-cn": "2.4.3 及更早版本以明文保存应用令牌。自 2.4.4 起令牌真正加密存储，因此由旧版本保存的令牌无法再读取。此时请在上方重新输入令牌并保存 — 适配器也会在日志中提示。",
-                        "uk": "До версії 2.4.3 App-Token зберігався у відкритому вигляді. Починаючи з 2.4.4 він справді зберігається зашифрованим, тому токен, збережений старішою версією, більше не читається. У такому разі введіть його вище ще раз і збережіть — адаптер також повідомляє про це в журналі."
-                    },
-                    "title": {
-                        "en": "App-Token after the update to 2.4.4",
-                        "de": "App-Token nach dem Update auf 2.4.4",
-                        "ru": "Токен приложения после обновления до 2.4.4",
-                        "pt": "Token de aplicação após a atualização para 2.4.4",
-                        "nl": "App-token na de update naar 2.4.4",
-                        "fr": "Jeton d'application après la mise à jour vers 2.4.4",
-                        "it": "Token app dopo l'aggiornamento alla 2.4.4",
-                        "es": "Token de aplicación tras la actualización a 2.4.4",
-                        "pl": "Token aplikacji po aktualizacji do 2.4.4",
-                        "zh-cn": "更新到 2.4.4 后的应用令牌",
-                        "uk": "App-Token після оновлення до 2.4.4"
-                    }
                 }
             }
         }

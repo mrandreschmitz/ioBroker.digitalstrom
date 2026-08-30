@@ -432,10 +432,9 @@ describe('Adapter logic', () => {
                 expect(ctx.log.errors[0]).to.not.contain('deadbeef');
             });
 
-            // Regression: up to 2.4.3 encryptedNative sat in the wrong place of io-package.json,
-            // so an existing installation holds the token in plain text. After the fix
-            // js-controller decrypts that into garbage - the user has to learn what to do.
-            it('warns about a token that js-controller could not decrypt', () => {
+            // A token js-controller could not decrypt comes back as garbage. Without this
+            // check the user would only see "Login failed" and had no idea what to do.
+            it('warns about a token that could not be read back', () => {
                 const ctx = startContext('192.168.1.10');
                 ctx.log.errors = [];
                 ctx.config.appToken = '\u0012\u00a4garbled-token\u0099';
