@@ -175,7 +175,7 @@ jobs:
             gh release edit "v$VERSION" \
               --title "Release v$VERSION" \
               --notes-file "$RUNNER_TEMP/release-notes.md" \
-              --draft=false --verify-tag "${FLAGS[@]}"
+              --draft=false "${FLAGS[@]}"
           else
             echo "creating release v$VERSION"
             gh release create "v$VERSION" \
