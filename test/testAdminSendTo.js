@@ -47,18 +47,22 @@ function evaluatePattern(pattern, data) {
     return f(data);
 }
 
+const { collectJsonConfigItems } = require('./lib/helpers');
+
 const jsonConfig = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'admin', 'jsonConfig.json'), 'utf8'));
+// The config is a tabs/panel tree, the controls live inside the panels
+const configItems = collectJsonConfigItems(jsonConfig);
 
 describe('admin createAppToken sendTo', () => {
-    const pattern = jsonConfig.items._createAppToken.jsonData;
+    const pattern = configItems._createAppToken.jsonData;
 
     it('is wired to the createAppToken command and fills the native app token', () => {
-        expect(jsonConfig.items._createAppToken.command).to.equal('createAppToken');
-        expect(jsonConfig.items._createAppToken.useNative).to.equal(true);
+        expect(configItems._createAppToken.command).to.equal('createAppToken');
+        expect(configItems._createAppToken.useNative).to.equal(true);
     });
 
     it('keeps the password field a password field', () => {
-        expect(jsonConfig.items.password.type).to.equal('password');
+        expect(configItems.password.type).to.equal('password');
     });
 
     it('inserts the values JSON safe instead of concatenating strings', () => {

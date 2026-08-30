@@ -36,4 +36,29 @@ function nodeCallbackPromise(run) {
     );
 }
 
-module.exports = { delay, callbackPromise, nodeCallbackPromise };
+/**
+ * Collects every control of an admin jsonConfig, no matter how deeply it is nested in
+ * tabs and panels. The root of the config is a tabs/panel tree, so a plain lookup on
+ * `config.items` only finds the tabs themselves.
+ *
+ * @param {object} config parsed admin/jsonConfig.json
+ * @returns {Record<string, any>} all items by their key, panels and tabs included
+ */
+function collectJsonConfigItems(config) {
+    /** @type {Record<string, any>} */
+    const all = {};
+    const walk = node => {
+        if (!node || typeof node !== 'object' || !node.items) {
+            return;
+        }
+        Object.keys(node.items).forEach(key => {
+            const item = node.items[key];
+            all[key] = item;
+            walk(item);
+        });
+    };
+    walk(config);
+    return all;
+}
+
+module.exports = { delay, callbackPromise, nodeCallbackPromise, collectJsonConfigItems };

@@ -133,6 +133,16 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ## Changelog
 
+### 2.4.5 (2026-08-30)
+
+* Redesigned the admin configuration. The options are split into the tabs **Connection**,
+  **Settings** and **Notes** instead of one long page, with section headers, info boxes and
+  switch cards in the digitalSTROM colours (`#00662E` / `#7FC241`, taken from the logo)
+* The new **Notes** tab explains the certificate check and the one time re-entry of the
+  App-Token after the update to 2.4.4
+* No option was renamed and none was dropped - existing instance settings are taken over
+  unchanged. A test now asserts that every option of `native` still has a control
+
 ### 2.4.4 (2026-08-14)
 
 Found by a systematic multi-agent review of the whole adapter. All of these defects already

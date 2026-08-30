@@ -203,6 +203,17 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
 
+### 2.4.5 (2026-08-30)
+
+* Admin-Konfiguration neu gestaltet. Die Optionen liegen jetzt in den Reitern **Verbindung**,
+  **Einstellungen** und **Hinweise** statt auf einer langen Seite — mit Abschnittsüberschriften,
+  Hinweisboxen und Schalterkarten in den digitalSTROM-Farben (`#00662E` / `#7FC241`, aus dem Logo
+  entnommen).
+* Der neue Reiter **Hinweise** erklärt die Zertifikatsprüfung und das einmalige Neueintragen des
+  App-Tokens nach dem Update auf 2.4.4.
+* Keine Option wurde umbenannt oder entfernt — bestehende Instanzeinstellungen werden unverändert
+  übernommen. Ein Test prüft jetzt, dass jede Option aus `native` weiterhin ein Bedienelement hat.
+
 ### 2.4.4 (2026-08-14)
 
 Gefunden durch eine systematische Multi-Agenten-Prüfung des gesamten Adapters. Alle diese Defekte
