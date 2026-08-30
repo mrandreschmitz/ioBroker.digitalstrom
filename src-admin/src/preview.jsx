@@ -49,6 +49,7 @@ function Preview() {
     const initialTab = parseInt(params.get('tab') || '0', 10);
     // ?iframe=1 shows the variant of the old admin, where the bar sits 38px higher
     const barOffset = params.get('iframe') === '1' ? 38 : 0;
+    const noscroll = params.get('noscroll') === '1';
     const words = dict[lang] || dict.en;
     const [native, setNative] = useState({
         host: '10.13.10.4',
@@ -66,7 +67,8 @@ function Preview() {
             {/* Same geometry as the admin: the dialog fills the window and scrolls inside
                 it, the save bar lies on top and stays at the bottom edge. */}
             <Box sx={{ position: 'relative', height: '100vh', overflow: 'hidden' }}>
-                <Box sx={{ height: '100%', overflow: 'auto' }}>
+                {/* ?noscroll=1 ahmt einen Rahmen nach, der NICHT scrollt - der schlimmste Fall */}
+                <Box sx={{ height: '100%', overflow: noscroll ? 'hidden' : 'auto' }}>
                     <Settings
                         native={native}
                         onChange={(attr, value) => setNative(n => ({ ...n, [attr]: value }))}

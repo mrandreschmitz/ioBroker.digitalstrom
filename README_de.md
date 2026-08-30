@@ -219,6 +219,15 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
 
+### 2.4.15 (2026-08-30)
+
+* **Der Dialog scrollt jetzt selbst.** Er benutzte `minHeight: 100%` und verließ sich darauf, dass der
+  umgebende Rahmen das Scrollen übernimmt. Wo dieser Rahmen nicht scrollt, war alles unterhalb der
+  ersten Bildschirmhöhe unerreichbar und der unterste Knopf blieb unter der Speicherleiste - deshalb
+  half auch mehr Abstand in 2.4.12 und 2.4.14 nichts. Mit `height: 100vh` und eigenem `overflow-y` ist
+  der Inhalt in beiden Fällen erreichbar; gegen einen bewusst nicht scrollenden Rahmen geprüft, 71 px
+  Luft unter dem letzten Knopf
+
 ### 2.4.14 (2026-08-30)
 
 * **Die Zählerwerte können optional über die neue Smart Home API gelesen werden.** Ein Request für alle

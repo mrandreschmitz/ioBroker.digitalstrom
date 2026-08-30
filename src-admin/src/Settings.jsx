@@ -130,7 +130,11 @@ export default function Settings({ native, onChange, onSendTo, alive, t, initial
     };
 
     return (
-        <Box sx={{ minHeight: '100%', bgcolor: 'background.default' }}>
+        // Der Dialog scrollt SELBST. Verlaesst man sich darauf, dass der umgebende Rahmen
+        // das tut, ist alles unterhalb der ersten Bildschirmhoehe unerreichbar, sobald der
+        // Rahmen overflow:hidden setzt - und dann hilft auch kein Abstand am unteren Rand.
+        // 100vh gibt eine definierte Hoehe, overflowY macht daraus einen eigenen Scroller.
+        <Box sx={{ height: '100vh', overflowY: 'auto', bgcolor: 'background.default' }}>
             {/* Kopfbereich mit Symbol, Name und Kurzbeschreibung */}
             <Box
                 sx={{

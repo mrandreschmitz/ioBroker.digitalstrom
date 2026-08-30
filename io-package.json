@@ -1,8 +1,21 @@
 {
     "common": {
         "name": "digitalstrom",
-        "version": "2.4.14",
+        "version": "2.4.15",
         "news": {
+            "2.4.15": {
+                "en": "The configuration dialog now scrolls by itself. It relied on the surrounding frame doing that, so with a frame that does not scroll everything below the first screen height was unreachable - no amount of bottom spacing could fix that.",
+                "de": "Der Konfigurationsdialog scrollt jetzt selbst. Er hat sich darauf verlassen, dass der umgebende Rahmen das tut - bei einem Rahmen ohne Scrollbereich war damit alles unterhalb der ersten Bildschirmhöhe unerreichbar, und kein Abstand am unteren Rand konnte daran etwas ändern.",
+                "ru": "The configuration dialog now scrolls by itself. It relied on the surrounding frame doing that, so with a frame that does not scroll everything below the first screen height was unreachable - no amount of bottom spacing could fix that.",
+                "pt": "The configuration dialog now scrolls by itself. It relied on the surrounding frame doing that, so with a frame that does not scroll everything below the first screen height was unreachable - no amount of bottom spacing could fix that.",
+                "nl": "The configuration dialog now scrolls by itself. It relied on the surrounding frame doing that, so with a frame that does not scroll everything below the first screen height was unreachable - no amount of bottom spacing could fix that.",
+                "fr": "The configuration dialog now scrolls by itself. It relied on the surrounding frame doing that, so with a frame that does not scroll everything below the first screen height was unreachable - no amount of bottom spacing could fix that.",
+                "it": "The configuration dialog now scrolls by itself. It relied on the surrounding frame doing that, so with a frame that does not scroll everything below the first screen height was unreachable - no amount of bottom spacing could fix that.",
+                "es": "The configuration dialog now scrolls by itself. It relied on the surrounding frame doing that, so with a frame that does not scroll everything below the first screen height was unreachable - no amount of bottom spacing could fix that.",
+                "pl": "The configuration dialog now scrolls by itself. It relied on the surrounding frame doing that, so with a frame that does not scroll everything below the first screen height was unreachable - no amount of bottom spacing could fix that.",
+                "zh-cn": "The configuration dialog now scrolls by itself. It relied on the surrounding frame doing that, so with a frame that does not scroll everything below the first screen height was unreachable - no amount of bottom spacing could fix that.",
+                "uk": "The configuration dialog now scrolls by itself. It relied on the surrounding frame doing that, so with a frame that does not scroll everything below the first screen height was unreachable - no amount of bottom spacing could fix that."
+            },
             "2.4.14": {
                 "en": "Optional: the meter values can now be read through the new Smart Home API of the dSS - ONE request instead of two per circuit. Switched off by default; a failing request falls back to the classic API automatically. Everything else keeps running exactly as before.",
                 "de": "Optional: Die Zählerwerte können jetzt über die neue Smart Home API des dSS gelesen werden - EIN Request statt zwei je Klemme. Standardmäßig aus; schlägt eine Abfrage fehl, wird automatisch auf die klassische API zurückgefallen. Alles andere läuft unverändert weiter.",
@@ -80,19 +93,6 @@
                 "pl": "Naprawiona nieprawidłowa konfiguracja admina: kolor separatorów jest teraz w style, a nie we właściwości color ograniczonej przez schemat",
                 "zh-cn": "修复了无效的管理配置：分隔线的颜色改为通过 style 设置，而不是受架构限制的 color 属性",
                 "uk": "Виправлено недійсну конфігурацію адмінки: колір роздільників тепер задається через style, а не через обмежену схемою властивість color"
-            },
-            "2.4.8": {
-                "en": "Removed the App-Token migration note from the admin dialog and from the readme. No public release ever shipped the misplaced encryptedNative declaration, so a permanent hint about it would only confuse. The adapter still detects a token it cannot read back and says so in the log, now without referring to a version history",
-                "de": "Der Hinweis zur App-Token-Migration wurde aus dem Admin-Dialog und aus dem Readme entfernt. Keine veröffentlichte Version enthielt die falsch platzierte encryptedNative-Deklaration, ein dauerhafter Hinweis darauf würde nur verwirren. Der Adapter erkennt weiterhin einen nicht lesbaren Token und meldet das im Log, jetzt ohne Bezug auf eine Versionshistorie",
-                "ru": "Примечание о миграции токена удалено из диалога администратора и из readme; проверка нечитаемого токена сохранена",
-                "pt": "Nota de migração do token removida do diálogo de administração e do readme; a deteção de um token ilegível mantém-se",
-                "nl": "Migratienotitie voor het token verwijderd uit de admindialoog en de readme; de detectie van een onleesbaar token blijft",
-                "fr": "Note de migration du jeton retirée du dialogue d'administration et du readme ; la détection d'un jeton illisible est conservée",
-                "it": "Nota di migrazione del token rimossa dalla finestra di amministrazione e dal readme; il rilevamento di un token illeggibile resta",
-                "es": "Nota de migración del token eliminada del diálogo de administración y del readme; se mantiene la detección de un token ilegible",
-                "pl": "Uwaga o migracji tokenu usunięta z okna administratora i z readme; wykrywanie nieczytelnego tokenu pozostaje",
-                "zh-cn": "从管理对话框和自述文件中移除了应用令牌迁移提示；对无法读取的令牌的检测保留",
-                "uk": "Примітку про міграцію токена прибрано з діалогу адміністрування та з readme; виявлення нечитабельного токена лишається"
             }
         },
         "titleLang": {

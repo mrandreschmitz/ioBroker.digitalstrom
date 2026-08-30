@@ -140,6 +140,14 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ## Changelog
 
+### 2.4.15 (2026-08-30)
+
+* **The dialog scrolls by itself now.** It used `minHeight: 100%` and relied on the surrounding frame
+  to provide the scrolling. Where that frame does not scroll, everything below the first screen height
+  was unreachable and the lowest button stayed under the save bar - which is why more bottom spacing in
+  2.4.12 and 2.4.14 did not help. With `height: 100vh` and its own `overflow-y` the content is reachable
+  in either case; verified against a deliberately non scrolling frame, 71 px clear below the last button
+
 ### 2.4.14 (2026-08-30)
 
 * **The meter values can optionally be read through the new Smart Home API.** One request for all
