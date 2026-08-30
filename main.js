@@ -764,6 +764,16 @@ class Digitalstrom extends utils.Adapter {
             );
             return null;
         }
+        // Same reasoning as for the app token: a value that is not a hex string usually
+        // means js-controller could not decrypt it (e.g. after restoring a backup on
+        // another host), and the dSS would only answer with an anonymous 401
+        if (!Digitalstrom.looksLikeAppToken(this.config.smartHomeApiKey)) {
+            this.log.error(
+                'The stored Smart Home API key does not look like a valid key (expected a long hex string). ' +
+                    'Please open the adapter configuration, create the API key again and save. ' +
+                    'The adapter tries to use it anyway.',
+            );
+        }
         try {
             const client = new DSSSmartHome({
                 host: this.config.host,

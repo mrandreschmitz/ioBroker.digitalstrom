@@ -118,6 +118,13 @@ function createMockSmartHome() {
             if (url.pathname === '/json/system/loginApplication') {
                 return send(200, { ok: true, result: { token: 'session-token' } });
             }
+            if (url.pathname === '/json/system/login') {
+                if (query.password === 'correct') {
+                    return send(200, { ok: true, result: { token: 'session-token' } });
+                }
+                // A wrong password is answered with HTTP 200 and ok:false, like a real dSS
+                return send(200, { ok: false, message: 'Authentication failed' });
+            }
             send(404, { error: 'not found' });
         });
     });

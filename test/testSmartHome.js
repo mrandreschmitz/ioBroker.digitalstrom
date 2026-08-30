@@ -108,6 +108,44 @@ describe('Smart Home API client', function () {
             expect(caught.message).to.contain('Invalid JSON');
         });
 
+        // Ohne res.on('error') feuert bei einem FIN mitten im Body weder 'end' noch der
+        // req-'error'-Handler - das Promise hinge fuer immer und der Request bliebe
+        // in activeRequests stehen
+        it('rejects instead of hanging when the connection dies in the middle of the body', async () => {
+            const http = require('node:http');
+            const broken = http.createServer((req, res) => {
+                res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': 1000 });
+                res.write('{"data":');
+                // end() the socket, not destroy(): a graceful FIN is the case that used
+                // to hang, an RST was always caught by the request error handler
+                setTimeout(() => res.socket && res.socket.end(), 20);
+            });
+            await new Promise(resolve => broken.listen(0, '127.0.0.1', () => resolve(undefined)));
+            const address = /** @type {import('node:net').AddressInfo} */ (broken.address());
+            const brokenClient = new DSSSmartHome({
+                host: `http://127.0.0.1:${address.port}`,
+                apiKey: 'irrelevant',
+                logger: silentLogger,
+            });
+            /** @type {any} */
+            let caught = null;
+            try {
+                await Promise.race([
+                    brokenClient.request('GET', '/api/v1/apartment'),
+                    delay(3000).then(() => {
+                        throw new Error('the request hangs');
+                    }),
+                ]);
+            } catch (err) {
+                caught = err;
+            }
+            brokenClient.stop();
+            await new Promise(resolve => broken.close(() => resolve(undefined)));
+            expect(caught, 'the request must fail').to.not.equal(null);
+            expect(caught.message).to.not.contain('the request hangs');
+            expect(brokenClient.activeRequests.size, 'the request is cleaned up').to.equal(0);
+        });
+
         it('sends no request after stop()', async () => {
             client = createClient();
             client.stop();
@@ -283,6 +321,126 @@ describe('Smart Home API client', function () {
             expect(created[0].query.token, 'the session authorizes the creation').to.equal('session-token');
             expect(created[0].body.data.attributes.name).to.equal('ioBroker.digitalstrom');
         });
+
+        // Ein falsches Passwort beantwortet der dSS mit HTTP 200 und ok:false - die
+        // Meldung des dSS muss beim Benutzer ankommen, nicht ein generischer Satz
+        it('surfaces the reason of the dSS when the password login fails', async () => {
+            /** @type {any} */
+            let caught = null;
+            try {
+                await DSSSmartHome.createApiKey({
+                    host: mock.baseUrl(),
+                    user: 'dssadmin',
+                    password: 'wrong',
+                    logger: silentLogger,
+                });
+            } catch (err) {
+                caught = err;
+            }
+            expect(caught, 'the key creation must fail').to.not.equal(null);
+            expect(caught.message).to.contain('Authentication failed');
+        });
+    });
+});
+
+describe('Websocket watchdog', function () {
+    this.timeout(15000);
+
+    const net = require('node:net');
+    const crypto = require('node:crypto');
+    const MiniWebsocket = require('../lib/websocket');
+
+    /**
+     * A hand-rolled server that completes the handshake and then behaves as told.
+     *
+     * @param {(socket: import('node:net').Socket, data: Buffer) => void} onFrame what to do with client frames
+     * @returns {Promise<{port: number, close: () => Promise<void>, frames: Buffer[]}>}
+     */
+    async function createSilentServer(onFrame) {
+        const frames = [];
+        const server = net.createServer(socket => {
+            socket.once('data', chunk => {
+                const head = chunk.toString('utf8');
+                const match = /Sec-WebSocket-Key: (\S+)/i.exec(head);
+                const accept = crypto
+                    .createHash('sha1')
+                    .update((match ? match[1] : '') + MiniWebsocket.WEBSOCKET_GUID)
+                    .digest('base64');
+                socket.write(
+                    [
+                        'HTTP/1.1 101 Switching Protocols',
+                        'Upgrade: websocket',
+                        'Connection: Upgrade',
+                        `Sec-WebSocket-Accept: ${accept}`,
+                        '',
+                        '',
+                    ].join('\r\n'),
+                );
+                socket.on('data', data => {
+                    const frame = Buffer.isBuffer(data) ? data : Buffer.from(data);
+                    frames.push(frame);
+                    onFrame(socket, frame);
+                });
+            });
+        });
+        await new Promise(resolve => server.listen(0, '127.0.0.1', () => resolve(undefined)));
+        const address = /** @type {import('node:net').AddressInfo} */ (server.address());
+        return {
+            port: address.port,
+            frames,
+            close: () => new Promise(resolve => server.close(() => resolve(undefined))),
+        };
+    }
+
+    // Eine halboffene Verbindung (dSS-Stromausfall, Routerwechsel) sendet kein FIN und
+    // kein RST - ohne Watchdog bliebe der Notification-Kanal bis zum Neustart stumm
+    it('pings a silent connection and declares it dead when nothing answers', async () => {
+        const server = await createSilentServer(() => {
+            // never answers - not even the pings
+        });
+        const socket = new MiniWebsocket({
+            host: '127.0.0.1',
+            port: server.port,
+            path: '/api/v1/apartment/notifications',
+            pingInterval: 80,
+            idleTimeout: 200,
+        });
+        const errors = [];
+        socket.on('error', err => errors.push(err.message));
+        const closed = new Promise(resolve => socket.on('close', () => resolve(undefined)));
+        await socket.connect();
+
+        await Promise.race([
+            closed,
+            new Promise((resolve, reject) => setTimeout(() => reject(new Error('the watchdog never fired')), 3000)),
+        ]);
+        expect(server.frames.length, 'the client pinged before giving up').to.be.at.least(1);
+        expect(errors.join(' ')).to.contain('dead');
+        socket.close();
+        await server.close();
+    });
+
+    it('keeps the connection open as long as the pings are answered', async () => {
+        const server = await createSilentServer(socket => {
+            // An unmasked pong with an empty payload, the minimal sign of life
+            socket.write(Buffer.from([0x8a, 0x00]));
+        });
+        const socket = new MiniWebsocket({
+            host: '127.0.0.1',
+            port: server.port,
+            path: '/api/v1/apartment/notifications',
+            pingInterval: 60,
+            idleTimeout: 150,
+        });
+        let closedEarly = false;
+        socket.on('close', () => (closedEarly = true));
+        socket.on('error', () => {});
+        await socket.connect();
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+        expect(closedEarly, 'an answered ping keeps the connection alive').to.equal(false);
+        socket.close();
+        await server.close();
     });
 });
 
@@ -492,6 +650,51 @@ describe('Meter values through the Smart Home API', () => {
         struct.updateMeterData(() => {
             expect(struct.infoStates.map(entry => entry.value)).to.deep.equal(['classic']);
             done();
+        });
+    });
+
+    // Eine Firmware ohne /api/v1 antwortet mit 404 - dann ist jeder Versuch vor dem
+    // maximalen Backoff verschwendet, genau wie bei einem abgelehnten Key
+    it('backs off to the maximum when the API does not exist (HTTP 404)', async () => {
+        const notFound = new Error('HTTP 404 for GET /api/v1/apartment/meterings/values');
+        /** @type {any} */ (notFound).status = 404;
+        const struct = createStructure({
+            smartHome: {
+                getMeteringValues: async () => {
+                    throw notFound;
+                },
+            },
+        });
+        await struct.updateMeterDataViaSmartHome();
+        expect(struct.smartHomeMeterRetryAfter - struct.now()).to.be.closeTo(struct.smartHomeMeterRetryMax, 1000);
+        expect(struct.warnings.join(' ')).to.contain('does not offer the Smart Home API');
+    });
+
+    // main.js plant den naechsten Poll-Zyklus ausschliesslich in diesem Callback - wirft
+    // der Callback selbst, darf der Zyklus weder doppelt laufen noch lautlos enden
+    it('runs the callback exactly once even when the callback throws', done => {
+        const struct = createStructure({
+            smartHome: {
+                getMeteringValues: async () => ({
+                    values: [
+                        { id: 'dsm-dsm-a-power', attributes: { value: 30 } },
+                        { id: 'dsm-dsm-a-energy', attributes: { value: 3600000 } },
+                        { id: 'dsm-dsm-b-power', attributes: { value: 21 } },
+                        { id: 'dsm-dsm-b-energy', attributes: { value: 7200000 } },
+                    ],
+                }),
+            },
+        });
+        let calls = 0;
+        struct.updateMeterData(() => {
+            calls++;
+            if (calls === 1) {
+                setTimeout(() => {
+                    expect(calls, 'the callback must not run twice').to.equal(1);
+                    done();
+                }, 50);
+                throw new Error('a broken consumer');
+            }
         });
     });
 
