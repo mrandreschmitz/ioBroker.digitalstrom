@@ -788,7 +788,8 @@ class Digitalstrom extends utils.Adapter {
                 },
             });
             this.log.info(
-                'Smart Home API is active: the meter values are read with one request instead of two per circuit',
+                'Smart Home API is active: meter values are read with one request instead of two per ' +
+                    'circuit, and device output values with one status request instead of one read per channel',
             );
             return client;
         } catch (err) {
