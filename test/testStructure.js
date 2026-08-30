@@ -662,6 +662,164 @@ describe('DSSStructure', () => {
         });
     });
 
+    describe('button state of index 0', () => {
+        function deviceStructure() {
+            const struct = createStructure({
+                dss: new EventEmitter(),
+                dssQueue: {
+                    queueSetOutputValue: (d, i, l, v, p, cb) => setImmediate(() => cb && cb(null, v)),
+                    queueUpdateOutputValue: (d, i, l, p, cb) => setImmediate(() => cb && cb(null, 0)),
+                    pushQueryQueue: (...args) => {
+                        const cb = args[args.length - 1];
+                        setImmediate(() => cb && cb(null, { ok: true }));
+                    },
+                },
+                adapter: {
+                    log: silentLogger,
+                    config: { initializeOutputValues: false, usePresetValues: false },
+                    setState: () => {},
+                    setDssState: () => {},
+                },
+            });
+            return struct;
+        }
+
+        function jokerDevice(buttonActiveGroup) {
+            return {
+                dSUID: 'dev1',
+                meterDSUID: 'm1',
+                zoneID: 5,
+                name: 'Taster',
+                hwInfo: 'SW-TKM210',
+                isValid: true,
+                isPresent: true,
+                buttonActiveGroup,
+                buttonInputCount: 4,
+                sensorInputCount: 0,
+                binaryInputCount: 0,
+                groups: [8],
+            };
+        }
+
+        // Regression: the state of button 0 was only created for buttonActiveGroup 1..8, while
+        // buttonClickType/buttonHoldCount of the same button were always created. main.js aborts
+        // the whole buttonClick handler when the plain button state is missing, so every press
+        // of the first button was dropped on devices with buttonActiveGroup -1, 0 or > 8.
+        [-1, 0, 9, 12].forEach(group => {
+            it(`creates the button state for buttonActiveGroup ${group}`, done => {
+                const struct = deviceStructure();
+                struct.createDevice(jokerDevice(group), () => {
+                    expect(struct.stateMap['dev1.0.button'], 'the handler in main.js needs this entry').to.equal(
+                        'devices.m1.dev1.button',
+                    );
+                    expect(struct.stateMap['dev1.0.buttonClickType']).to.be.a('string');
+                    expect(struct.stateMap['dev1.0.buttonHoldCount']).to.be.a('string');
+                    expect(struct.stateMap['dev1.1.button'], 'the further buttons stay as they were').to.be.a('string');
+                    done();
+                });
+            });
+        });
+
+        it('keeps working for the groups that were already correct', done => {
+            const struct = deviceStructure();
+            struct.createDevice(jokerDevice(1), () => {
+                expect(struct.stateMap['dev1.0.button']).to.equal('devices.m1.dev1.button');
+                expect(struct.initialObjectValues['devices.m1.dev1.button']).to.equal(false);
+                done();
+            });
+        });
+    });
+
+    describe('extraneous zones', () => {
+        function apartmentStructure(levels) {
+            const struct = createStructure({
+                dss: new EventEmitter(),
+                dssQueue: {
+                    pushQueryQueue: (...args) => {
+                        const cb = args[args.length - 1];
+                        setImmediate(() => cb && cb(null, { ok: true, result: { scene: 0 } }));
+                    },
+                },
+                adapter: {
+                    log: Object.assign({}, silentLogger, { warn: msg => levels.push(String(msg)) }),
+                    config: {},
+                    setState: () => {},
+                    setDssState: () => {},
+                },
+            });
+            struct.propertyStates = [];
+            struct.sensorValues = { outdoor: {}, zones: {} };
+            struct.temperatureControlStatus = { zones: {} };
+            return struct;
+        }
+
+        const zone = id => ({ id, name: `Zone ${id}`, isPresent: true, isValid: true, groups: [], devices: [] });
+
+        // Regression: the check used processedZones, but the zones are handed to processZone()
+        // via setImmediate - the map was still empty, so EVERY regular zone was reported at
+        // every single adapter start.
+        it('does not report a zone that is assigned to a floor', done => {
+            const warnings = [];
+            const struct = apartmentStructure(warnings);
+            struct.createApartment(
+                {
+                    floors: { 0: { id: 0, name: 'EG', zones: [5] } },
+                    zones: { 5: zone(5) },
+                    zone0: { groups: [] },
+                    clusters: {},
+                },
+                {},
+                () => {
+                    expect(
+                        warnings.filter(w => w.includes('EXTRANOUS')),
+                        'no false alarm',
+                    ).to.deep.equal([]);
+                    struct.clearTimeouts();
+                    done();
+                },
+            );
+        });
+
+        it('still reports a zone that belongs to no floor', done => {
+            const warnings = [];
+            const struct = apartmentStructure(warnings);
+            struct.createApartment(
+                {
+                    floors: { 0: { id: 0, name: 'EG', zones: [5] } },
+                    zones: { 5: zone(5), 9: zone(9) },
+                    zone0: { groups: [] },
+                    clusters: {},
+                },
+                {},
+                () => {
+                    const extraneous = warnings.filter(w => w.includes('EXTRANOUS'));
+                    expect(extraneous, 'exactly the unassigned zone').to.have.lengthOf(1);
+                    expect(extraneous[0]).to.contain('9');
+                    struct.clearTimeouts();
+                    done();
+                },
+            );
+        });
+    });
+
+    describe('output channel definitions', () => {
+        it('names the indoor shade channels as indoor', () => {
+            expect(dssConstants.outputChannelUnitRoleMap.shadePositionIndoor.name).to.contain('Indoor');
+            expect(dssConstants.outputChannelUnitRoleMap.shadePositionOutside.name).to.contain('Outside');
+            expect(dssConstants.outputChannelUnitRoleMap.shadeOpeningAngleIndoor.name).to.contain('Indoor');
+            expect(dssConstants.outputChannelUnitRoleMap.shadeOpeningAngleOutside.name).to.contain('Outside');
+        });
+
+        it('gives every output channel a unique name', () => {
+            const seen = {};
+            Object.keys(dssConstants.outputChannelUnitRoleMap).forEach(key => {
+                const name = dssConstants.outputChannelUnitRoleMap[key].name;
+                expect(seen[name], `${key} shares its name with ${seen[name]}`).to.equal(undefined);
+                seen[name] = key;
+            });
+        });
+    });
+
     describe('unmapped property states', () => {
         function reportingStructure(entries) {
             return createStructure({

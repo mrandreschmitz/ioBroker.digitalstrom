@@ -88,6 +88,12 @@ Empfehlungen, in dieser Reihenfolge:
 Der App-Token wird verschlüsselt gespeichert (`encryptedNative`), nicht an andere Adapter
 weitergegeben (`protectedNative`), nicht ins Log geschrieben und im Admin-Dialog maskiert dargestellt.
 
+> **Bis Version 2.4.3 stimmte das nicht.** Beide Deklarationen standen innerhalb von `common` statt
+> in der Wurzel der io-package.json, wodurch keine von beiden griff und der Token im Klartext lag.
+> Behoben in 2.4.4. Ein von einer älteren Version gespeicherter Token lässt sich danach nicht mehr
+> entschlüsseln — öffne einmal die Adapter-Konfiguration, trage den App-Token erneut ein und
+> speichere. Der Adapter erkennt den Fall und weist im Log darauf hin.
+
 Nach dem Eintragen des App-Tokens und dem Speichern startet der Adapter automatisch neu.
 
 Stimmen die Daten, liest der Adapter die Wohnungs- und Gerätestruktur aus und legt sie als
@@ -196,6 +202,45 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
+
+### 2.4.4 (2026-08-14)
+
+Gefunden durch eine systematische Multi-Agenten-Prüfung des gesamten Adapters. Alle diese Defekte
+existierten bereits in 2.4.2 und früher — sie schlagen still fehl, deshalb sind sie nie als Fehler
+aufgefallen.
+
+* **Eine Szene für einen ganzen Raum erreichte die Geräte-Handler nie.** `zoneDevices` ist nur nach
+  den echten Gerätegruppen (1, 2, 8 …) indiziert, nie nach der Broadcast-Gruppe 0 — der Fan-out
+  fand also nichts, und die anschließende Weiterleitungsschleife ist als „forwarded" markiert, was
+  ihn ebenfalls abschaltet. Folge: Nach jedem „Raum aus" behielten `brightness`,
+  `shadePositionOutside` und `shadeOpeningAngle*` ihren alten Wert, bis zufällig eine Gruppenszene
+  dasselbe Gerät traf oder der Adapter neu startete — ohne eine einzige Logmeldung. Der Adapter
+  löst diesen Fall selbst aus: Seine eigenen Raum-Szenen-States senden `zone/callScene` ohne
+  groupID.
+* **Der App-Token wird jetzt wirklich verschlüsselt gespeichert.** `encryptedNative` und
+  `protectedNative` standen innerhalb von `common` statt in der Wurzel der io-package.json, wo
+  `ioBroker.AdapterObject` sie erwartet. Beides war damit wirkungslos: Der Token lag im Klartext in
+  der Objektdatenbank, war für jeden anderen Adapter lesbar und stand unverschlüsselt in jedem
+  Backup. **Migration:** Ein von einer älteren Version gespeicherter Token lässt sich nicht
+  entschlüsseln und kommt als Müll zurück. Öffne einmal die Adapter-Konfiguration, trage den
+  App-Token erneut ein (oder erstelle mit deinen DSS-Anmeldedaten einen neuen) und speichere. Der
+  Adapter erkennt diesen Fall jetzt und sagt genau das, statt nur einen fehlgeschlagenen Login zu
+  melden.
+* **Bei manchen Geräten wurde jeder Druck auf den ersten Taster verworfen.** Der State von Taster 0
+  entstand nur bei `buttonActiveGroup` 1..8, während Klicktyp und Haltedauer desselben Tasters
+  immer angelegt wurden — und der Event-Handler bricht ab, wenn der einfache Taster-State fehlt.
+  Bei einem Tastenfeld mit nicht zugewiesenem Taster, auf Broadcast oder in einer Gruppe über 8
+  funktionierten die Taster 2..n, während Taster 1 nur `INVALID Button click` erzeugte.
+* Klicktyp und Haltedauer wurden als DSS-Rohstring in einen als Zahl deklarierten State
+  geschrieben — js-controller warnte bei jedem Tastendruck und die `states`-Zuordnung griff nicht.
+* `EXTRANOUS ZONE found <id>` wurde bei jedem Adapterstart für jeden regulären Raum geloggt: Die
+  Prüfung lief synchron, während die Räume über `setImmediate` verarbeitet werden — ihre
+  Buchführung war zu dem Zeitpunkt noch leer.
+* **„Geräte-Ausgangswerte aktiv abfragen" = aus unterdrückte auch die Szenen-Preset-Werte.** Die
+  Option steuert laut Dokumentation nur die Lesezugriffe; die Preset-Werte gehören zu
+  „Szenen-Preset-Werte verwenden". Der Gate saß vor dem Geräte-Handler statt vor dem Lesezugriff.
+* Der Ausgangskanal `shadePositionIndoor` hieß „Shade Position **Outside** (curtains)". Bestehende
+  Objekte behalten ihren alten Namen — ioBroker bewahrt den Namen bei Updates.
 
 ### 2.4.3 (2026-08-12)
 

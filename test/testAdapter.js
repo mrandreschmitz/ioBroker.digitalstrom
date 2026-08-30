@@ -20,6 +20,9 @@ const { Digitalstrom } = proxyquire('../main', {
 
 const silentLog = { silly: () => {}, debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
+// Shape of a real digitalSTROM application token (64 hex characters)
+const VALID_APP_TOKEN = 'a1b2c3d4'.repeat(8);
+
 /**
  * Builds a minimal adapter-like context so the adapter methods can be tested
  * without a running js-controller.
@@ -380,7 +383,9 @@ describe('Adapter logic', () => {
                     },
                 };
                 return createContext({
-                    config: { host, appToken: 'token' },
+                    // A real DSS app token is a long hex string - a placeholder would trigger
+                    // the plausibility check of main() and produce an extra error line
+                    config: { host, appToken: VALID_APP_TOKEN },
                     errors: log.errors,
                     log,
                     objectHelper: { loadExistingObjects: cb => cb() },
@@ -409,11 +414,38 @@ describe('Adapter logic', () => {
             it('logs a helpful error without leaking the app token', () => {
                 const ctx = startContext('ftp://192.168.1.10');
                 ctx.log.errors = [];
-                ctx.config.appToken = 'SUPERSECRET-TOKEN';
+                // Same shape as a real token so only the host error is reported
+                ctx.config.appToken = 'deadbeef'.repeat(8);
                 Digitalstrom.prototype.main.call(ctx);
                 expect(ctx.log.errors).to.have.lengthOf(1);
                 expect(ctx.log.errors[0]).to.contain('only https and http are supported');
-                expect(ctx.log.errors[0]).to.not.contain('SUPERSECRET-TOKEN');
+                expect(ctx.log.errors[0]).to.not.contain('deadbeef');
+            });
+
+            // Regression: up to 2.4.3 encryptedNative sat in the wrong place of io-package.json,
+            // so an existing installation holds the token in plain text. After the fix
+            // js-controller decrypts that into garbage - the user has to learn what to do.
+            it('warns about a token that js-controller could not decrypt', () => {
+                const ctx = startContext('192.168.1.10');
+                ctx.log.errors = [];
+                ctx.config.appToken = '\u0012\u00a4garbled-token\u0099';
+                Digitalstrom.prototype.main.call(ctx);
+                const hint = ctx.log.errors.find(msg => msg.includes('does not look like a valid'));
+                expect(hint, 'the user must get an actionable message').to.be.a('string');
+                expect(hint).to.contain('enter the App-Token again');
+                // The login is still attempted, the check never blocks the start
+                expect(ctx.dss, 'the client must still be created').to.not.equal(null);
+                ctx.dss.stop();
+                clearTimeout(ctx.startupTimeout);
+            });
+
+            it('accepts a real looking app token without complaining', () => {
+                expect(Digitalstrom.looksLikeAppToken('deadbeef'.repeat(8))).to.equal(true);
+                expect(Digitalstrom.looksLikeAppToken('ABCDEF0123456789'.repeat(2))).to.equal(true);
+                expect(Digitalstrom.looksLikeAppToken('garbled token'), 'spaces are impossible').to.equal(false);
+                expect(Digitalstrom.looksLikeAppToken('abc'), 'too short').to.equal(false);
+                expect(Digitalstrom.looksLikeAppToken(''), 'empty').to.equal(false);
+                expect(Digitalstrom.looksLikeAppToken(undefined)).to.equal(false);
             });
 
             it('starts normally with a valid host', () => {
@@ -872,6 +904,195 @@ describe('Adapter logic', () => {
                     done();
                 });
             });
+        });
+    });
+
+    describe('scene fan-out to the devices', () => {
+        function sceneContext(config) {
+            const dss = new DSS({ host: 'localhost', appToken: 'app', logger: silentLog });
+            dss.requestAsync = async () => ({ ok: true });
+            dss.pollEvent = () => {};
+            const deviceEvents = [];
+            const ctx = createContext({
+                dss,
+                config: Object.assign({ initializeOutputValues: true, usePresetValues: true }, config),
+                dssStruct: {
+                    // Room 5 with one device in the light group - the broadcast group 0 is
+                    // never a key here, the DSS does not list devices in it
+                    zoneDevices: { 5: { 1: ['dev1'], 2: ['dev2'] } },
+                    stateMap: {
+                        '5.1.scenes.0': 'apartment.0.5.1.scenes.Preset0',
+                        '5.2.scenes.0': 'apartment.0.5.2.scenes.Preset0',
+                        '0.0.scenes.0': 'apartment.scenes.Preset0',
+                    },
+                    dssObjects: {},
+                    apartmentStructure: { zones: [{ id: 5 }] },
+                },
+            });
+            dss.on('dev1', data => deviceEvents.push(['dev1', data.properties.sceneID]));
+            dss.on('dev2', data => deviceEvents.push(['dev2', data.properties.sceneID]));
+            return { ctx, dss, deviceEvents };
+        }
+
+        function callScene(dss, zoneID, groupID) {
+            dss.emit('callScene', {
+                name: 'callScene',
+                source: { isGroup: true, isDevice: false, isApartment: false },
+                properties: { zoneID, groupID, sceneID: '0', callOrigin: '-1' },
+            });
+        }
+
+        // Regression: a scene for a whole room arrives with groupID "0". zoneDevices is only
+        // keyed by the real device groups, so the fan-out found nothing and the forwarding
+        // loop that runs afterwards is marked as "forwarded", which disabled it as well.
+        // Result: brightness and shade position kept their old value forever.
+        it('reaches every device of the room on a room wide scene (groupID 0)', done => {
+            const { ctx, dss, deviceEvents } = sceneContext();
+            Digitalstrom.prototype.registerEventHandlers.call(ctx, ['callScene']);
+            callScene(dss, '5', '0');
+            setTimeout(() => {
+                expect(deviceEvents.map(e => e[0]).sort(), 'both devices of the room must be refreshed').to.deep.equal([
+                    'dev1',
+                    'dev2',
+                ]);
+                dss.stop();
+                done();
+            }, 10);
+        });
+
+        it('still reaches exactly the devices of one group on a group scene', done => {
+            const { ctx, dss, deviceEvents } = sceneContext();
+            Digitalstrom.prototype.registerEventHandlers.call(ctx, ['callScene']);
+            callScene(dss, '5', '1');
+            setTimeout(() => {
+                expect(deviceEvents).to.deep.equal([['dev1', '0']]);
+                dss.stop();
+                done();
+            }, 10);
+        });
+
+        it('delivers every device exactly once on a room wide scene', done => {
+            const { ctx, dss, deviceEvents } = sceneContext();
+            ctx.dssStruct.zoneDevices = { 5: { 1: ['dev1'], 2: ['dev1', 'dev2'], 8: ['dev1'] } };
+            Digitalstrom.prototype.registerEventHandlers.call(ctx, ['callScene']);
+            callScene(dss, '5', '0');
+            setTimeout(() => {
+                const perDevice = {};
+                deviceEvents.forEach(e => (perDevice[e[0]] = (perDevice[e[0]] || 0) + 1));
+                expect(perDevice, 'a device in several groups must not be handled twice').to.deep.equal({
+                    dev1: 1,
+                    dev2: 1,
+                });
+                dss.stop();
+                done();
+            }, 10);
+        });
+
+        // Regression: the fan-out was gated on initializeOutputValues, but the device handlers
+        // also apply the scene preset values, which is controlled by usePresetValues. With
+        // reading switched off the preset values were silently dead too.
+        it('reaches the devices even when initializeOutputValues is off', done => {
+            const { ctx, dss, deviceEvents } = sceneContext({ initializeOutputValues: false });
+            Digitalstrom.prototype.registerEventHandlers.call(ctx, ['callScene']);
+            callScene(dss, '5', '1');
+            setTimeout(() => {
+                expect(deviceEvents, 'the preset values must still be applied').to.deep.equal([['dev1', '0']]);
+                dss.stop();
+                done();
+            }, 10);
+        });
+
+        it('does not fan out again for the forwarded frames', done => {
+            const { ctx, dss, deviceEvents } = sceneContext();
+            Digitalstrom.prototype.registerEventHandlers.call(ctx, ['callScene']);
+            callScene(dss, '5', '0');
+            setTimeout(() => {
+                expect(deviceEvents.length, 'exactly one event per device, not one per group').to.equal(2);
+                dss.stop();
+                done();
+            }, 10);
+        });
+    });
+
+    describe('button events', () => {
+        function buttonContext() {
+            const dss = new DSS({ host: 'localhost', appToken: 'app', logger: silentLog });
+            dss.requestAsync = async () => ({ ok: true });
+            dss.pollEvent = () => {};
+            const ctx = createContext({
+                dss,
+                dssStruct: {
+                    dssObjects: {
+                        'devices.m1.dev1.buttonClickType': { common: { type: 'number' } },
+                        'devices.m1.dev1.buttonHoldCount': { common: { type: 'number' } },
+                    },
+                    stateMap: {
+                        'dev1.0.button': 'devices.m1.dev1.button',
+                        'dev1.0.buttonClickType': 'devices.m1.dev1.buttonClickType',
+                        'dev1.0.buttonHoldCount': 'devices.m1.dev1.buttonHoldCount',
+                    },
+                    zoneDevices: {},
+                    apartmentStructure: { zones: [] },
+                },
+            });
+            return { ctx, dss };
+        }
+
+        // Regression: both states are declared as numbers, but the DSS sends strings and the
+        // handler wrote them with setState instead of setDssState
+        it('converts the DSS strings of a button click into numbers', done => {
+            const { ctx, dss } = buttonContext();
+            Digitalstrom.prototype.registerEventHandlers.call(ctx, ['buttonClick']);
+            dss.emit('buttonClick', {
+                name: 'buttonClick',
+                source: { isDevice: true, dSUID: 'dev1' },
+                properties: { clickType: '7', holdCount: '3' },
+            });
+            setTimeout(() => {
+                expect(ctx.states['devices.m1.dev1.button']).to.equal(true);
+                expect(ctx.states['devices.m1.dev1.buttonClickType'], 'must be the number 7').to.equal(7);
+                expect(ctx.states['devices.m1.dev1.buttonHoldCount']).to.equal(3);
+                dss.stop();
+                done();
+            }, 10);
+        });
+
+        it('keeps the click type 0 and the defaults working', done => {
+            const { ctx, dss } = buttonContext();
+            Digitalstrom.prototype.registerEventHandlers.call(ctx, ['buttonClick']);
+            dss.emit('buttonClick', {
+                name: 'buttonClick',
+                source: { isDevice: true, dSUID: 'dev1' },
+                properties: { clickType: 0 },
+            });
+            setTimeout(() => {
+                expect(ctx.states['devices.m1.dev1.buttonClickType'], 'clickType 0 stays 0').to.equal(0);
+                expect(ctx.states['devices.m1.dev1.buttonHoldCount'], 'default 0').to.equal(0);
+                dss.stop();
+                done();
+            }, 10);
+        });
+
+        it('does not write anything when only the plain button state exists', done => {
+            const { ctx, dss } = buttonContext();
+            delete ctx.dssStruct.stateMap['dev1.0.buttonClickType'];
+            delete ctx.dssStruct.stateMap['dev1.0.buttonHoldCount'];
+            Digitalstrom.prototype.registerEventHandlers.call(ctx, ['buttonClick']);
+            expect(() =>
+                dss.emit('buttonClick', {
+                    name: 'buttonClick',
+                    source: { isDevice: true, dSUID: 'dev1' },
+                    properties: { clickType: '7' },
+                }),
+            ).to.not.throw();
+            setTimeout(() => {
+                expect(ctx.states['devices.m1.dev1.button']).to.equal(true);
+                expect(Object.keys(ctx.states), 'no write with an undefined id').to.deep.equal([
+                    'devices.m1.dev1.button',
+                ]);
+                dss.stop();
+                done();
+            }, 10);
         });
     });
 

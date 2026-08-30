@@ -423,6 +423,15 @@ class Digitalstrom extends utils.Adapter {
             this.log.warn('Please open Admin page for this adapter to set the host and create an App Token.');
             return;
         }
+        if (!Digitalstrom.looksLikeAppToken(this.config.appToken)) {
+            // Almost always the one time migration effect described at looksLikeAppToken()
+            this.log.error(
+                'The stored App-Token does not look like a valid digitalSTROM token. Since version 2.4.4 the ' +
+                    'token is really stored encrypted - a token that was saved by an older version is read back ' +
+                    'as garbage. Please open the adapter configuration, enter the App-Token again (or create a ' +
+                    'new one with your DSS login) and save. The adapter tries to log in anyway.',
+            );
+        }
         let dss;
         try {
             dss = new DSS({
@@ -644,6 +653,25 @@ class Digitalstrom extends utils.Adapter {
     }
 
     /**
+     * True when the value looks like a digitalSTROM application token.
+     *
+     * The DSS issues a long hex string. This is used to recognize a token that js-controller
+     * could not decrypt: up to version 2.4.3 the adapter declared encryptedNative in the wrong
+     * place of io-package.json, so existing installations hold the token in plain text. After
+     * the fix js-controller decrypts that plain text into garbage and the login would only fail
+     * with "Login failed", which gives the user no clue what to do.
+     *
+     * Deliberately only a plausibility check - it never blocks the login, it only produces a
+     * helpful message.
+     *
+     * @param {unknown} token configured app token
+     * @returns {boolean} true if the value can be a valid token
+     */
+    static looksLikeAppToken(token) {
+        return typeof token === 'string' && /^[0-9a-f]{32,}$/i.test(token.trim());
+    }
+
+    /**
      * Validates the configured polling interval independently of the admin UI.
      * Invalid values must never produce an aggressive timer.
      *
@@ -822,16 +850,13 @@ class Digitalstrom extends utils.Adapter {
                 return;
             }
             this.setState(dssStruct.stateMap[`${data.source.dSUID}.${buttonIndex}.button`], true, true);
-            this.setState(
-                dssStruct.stateMap[`${data.source.dSUID}.${buttonIndex}.buttonClickType`],
-                data.properties.clickType ?? -1,
-                true,
-            );
-            this.setState(
-                dssStruct.stateMap[`${data.source.dSUID}.${buttonIndex}.buttonHoldCount`],
-                data.properties.holdCount ?? 0,
-                true,
-            );
+            // setDssState, not setState: the DSS delivers the click type and the hold count as
+            // strings while both objects are declared as numbers. The ids can be missing on
+            // devices that only have the plain button state.
+            const clickTypeId = dssStruct.stateMap[`${data.source.dSUID}.${buttonIndex}.buttonClickType`];
+            clickTypeId && this.setDssState(clickTypeId, data.properties.clickType ?? -1);
+            const holdCountId = dssStruct.stateMap[`${data.source.dSUID}.${buttonIndex}.buttonHoldCount`];
+            holdCountId && this.setDssState(holdCountId, data.properties.holdCount ?? 0);
         });
 
         dss.on('zoneSensorValue', data => {
@@ -857,6 +882,38 @@ class Digitalstrom extends utils.Adapter {
             }
             this.setDssState(sourceDeviceId, data.properties.sensorValueFloat);
         });
+
+        /**
+         * Hands a scene event to the device handlers of the affected devices.
+         *
+         * zoneDevices is keyed by the real device groups (1, 2, 8 ...) only - the DSS never
+         * lists a device in the broadcast group 0. A scene called for a whole room therefore
+         * arrives with groupID "0" and has to be fanned out over every group of that room,
+         * exactly like the apartment wide broadcast does.
+         *
+         * @param {string} zoneId zone of the scene event
+         * @param {string} groupId group of the scene event, "0" means the whole room
+         * @param {object} data the scene event itself
+         */
+        const emitSceneToDevices = (zoneId, groupId, data) => {
+            const groups = dssStruct.zoneDevices[zoneId];
+            if (!groups) {
+                return;
+            }
+            if (String(groupId) !== '0') {
+                (groups[groupId] || []).forEach(dSUID => dss.emit(dSUID, data));
+                return;
+            }
+            const handledDevices = {};
+            Object.keys(groups).forEach(group =>
+                groups[group].forEach(dSUID => {
+                    if (!handledDevices[dSUID]) {
+                        handledDevices[dSUID] = true;
+                        dss.emit(dSUID, data);
+                    }
+                }),
+            );
+        };
 
         const handleScene = (data, value, forwarded) => {
             this.eventLog(data.name + (forwarded ? ' (forwarded)' : ''), data, true);
@@ -899,15 +956,11 @@ class Digitalstrom extends utils.Adapter {
                     this.lastScenes[`${data.properties.zoneID}.${data.properties.groupID}`] = undefined;
                 }
 
-                if (
-                    this.config.initializeOutputValues &&
-                    !forwarded &&
-                    dssStruct.zoneDevices[data.properties.zoneID] &&
-                    dssStruct.zoneDevices[data.properties.zoneID][data.properties.groupID]
-                ) {
-                    dssStruct.zoneDevices[data.properties.zoneID][data.properties.groupID].forEach(dSUID =>
-                        dss.emit(dSUID, data),
-                    );
+                // No initializeOutputValues check here: the device handlers also apply the
+                // scene preset values (usePresetValues) and gate the real DSS read on that
+                // option themselves.
+                if (!forwarded) {
+                    emitSceneToDevices(data.properties.zoneID, data.properties.groupID, data);
                 }
             } else if (
                 data.source.isApartment ||
@@ -923,12 +976,11 @@ class Digitalstrom extends utils.Adapter {
                     this.lastScenes['0.0'] = undefined;
                 }
 
-                if (this.config.initializeOutputValues && !forwarded) {
+                if (!forwarded) {
                     const handledDevices = {};
                     Object.keys(dssStruct.zoneDevices).forEach(zoneId => {
                         Object.keys(dssStruct.zoneDevices[zoneId]).forEach(groupId => {
                             dssStruct.zoneDevices[zoneId][groupId].forEach(dSUID => {
-                                //console.log('Check handled device: ' + dSUID + ' : ' + handledDevices[dSUID]);
                                 if (!handledDevices[dSUID]) {
                                     dss.emit(dSUID, data);
                                     handledDevices[dSUID] = true;

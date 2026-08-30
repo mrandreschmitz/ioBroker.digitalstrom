@@ -55,6 +55,8 @@ Recommendations, in this order:
 
 The App-Token is stored encrypted (`encryptedNative`), is not passed on to other adapters (`protectedNative`), is not written to the log and is shown masked in the admin dialog.
 
+> **Up to version 2.4.3 this was not true.** Both declarations sat inside `common` instead of at the root of io-package.json, so neither took effect and the token was kept in plain text. This is fixed in 2.4.4. A token that was saved by an older version cannot be decrypted afterwards - open the adapter configuration once, enter the App-Token again and save. The adapter detects the case and says so in the log.
+
 After providing an App token and saving the settings the adapter will restart automatically.
 
 When data are correct the adapter read out the apartment and devices structure and create them as ioBroker Objects. This can take some time (depending on the number of devices and floors/zones/groups and the performance of your system several seconds). Please be patient. And I really mean it that way ... Several thousand objects are easy to reach here! Give the adapter time please!
@@ -130,6 +132,42 @@ It is published under the same MIT license; the original copyright notice is kep
 [LICENSE](LICENSE).
 
 ## Changelog
+
+### 2.4.4 (2026-08-14)
+
+Found by a systematic multi-agent review of the whole adapter. All of these defects already
+existed in 2.4.2 and earlier - they fail silently, which is why they never showed up as an error.
+
+* **A scene called for a whole room never reached the device handlers.** `zoneDevices` is only
+  keyed by the real device groups (1, 2, 8 ...), never by the broadcast group 0, so the fan-out
+  found nothing - and the forwarding loop that runs afterwards is marked as "forwarded", which
+  disabled it as well. Effect: after every "room off" the states `brightness`,
+  `shadePositionOutside` and `shadeOpeningAngle*` kept their old value until the next group
+  scene hit the same device or the adapter restarted, without a single log line. The adapter
+  triggers this case itself: its own room scene states send `zone/callScene` without a groupID
+* **The App-Token is now really stored encrypted.** `encryptedNative` and `protectedNative` were
+  declared inside `common` instead of at the root of io-package.json, where `ioBroker.AdapterObject`
+  expects them. Neither took effect, so the token was kept in plain text in the object database,
+  was readable by every other adapter and was contained in every backup in the clear.
+  **Migration:** a token that was saved by an older version cannot be decrypted and is read back
+  as garbage. Open the adapter configuration once, enter the App-Token again (or create a new one
+  with your DSS login) and save. The adapter now detects this case and says exactly that instead
+  of only reporting a failed login
+* **Every press of the first button was dropped on some devices.** The state of button 0 was only
+  created for `buttonActiveGroup` 1..8, while the click type and hold count states of the same
+  button were always created - and the event handler aborts when the plain button state is
+  missing. On a keypad whose button is unassigned, on broadcast, or in a group above 8, buttons
+  2..n worked while button 1 only produced `INVALID Button click`
+* Button click type and hold count were written with the raw DSS string into a state declared as
+  a number, so js-controller warned on every press and the `states` mapping did not resolve
+* `EXTRANOUS ZONE found <id>` was logged for every regular room at every adapter start: the check
+  ran synchronously while the rooms are processed through `setImmediate`, so its bookkeeping was
+  still empty
+* **"Request device output values actively" = false suppressed the scene preset values as well.**
+  The option is documented to control only the reads; the preset values belong to "Use scene
+  preset values". The gate sat in front of the device handler instead of in front of the read
+* The output channel `shadePositionIndoor` was named "Shade Position **Outside** (curtains)".
+  Existing objects keep their old name - ioBroker preserves the name on update
 
 ### 2.4.3 (2026-08-12)
 
