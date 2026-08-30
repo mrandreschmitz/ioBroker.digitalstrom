@@ -25,11 +25,16 @@ const DSSStructure = require('./lib/dssStructure');
 const configUtils = require('./lib/configUtils');
 const dssConstants = require('./lib/constants');
 
-const DEFAULT_POLL_INTERVAL = 60000;
 // DSS rules 8/9 (see above) allow at most one cyclic read per minute and circuit.
-// One polling cycle already issues several measurement reads per circuit
-// (getConsumption + getEnergyMeterValue), so anything below 60s violates the rule.
-// 0 still disables polling completely.
+// One cycle issues TWO reads per circuit (getConsumption + getEnergyMeterValue), and the
+// timer for the next cycle only starts once they are answered - measured against a real
+// DSS a cycle therefore takes about 20s longer than the configured interval:
+//   interval  60s -> cycle  ~80s -> 1.53 requests per minute and circuit
+//   interval 100s -> cycle ~120s -> 1.00 requests per minute and circuit
+// 100s is the first value that really stays within the rule, so it is the default.
+const DEFAULT_POLL_INTERVAL = 100000;
+// Smaller values stay possible on purpose - they exceed the guideline, which is documented
+// in the README and in the admin dialog. 0 still disables polling completely.
 const MIN_POLL_INTERVAL_SECONDS = 60;
 const MAX_POLL_INTERVAL_SECONDS = 24 * 60 * 60;
 

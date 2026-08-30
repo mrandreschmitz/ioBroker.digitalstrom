@@ -38,10 +38,14 @@ Adapter automatisch einen App-Token erstellt.
 Zusätzlich zu den Anmeldedaten stehen folgende Einstellungen zur Verfügung:
 
 * **Datenabfrageintervall**: Intervall, in dem die Zählerdaten („Energy Meter") von den dSM-Geräten
-  abgefragt werden. Standard 60 s, Minimum 60 s. Die digitalSTROM-Regeln 8 und 9 erlauben höchstens
-  einen zyklischen Lesezugriff pro Minute und Klemme, und ein Abfragezyklus erzeugt bereits mehrere
-  Messwert-Reads pro Klemme — Werte zwischen 1 und 59 werden deshalb auf 60 s angehoben. Mit `0` wird
-  die Abfrage vollständig deaktiviert. Ungültige Werte fallen auf den Standard zurück.
+  abgefragt werden. Standard 100 s, Minimum 60 s. Die digitalSTROM-Regeln 8 und 9 erlauben höchstens
+  einen zyklischen Lesezugriff pro Minute und Klemme. Ein Zyklus liest zwei Werte je Klemme
+  (`getConsumption` und `getEnergyMeterValue`), und der Timer für den nächsten Zyklus startet erst,
+  wenn beide beantwortet sind — ein Zyklus dauert dadurch rund 20 s länger als das eingestellte
+  Intervall. An einer echten Anlage gemessen: 60 s ergeben ~1,5 Anfragen pro Minute und Klemme,
+  100 s genau 1,0. Deshalb ist 100 s der Standard. Kleinere Werte bleiben ab 60 s möglich,
+  überschreiten die Vorgabe aber. Mit `0` wird die Abfrage vollständig deaktiviert. Ungültige Werte
+  fallen auf den Standard zurück.
 * **Szenen-Preset-Werte verwenden**: Das digitalSTROM-System ist nicht darauf ausgelegt, die echten
   Ausgangswerte der Geräte ständig bereitzuhalten, sondern arbeitet überwiegend mit Szenen. Für Licht
   und Rollladen/Jalousie sind für viele Szenen Ausgangswerte definiert. Der Adapter kennt diese Werte
@@ -202,6 +206,18 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
+
+### 2.4.7 (2026-08-30)
+
+* **Das Datenabfrageintervall steht standardmäßig auf 100 s statt 60 s.** An einer produktiven
+  Anlage mit 6 Zählerklemmen gemessen: Ein Zyklus liest zwei Werte je Klemme (`getConsumption` +
+  `getEnergyMeterValue`), und der Timer für den nächsten Zyklus startet erst, wenn beide
+  beantwortet sind — ein Zyklus dauert dadurch rund 20 s länger als das eingestellte Intervall.
+  Mit 60 s ergab das gemessene 1,53 Anfragen pro Minute und Klemme, also das Anderthalbfache
+  dessen, was die digitalSTROM-Regeln 8/9 erlauben. 100 s ergibt einen Zyklus von etwa 120 s und
+  damit genau 1,0. Die Aussage aus 2.4.4, 60 s halte diese Regeln ein, zählte nur einen Read pro
+  Zyklus und war falsch. Das Minimum bleibt bei 60 s: Kleinere Werte sind weiterhin möglich, sie
+  werden jetzt nur ehrlich als Überschreitung dokumentiert statt als regelkonform bezeichnet.
 
 ### 2.4.6 (2026-08-30)
 

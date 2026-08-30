@@ -70,21 +70,23 @@ function createContext(overrides = {}) {
 describe('Adapter logic', () => {
     describe('normalizePollInterval', () => {
         const cases = [
-            [undefined, 60000, 'default when unset'],
-            [null, 60000, 'default when null'],
-            ['', 60000, 'default when empty'],
-            [60, 60000, 'normal value'],
+            // A cycle reads two values per circuit and the timer only starts afterwards, so
+            // 100s is the first interval that stays within DSS rules 8/9
+            [undefined, 100000, 'default when unset'],
+            [null, 100000, 'default when null'],
+            ['', 100000, 'default when empty'],
+            [60, 60000, 'the configured minimum stays possible'],
+            [100, 100000, 'the default itself'],
             ['120', 120000, 'numeric string'],
             [0, 0, 'zero disables polling'],
             ['0', 0, 'zero as string disables polling'],
             [-5, 0, 'negative disables instead of firing immediately'],
-            [NaN, 60000, 'NaN falls back to default'],
-            [Infinity, 60000, 'Infinity falls back to default'],
-            ['abc', 60000, 'garbage falls back to default'],
-            // DSS rules 8/9: at most one cyclic read per minute and circuit
+            [NaN, 100000, 'NaN falls back to default'],
+            [Infinity, 100000, 'Infinity falls back to default'],
+            ['abc', 100000, 'garbage falls back to default'],
             [1, 60000, 'too small values are raised to the minimum'],
-            ['30', 60000, 'values below the DSS limit are raised to 60s'],
-            [59, 60000, 'just below the DSS limit is raised to 60s'],
+            ['30', 60000, 'values below the minimum are raised to 60s'],
+            [59, 60000, 'just below the minimum is raised to 60s'],
             [999999999, 24 * 60 * 60 * 1000, 'huge values are capped'],
             [120.4, 120000, 'fractions are rounded'],
         ];
@@ -94,11 +96,19 @@ describe('Adapter logic', () => {
             });
         });
 
-        it('never produces an interval below the documented DSS limit', () => {
+        it('never produces an interval below the configured minimum', () => {
             [-1000, -1, 0.4, '-99', 1, 10, 59].forEach(input => {
                 const result = Digitalstrom.normalizePollInterval(input);
                 expect(result === 0 || result >= 60000, `bad interval for ${input}: ${result}`).to.equal(true);
             });
+        });
+
+        // Two requests per circuit and cycle plus roughly 20s until the timer restarts:
+        // only from 100s on the adapter stays at or below one request per minute and circuit
+        it('keeps the default within the request limit of the DSS', () => {
+            const cycleSeconds = Digitalstrom.normalizePollInterval(undefined) / 1000 + 20;
+            const requestsPerMinute = (2 / cycleSeconds) * 60;
+            expect(requestsPerMinute, `default results in ${requestsPerMinute}/min`).to.be.at.most(1);
         });
     });
 

@@ -1,8 +1,21 @@
 {
     "common": {
         "name": "digitalstrom",
-        "version": "2.4.6",
+        "version": "2.4.7",
         "news": {
+            "2.4.7": {
+                "en": "The default data polling interval is 100s instead of 60s. Measured against a real installation a cycle needs about 20s on top of the configured interval and issues two requests per circuit, so 60s resulted in 1.5 requests per minute and circuit - one and a half times what the digitalSTROM rules 8/9 allow. 100s is the first value that really stays within the limit. The minimum stays at 60s, lower values are possible but are documented as exceeding the guideline",
+                "de": "Das Datenabfrageintervall steht standardmäßig auf 100 s statt 60 s. An einer echten Anlage gemessen braucht ein Zyklus rund 20 s zusätzlich zum eingestellten Intervall und erzeugt zwei Anfragen je Klemme - 60 s ergaben damit 1,5 Anfragen pro Minute und Klemme, also das Anderthalbfache dessen, was die digitalSTROM-Regeln 8/9 erlauben. 100 s ist der erste Wert, der die Grenze wirklich einhält. Das Minimum bleibt bei 60 s, kleinere Werte sind weiterhin möglich, die Abweichung ist dokumentiert",
+                "ru": "Интервал опроса по умолчанию 100 с вместо 60 с: цикл выполняет два запроса на контур, поэтому 60 с превышали правила DSS 8/9. Минимум остаётся 60 с",
+                "pt": "Intervalo de consulta predefinido de 100s em vez de 60s: um ciclo faz dois pedidos por circuito, pelo que 60s excedia as regras DSS 8/9. O mínimo mantém-se em 60s",
+                "nl": "Standaard polling-interval 100s in plaats van 60s: een cyclus doet twee verzoeken per circuit, waardoor 60s de DSS-regels 8/9 overschreed. Het minimum blijft 60s",
+                "fr": "Intervalle d'interrogation par défaut de 100s au lieu de 60s : un cycle effectue deux requêtes par circuit, 60s dépassait donc les règles DSS 8/9. Le minimum reste 60s",
+                "it": "Intervallo di polling predefinito di 100s invece di 60s: un ciclo esegue due richieste per circuito, quindi 60s superava le regole DSS 8/9. Il minimo resta 60s",
+                "es": "Intervalo de sondeo predeterminado de 100s en lugar de 60s: un ciclo realiza dos peticiones por circuito, por lo que 60s superaba las reglas DSS 8/9. El mínimo sigue siendo 60s",
+                "pl": "Domyślny interwał odpytywania 100s zamiast 60s: cykl wykonuje dwa żądania na obwód, więc 60s przekraczało reguły DSS 8/9. Minimum pozostaje 60s",
+                "zh-cn": "默认轮询间隔由 60 秒改为 100 秒：每个周期对每个回路发出两次请求，因此 60 秒超出了 DSS 规则 8/9。最小值仍为 60 秒",
+                "uk": "Типовий інтервал опитування 100 с замість 60 с: цикл виконує два запити на контур, тож 60 с перевищували правила DSS 8/9. Мінімум лишається 60 с"
+            },
             "2.4.6": {
                 "en": "Room temperature control: every regulated room now gets a \"temperatureControl\" channel with the controller mode, the controller state and a readable, writable operation mode. Rooms the DSS does not regulate stay without those objects\nThe configured set point per operation mode is read with zone/getTemperatureControlValues and can be changed. Firmware that does not know the endpoint simply gets no set point states instead of dead objects\nStates of an apartment cluster (cluster.<id>.user_lock, .operation_lock) are created below the group of that cluster - they had no object at all before\nGroup states whose name contains a dot (status.malfunction / status.service of the ventilation groups) are created as nested states instead of being dropped\nThe check for rooms without a floor evaluated isValid as plain truthiness. A real DSS does not send that flag for zones at all, which silenced the check completely - only zones the DSS explicitly marks as invalid or not present are skipped now",
                 "de": "Raumtemperaturregelung: Jeder geregelte Raum bekommt jetzt einen Kanal \"temperatureControl\" mit Reglermodus, Reglerzustand und einer lesbaren, schaltbaren Betriebsart. Räume, die das DSS nicht regelt, bleiben ohne diese Objekte\nDer eingestellte Sollwert je Betriebsart wird über zone/getTemperatureControlValues gelesen und lässt sich ändern. Eine Firmware, die den Endpunkt nicht kennt, bekommt einfach keine Sollwert-States statt toter Objekte\nStates eines Wohnungs-Clusters (cluster.<id>.user_lock, .operation_lock) werden unterhalb der zugehörigen Gruppe angelegt — bisher hatten sie überhaupt kein Objekt\nGruppen-States, deren Name einen Punkt enthält (status.malfunction / status.service der Lüftungsgruppen), werden als verschachtelte States angelegt statt verworfen zu werden\nDie Prüfung auf Räume ohne Etage wertete isValid als reine Truthiness aus. Ein echtes DSS sendet dieses Flag bei Zonen gar nicht, wodurch die Prüfung völlig stumm war - jetzt werden nur Zonen übersprungen, die das DSS ausdrücklich als ungültig oder nicht vorhanden meldet",
@@ -218,7 +231,7 @@
     "native": {
         "host": "",
         "appToken": "",
-        "dataPollInterval": 60,
+        "dataPollInterval": 100,
         "usePresetValues": true,
         "initializeOutputValues": true,
         "deleteUnknownObjects": false,

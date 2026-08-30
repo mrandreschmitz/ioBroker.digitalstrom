@@ -362,19 +362,19 @@
                         "uk": "Інтервал опитування даних"
                     },
                     "help": {
-                        "en": "Interval for polling meter data in seconds. Minimum 60s (DSS rules 8/9 allow at most one cyclic read per minute and circuit), 0 disables polling",
-                        "de": "Intervall für die Abfrage der Zählerdaten in Sekunden. Minimum 60s (DSS-Regeln 8/9 erlauben maximal einen zyklischen Read pro Minute und Klemme), 0 deaktiviert die Abfrage",
-                        "ru": "Интервал опроса данных счетчика в секундах. Минимум 60 с (правила DSS 8/9 допускают не более одного циклического чтения в минуту на контур), 0 отключает опрос",
-                        "pt": "Intervalo para consulta dos dados do medidor em segundos. Mínimo 60s (as regras DSS 8/9 permitem no máximo uma leitura cíclica por minuto e circuito), 0 desativa a consulta",
-                        "nl": "Interval voor het opvragen van meterdata in seconden. Minimaal 60s (DSS-regels 8/9 staan maximaal één cyclische uitlezing per minuut en circuit toe), 0 schakelt polling uit",
-                        "fr": "Intervalle d'interrogation des données du compteur en secondes. Minimum 60s (les règles DSS 8/9 n'autorisent qu'une lecture cyclique par minute et par circuit), 0 désactive l'interrogation",
-                        "it": "Intervallo per il polling dei dati del contatore in secondi. Minimo 60s (le regole DSS 8/9 consentono al massimo una lettura ciclica al minuto per circuito), 0 disabilita il polling",
-                        "es": "Intervalo para sondear los datos del medidor en segundos. Mínimo 60s (las reglas DSS 8/9 permiten como máximo una lectura cíclica por minuto y circuito), 0 desactiva el sondeo",
-                        "pl": "Interwał odpytywania danych licznika w sekundach. Minimum 60s (reguły DSS 8/9 dopuszczają najwyżej jeden cykliczny odczyt na minutę i obwód), 0 wyłącza odpytywanie",
-                        "zh-cn": "轮询电表数据的间隔（秒）。最小 60 秒（DSS 规则 8/9 规定每个回路每分钟最多一次周期性读取），0 表示禁用轮询",
-                        "uk": "Інтервал опитування даних лічильників у секундах. Мінімум 60 с (правила DSS 8/9 дозволяють щонайбільше одне циклічне читання за хвилину на контур), 0 вимикає опитування"
+                        "en": "Interval for polling meter data in seconds. Default 100s: a cycle reads two values per circuit, which keeps the adapter within the DSS rules 8/9 (at most one cyclic read per minute and circuit). Smaller values are allowed from 60s on but exceed that guideline. 0 disables polling.",
+                        "de": "Intervall für die Abfrage der Zählerdaten in Sekunden. Standard 100s: Pro Zyklus werden zwei Werte je Klemme gelesen, damit bleibt der Adapter innerhalb der DSS-Regeln 8/9 (höchstens ein zyklischer Read pro Minute und Klemme). Kleinere Werte sind ab 60s möglich, überschreiten diese Vorgabe aber. 0 deaktiviert die Abfrage.",
+                        "ru": "Интервал опроса данных счётчиков в секундах. По умолчанию 100 с: за цикл считываются два значения на контур, благодаря чему адаптер остаётся в рамках правил DSS 8/9 (не более одного циклического чтения в минуту на контур). Меньшие значения возможны от 60 с, но превышают эту рекомендацию. 0 отключает опрос.",
+                        "pt": "Intervalo para consulta dos dados do medidor em segundos. Predefinição 100s: cada ciclo lê dois valores por circuito, mantendo o adaptador dentro das regras DSS 8/9 (no máximo uma leitura cíclica por minuto e circuito). Valores menores são possíveis a partir de 60s, mas excedem essa recomendação. 0 desativa a consulta.",
+                        "nl": "Interval voor het opvragen van meterdata in seconden. Standaard 100s: per cyclus worden twee waarden per circuit gelezen, waarmee de adapter binnen de DSS-regels 8/9 blijft (maximaal één cyclische uitlezing per minuut en circuit). Lagere waarden zijn mogelijk vanaf 60s, maar overschrijden die richtlijn. 0 schakelt polling uit.",
+                        "fr": "Intervalle d'interrogation des données du compteur en secondes. Par défaut 100s : un cycle lit deux valeurs par circuit, ce qui maintient l'adaptateur dans les règles DSS 8/9 (au plus une lecture cyclique par minute et par circuit). Des valeurs plus faibles sont possibles à partir de 60s mais dépassent cette recommandation. 0 désactive l'interrogation.",
+                        "it": "Intervallo per il polling dei dati del contatore in secondi. Predefinito 100s: ogni ciclo legge due valori per circuito, così l'adattatore resta entro le regole DSS 8/9 (al massimo una lettura ciclica al minuto per circuito). Valori inferiori sono possibili da 60s, ma superano tale indicazione. 0 disabilita il polling.",
+                        "es": "Intervalo para sondear los datos del medidor en segundos. Predeterminado 100s: cada ciclo lee dos valores por circuito, con lo que el adaptador se mantiene dentro de las reglas DSS 8/9 (como máximo una lectura cíclica por minuto y circuito). Valores menores son posibles a partir de 60s, pero superan esa indicación. 0 desactiva el sondeo.",
+                        "pl": "Interwał odpytywania danych licznika w sekundach. Domyślnie 100s: w każdym cyklu odczytywane są dwie wartości na obwód, dzięki czemu adapter mieści się w regułach DSS 8/9 (najwyżej jeden cykliczny odczyt na minutę i obwód). Mniejsze wartości są możliwe od 60s, ale przekraczają tę wytyczną. 0 wyłącza odpytywanie.",
+                        "zh-cn": "轮询电表数据的间隔（秒）。默认 100 秒：每个周期会为每个回路读取两个值，这样适配器可以符合 DSS 规则 8/9（每个回路每分钟最多一次周期性读取）。可以设置为 60 秒起的更小值，但会超出该建议。0 表示禁用轮询。",
+                        "uk": "Інтервал опитування даних лічильників у секундах. Типово 100 с: за цикл зчитуються два значення на контур, завдяки чому адаптер лишається в межах правил DSS 8/9 (щонайбільше одне циклічне читання за хвилину на контур). Менші значення можливі від 60 с, але перевищують цю настанову. 0 вимикає опитування."
                     },
-                    "step": 60
+                    "step": 10
                 },
                 "_divBehaviour": {
                     "type": "divider",

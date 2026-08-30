@@ -35,7 +35,7 @@ First of all you need to enter your DSS IP/Hostname. Then you can choose if you 
 If you do not have an App-Token simply enter your Username and Password to retrieve an App Token automatically.
 
 Additionally to the Authentication settings (see above) you can edit the following settings to your needs:
-* **Data Polling Interval**: This is the interval the "Energy Meter" data are requested from your DSM devices. Default 60s, minimum 60s. The digitalSTROM rules 8 and 9 allow at most one cyclic read per minute and circuit, and one polling cycle already issues several measurement reads per circuit - values between 1 and 59 are therefore raised to 60s. Set 0 to disable polling of the energy meter data completely. Invalid values fall back to the default.
+* **Data Polling Interval**: This is the interval the "Energy Meter" data are requested from your DSM devices. Default 100s, minimum 60s. The digitalSTROM rules 8 and 9 allow at most one cyclic read per minute and circuit. One cycle reads two values per circuit (`getConsumption` and `getEnergyMeterValue`) and the timer for the next cycle only starts once they are answered, so a cycle takes about 20s longer than the configured interval - measured against a real DSS: 60s results in ~1.5 requests per minute and circuit, 100s in exactly 1.0. That is why 100s is the default. Lower values stay possible from 60s on, but they exceed the guideline. Set 0 to disable polling of the energy meter data completely. Invalid values fall back to the default.
 * **Use Scene Preset Values**: The Digitalstrom system is not really designed to have the real output values of the devices available all the time and works most with Scenes. For Light and Shader/Blinds some output values are defined for many of the available Scenes. The adapter knows them and when this setting is active the adapter will try to lookup these values when a scene gets triggered and set those values to the states directly. The real values are requested with a delay. This method might deliver wrong values when local priorities are set/used!
 * **Request Device Output values actively**: The adapter initializes all device output values on start and also after scenes that are effective for a device. There are delay but in fact all those messages will go over the Digitalstrom bus. If this is problematic for you you can try to deactivate this feature. This option only controls **reading** output values from the DSS - writing (e.g. setting a blind position or angle, or a dimmer value) always works, independent of this setting.
 * **Delete unknown objects on startup**: When enabled, all ioBroker objects that are not part of the current DSS structure are deleted on adapter startup. Warning: Objects of devices that are just temporarily unreachable (e.g. a powered-off circuit) are deleted too - including their custom settings like history/InfluxDB configurations! Because of that this option is disabled by default; orphaned objects are then only listed in the log.
@@ -132,6 +132,18 @@ It is published under the same MIT license; the original copyright notice is kep
 [LICENSE](LICENSE).
 
 ## Changelog
+
+### 2.4.7 (2026-08-30)
+
+* **The default data polling interval is 100s instead of 60s.** Measured against a productive
+  installation with 6 metering circuits: a cycle reads two values per circuit
+  (`getConsumption` + `getEnergyMeterValue`) and the timer for the next cycle only starts once
+  both are answered, so a cycle takes roughly 20s longer than the configured interval. With 60s
+  that resulted in a measured 1.53 requests per minute and circuit - one and a half times what
+  the digitalSTROM rules 8/9 allow. 100s gives a cycle of about 120s and therefore exactly 1.0.
+  The claim in 2.4.4 that 60s complies with those rules counted only one read per cycle and was
+  wrong. The minimum stays at 60s: lower values remain possible, they are now just honestly
+  documented as exceeding the guideline instead of being called compliant
 
 ### 2.4.6 (2026-08-30)
 
