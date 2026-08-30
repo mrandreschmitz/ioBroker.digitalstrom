@@ -201,6 +201,16 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
 
+### 2.4.9 (2026-08-30)
+
+* **Ungültige Admin-Konfiguration behoben.** Die beiden Trennlinien des in 2.4.5 eingeführten
+  Layouts trugen eine Farbe aus der digitalSTROM-Palette, das Schema erlaubt für diese
+  Eigenschaft aber nur `primary` und `secondary`. Admin wies die gesamte Konfiguration mit
+  `digitalstrom has an invalid jsonConfig` zurück und fiel auf einen generischen Dialog zurück.
+  Die Farbe steht jetzt in `style`/`darkStyle`, wo eine freie Farbe zulässig ist. Zwei neue
+  Tests prüfen die enum-beschränkten Eigenschaften des Schemas, damit diese Fehlerklasse nicht
+  unbemerkt zurückkommen kann.
+
 ### 2.4.8 (2026-08-30)
 
 * Der Hinweis zur App-Token-Migration wurde aus dem Admin-Dialog und aus dem Readme entfernt.

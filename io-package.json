@@ -1,8 +1,21 @@
 {
     "common": {
         "name": "digitalstrom",
-        "version": "2.4.8",
+        "version": "2.4.9",
         "news": {
+            "2.4.9": {
+                "en": "Fixed an invalid admin configuration: the two dividers of the new layout carried a colour of the digitalSTROM palette, but the schema only allows \"primary\" and \"secondary\" there. admin refused the whole jsonConfig with \"digitalstrom has an invalid jsonConfig\" and fell back to a generic dialog. The colour now lives in style/darkStyle. Two tests check the enum constrained properties of the schema from now on",
+                "de": "Ungültige Admin-Konfiguration behoben: Die beiden Trennlinien des neuen Layouts trugen eine Farbe aus der digitalSTROM-Palette, das Schema erlaubt dort aber nur \"primary\" und \"secondary\". Admin wies die gesamte jsonConfig mit \"digitalstrom has an invalid jsonConfig\" zurück und fiel auf einen generischen Dialog zurück. Die Farbe steht jetzt in style/darkStyle. Zwei Tests prüfen künftig die enum-beschränkten Eigenschaften des Schemas",
+                "ru": "Исправлена недопустимая конфигурация админки: цвет разделителей теперь задаётся через style, а не через ограниченное схемой свойство color",
+                "pt": "Corrigida a configuração inválida do admin: a cor dos separadores passa a estar em style em vez da propriedade color limitada pelo esquema",
+                "nl": "Ongeldige adminconfiguratie hersteld: de kleur van de scheidingslijnen staat nu in style in plaats van de door het schema beperkte color-eigenschap",
+                "fr": "Configuration d'administration invalide corrigée : la couleur des séparateurs est désormais dans style et non dans la propriété color limitée par le schéma",
+                "it": "Corretta la configurazione admin non valida: il colore dei divisori ora è in style e non nella proprietà color limitata dallo schema",
+                "es": "Corregida la configuración de admin no válida: el color de los separadores ahora está en style y no en la propiedad color limitada por el esquema",
+                "pl": "Naprawiona nieprawidłowa konfiguracja admina: kolor separatorów jest teraz w style, a nie we właściwości color ograniczonej przez schemat",
+                "zh-cn": "修复了无效的管理配置：分隔线的颜色改为通过 style 设置，而不是受架构限制的 color 属性",
+                "uk": "Виправлено недійсну конфігурацію адмінки: колір роздільників тепер задається через style, а не через обмежену схемою властивість color"
+            },
             "2.4.8": {
                 "en": "Removed the App-Token migration note from the admin dialog and from the readme. No public release ever shipped the misplaced encryptedNative declaration, so a permanent hint about it would only confuse. The adapter still detects a token it cannot read back and says so in the log, now without referring to a version history",
                 "de": "Der Hinweis zur App-Token-Migration wurde aus dem Admin-Dialog und aus dem Readme entfernt. Keine veröffentlichte Version enthielt die falsch platzierte encryptedNative-Deklaration, ein dauerhafter Hinweis darauf würde nur verwirren. Der Adapter erkennt weiterhin einen nicht lesbaren Token und meldet das im Log, jetzt ohne Bezug auf eine Versionshistorie",

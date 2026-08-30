@@ -145,9 +145,14 @@
                 },
                 "_divToken": {
                     "type": "divider",
-                    "color": "#7FC241",
                     "height": 1,
-                    "newLine": true
+                    "newLine": true,
+                    "style": {
+                        "backgroundColor": "#7FC241"
+                    },
+                    "darkStyle": {
+                        "backgroundColor": "#7FC241"
+                    }
                 },
                 "_hdrToken": {
                     "type": "header",
@@ -378,9 +383,14 @@
                 },
                 "_divBehaviour": {
                     "type": "divider",
-                    "color": "#7FC241",
                     "height": 1,
-                    "newLine": true
+                    "newLine": true,
+                    "style": {
+                        "backgroundColor": "#7FC241"
+                    },
+                    "darkStyle": {
+                        "backgroundColor": "#7FC241"
+                    }
                 },
                 "_hdrBehaviour": {
                     "type": "header",

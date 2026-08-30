@@ -131,6 +131,15 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ## Changelog
 
+### 2.4.9 (2026-08-30)
+
+* **Fixed an invalid admin configuration.** The two dividers of the layout introduced in 2.4.5
+  carried a colour of the digitalSTROM palette, but the schema only allows `primary` and
+  `secondary` for that property. admin therefore rejected the whole config with
+  `digitalstrom has an invalid jsonConfig` and fell back to a generic dialog. The colour now
+  lives in `style`/`darkStyle`, where a free colour is allowed. Two new tests check the enum
+  constrained properties of the schema, so this class of error cannot come back unnoticed
+
 ### 2.4.8 (2026-08-30)
 
 * Removed the App-Token migration note from the admin dialog and from the readme. No public
