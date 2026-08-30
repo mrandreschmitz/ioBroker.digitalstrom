@@ -106,7 +106,7 @@ The devices are structured with "circuit/dSM"."deviceID" and the subsctructure i
 ## Known Issues / System design effects
 * The DSS system mainly works using scenes and not via real device values and also getting the real values is very slow because needs to be fetched via the bus. 
 * Values might be empty when they were not reported by the system
-* Binary inputs were originally implemented without any hardware to test against. They are confirmed to work in the meantime, with motion detectors and window handles reporting through them. The state carries the number the DSS reports for that input, not a boolean, and those numbers are not yet mapped to readable texts.
+* Binary inputs were originally implemented without any hardware to test against. They are confirmed to work in the meantime, with motion detectors and window handles reporting through them. The state keeps the number the DSS reports, so history data stays comparable, but the numbers are named: `inactive`/`active` for a normal binary input, and `closed`/`open`/`tilted` for a window handle, which reports three positions instead of two.
 * Meaningful output value reading and writing is only implemented for Ligh (Yellow) and Shade/Blind (Gray) devices.
 * I had no chance so far checking how the system behaves with vDCs. So I need logs and details here to add it
 * Room temperature control is implemented for the rooms the DSS really regulates: the controller mode and the controller state are read, the operation mode follows the scenes of group 48 and can be set, and the set point of every operation mode is read and writable. Rooms without an active controller deliberately get no such objects.

@@ -170,9 +170,10 @@ Die Geräte sind als „Klemme/dSM"."Geräte-ID" strukturiert, darunter jeweils:
   Werte ist zudem langsam, weil es über den Bus laufen muss.
 * Werte können leer bleiben, wenn das System sie nicht meldet.
 * Binäreingänge wurden ursprünglich ohne passende Geräte zum Testen implementiert. Inzwischen ist
-  belegt, dass sie funktionieren: Bewegungsmelder und Fenstergriffe melden darüber. Der Zustand
-  enthält die Zahl, die der DSS für den Eingang meldet, keinen Wahrheitswert, und diese Zahlen sind
-  noch nicht auf lesbare Texte abgebildet.
+  belegt, dass sie funktionieren: Bewegungsmelder und Fenstergriffe melden darüber. Der Zustand behält die
+  Zahl, die der DSS meldet, damit Verlaufsdaten vergleichbar bleiben, die Zahlen sind aber benannt:
+  `inactive`/`active` bei einem normalen Binäreingang und `closed`/`open`/`tilted` bei einem
+  Fenstergriff, der drei statt zwei Stellungen meldet.
 * Sinnvolles Lesen und Schreiben von Ausgangswerten ist bisher nur für Licht (Gelb) und
   Rollladen/Jalousie (Grau) umgesetzt.
 * Das Verhalten mit vDCs konnte bisher nicht geprüft werden. Auch dafür werden Logs und Details

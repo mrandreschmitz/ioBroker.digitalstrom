@@ -662,6 +662,71 @@ describe('DSSStructure', () => {
         });
     });
 
+    describe('binary input value mapping', () => {
+        function binaryInputDevice(inputType) {
+            return {
+                dSUID: 'dev1',
+                meterDSUID: 'm1',
+                zoneID: 5,
+                name: 'Fenster',
+                hwInfo: 'EnOcean',
+                isValid: true,
+                isPresent: true,
+                buttonActiveGroup: -1,
+                buttonInputCount: 0,
+                sensorInputCount: 0,
+                binaryInputCount: 1,
+                binaryInputs: [{ inputType, targetGroup: 8, state: 1 }],
+                groups: [8],
+            };
+        }
+
+        function structure() {
+            return createStructure({
+                dss: new EventEmitter(),
+                dssQueue: {
+                    queueSetOutputValue: (d, i, l, v, p, cb) => setImmediate(() => cb && cb(null, v)),
+                    queueUpdateOutputValue: (d, i, l, p, cb) => setImmediate(() => cb && cb(null, 0)),
+                    pushQueryQueue: (...args) => {
+                        const cb = args[args.length - 1];
+                        setImmediate(() => cb && cb(null, { ok: true }));
+                    },
+                },
+                adapter: {
+                    log: silentLogger,
+                    config: { initializeOutputValues: false, usePresetValues: false },
+                    setState: () => {},
+                    setDssState: () => {},
+                },
+            });
+        }
+
+        // The value of a binary input used to be a bare number without any meaning attached,
+        // so a window handle reported 1, 2 or 3 and nothing said which position that was.
+        // Observed on an EnOcean window handle (F6-10-00) against the readable device state
+        // of the same handle: closed 1, open 2, tilted 3.
+        it('names the three positions of a window handle', done => {
+            const struct = structure();
+            struct.createDevice(binaryInputDevice(15), () => {
+                const obj = struct.dssObjects['devices.m1.dev1.binaryInputs.0'];
+                expect(obj.common.name).to.equal('Window is tilted');
+                expect(obj.common.states).to.deep.equal({ 1: 'closed', 2: 'open', 3: 'tilted' });
+                expect(obj.common.type, 'the raw number stays, history keeps working').to.equal('number');
+                done();
+            });
+        });
+
+        it('names the two states of every other binary input', done => {
+            const struct = structure();
+            struct.createDevice(binaryInputDevice(5), () => {
+                const obj = struct.dssObjects['devices.m1.dev1.binaryInputs.0'];
+                expect(obj.common.name).to.equal('Motion');
+                expect(obj.common.states).to.deep.equal({ 1: 'inactive', 2: 'active' });
+                done();
+            });
+        });
+    });
+
     describe('button state of index 0', () => {
         function deviceStructure() {
             const struct = createStructure({
