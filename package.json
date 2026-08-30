@@ -77,7 +77,7 @@
         "lint": "eslint .",
         "typecheck": "tsc --noEmit",
         "release": "release-script",
-        "build:admin": "vite build --config src-admin/vite.config.js",
+        "build:admin": "vite build --config src-admin/vite.config.js && node scripts/adminSourcesHash.cjs",
         "dev:admin": "vite --config src-admin/vite.config.js",
         "build": "npm run build:admin",
         "check:admin": "tsc --noEmit -p src-admin/tsconfig.json"

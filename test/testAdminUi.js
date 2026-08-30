@@ -24,6 +24,17 @@ describe('Admin interface', () => {
         expect(fs.statSync(bundle).size, 'the bundle looks truncated').to.be.greaterThan(100000);
     });
 
+    // Comparing the built bundle byte by byte turned out to be unreliable: the same
+    // commit produced a matching bundle on one runner and a differing one on another,
+    // which failed the release of 2.4.10. The fingerprint of the sources is stable
+    // everywhere, so it is what gets compared.
+    it('the bundle was built from the current sources', () => {
+        const { hashSources, target } = require('../scripts/adminSourcesHash.cjs');
+        expect(fs.existsSync(target), 'run "npm run build:admin"').to.be.true;
+        const stored = fs.readFileSync(target, 'utf8').trim();
+        expect(stored, 'src-admin changed without a rebuild - run "npm run build:admin"').to.equal(hashSources());
+    });
+
     it('the icon referred to by io-package.json is next to the bundle', () => {
         const ioPackage = readJson('io-package.json');
         expect(fs.existsSync(path.join(root, 'admin', ioPackage.common.icon))).to.be.true;
