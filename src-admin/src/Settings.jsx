@@ -115,7 +115,14 @@ export default function Settings({ native, onChange, onSendTo, alive, t, initial
     const createSmartHomeKey = async () => {
         setKeyState({ running: true, error: '', done: false });
         try {
-            const res = await onSendTo('createSmartHomeKey', { host: native.host });
+            // Der App-Token aus dem FORMULAR wird mitgesendet: der Knopf ist aktiv, sobald
+            // das Formular einen Token zeigt - auch einen frisch erstellten, noch nicht
+            // gespeicherten. Ohne ihn wuerde die Instanz auf den GESPEICHERTEN Token
+            // zurueckfallen und im Neueinrichtungs-Flow "kein App-Token" melden.
+            const res = await onSendTo('createSmartHomeKey', {
+                host: native.host,
+                appToken: native.appToken || '',
+            });
             if (res && res.error) {
                 setKeyState({ running: false, error: res.error, done: false });
             } else if (res && res.apiKey) {
