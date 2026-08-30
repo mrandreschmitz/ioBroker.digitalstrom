@@ -32,6 +32,10 @@ maintenance/**
 test.js
 tsconfig.json
 main.test.js
+# sources of the admin interface - the built result in admin/ is what ships
+src-admin/
+scripts/
+
 # lint/format configs
 eslint.config.mjs
 prettier.config.mjs
