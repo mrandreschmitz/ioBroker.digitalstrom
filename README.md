@@ -109,7 +109,8 @@ The devices are structured with "circuit/dSM"."deviceID" and the subsctructure i
 * Binary inputs were implemented "Blind" right know because I do not have such a devices. So I'm happy to get some logs/reports with binary input devices :-)
 * Meaningful output value reading and writing is only implemented for Ligh (Yellow) and Shade/Blind (Gray) devices.
 * I had no chance so far checking how the system behaves with vDCs. So I need logs and details here to add it
-* Ventilation and Temperature management/devices are also not fully implemented ... what makes sense here?
+* Room temperature control is implemented for the rooms the DSS really regulates: the controller mode and the controller state are read, the operation mode follows the scenes of group 48 and can be set, and the set point of every operation mode is read and writable. Rooms without an active controller deliberately get no such objects.
+* Ventilation is covered by the group scenes, the apartment ventilation status and the two boolean output channels (swing mode, auto intensity). Ventilation devices have no dedicated functionality beyond that, because no such hardware was available to test against. Logs and reports are welcome.
 
 ## How to report issues and feature requests
 

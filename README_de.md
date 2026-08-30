@@ -175,7 +175,14 @@ Die Geräte sind als „Klemme/dSM"."Geräte-ID" strukturiert, darunter jeweils:
   Rollladen/Jalousie (Grau) umgesetzt.
 * Das Verhalten mit vDCs konnte bisher nicht geprüft werden. Auch dafür werden Logs und Details
   benötigt.
-* Lüftung und Temperaturregelung sind ebenfalls nicht vollständig umgesetzt.
+* Die Raumtemperaturregelung ist für die Räume umgesetzt, die der DSS tatsächlich regelt: Reglermodus
+  und Reglerzustand werden gelesen, der Betriebsmodus folgt den Szenen der Gruppe 48 und ist
+  schreibbar, und der Sollwert jedes Betriebsmodus wird gelesen und kann geändert werden. Räume ohne
+  aktiven Regler erhalten bewusst keine dieser Objekte.
+* Die Lüftung ist über die Gruppenszenen, den Lüftungsstatus der Wohnung und die beiden booleschen
+  Ausgangskanäle (Schwenkmodus, automatische Intensität) abgedeckt. Darüber hinaus haben
+  Lüftungsgeräte keine eigene Funktionalität, da keine passende Hardware zum Testen vorlag. Logs und
+  Rückmeldungen sind willkommen.
 
 ## Fehler melden und Funktionswünsche
 
