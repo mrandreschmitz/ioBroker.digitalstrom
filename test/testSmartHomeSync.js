@@ -5,6 +5,24 @@ const SmartHomeOutputSync = require('../lib/dssSmartHomeSync');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
+ * Wartet auf eine Bedingung statt einer festen Zeit - feste Wartefenster in
+ * Kombination mit exakten Zaehl-Erwartungen kippen auf langsamen CI-Runnern
+ * (beobachtet auf windows-latest).
+ *
+ * @param {() => boolean} condition
+ * @param {number} [timeout]
+ */
+async function waitFor(condition, timeout = 5000) {
+    const start = Date.now();
+    while (!condition()) {
+        if (Date.now() - start > timeout) {
+            throw new Error('waitFor: condition not reached in time');
+        }
+        await delay(10);
+    }
+}
+
+/**
  * The sync needs very little of the structure - exactly this surface.
  *
  * @returns {any}
@@ -333,11 +351,12 @@ describe('Smart Home output sync', function () {
         });
 
         sync.requestDeviceSync(SHADE(), ['shadePositionOutside']);
-        await delay(250);
+        // Budget verbraucht = der Fallback-Read ist da; die Zahl der Statusreads bis
+        // dahin ist deterministisch (initial + 2 Follow-ups), nur ihr Zeitpunkt nicht
+        await waitFor(() => structure.classicReads.length === 1);
         sync.requestDeviceSync(SHADE(), ['shadePositionOutside']);
-        await delay(250);
+        await waitFor(() => structure.classicReads.length === 2);
         expect(statusCalls, 'two full follow-up budgets were burned').to.equal(6);
-        expect(structure.classicReads).to.have.lengthOf(2);
 
         // The third trigger goes classic immediately - no debounce, no status request
         expect(sync.requestDeviceSync(SHADE(), ['shadePositionOutside'])).to.equal(true);
@@ -348,7 +367,7 @@ describe('Smart Home output sync', function () {
             prio: 'medium',
             report: false,
         });
-        await delay(100);
+        await delay(150);
         expect(statusCalls, 'the learned channel costs no further status request').to.equal(6);
     });
 
@@ -378,12 +397,11 @@ describe('Smart Home output sync', function () {
             },
             ['brightness'],
         );
-        await delay(60);
-        expect(sync.undeliverable.size, 'the gap healed itself').to.equal(0);
+        await waitFor(() => sync.undeliverable.size === 0);
 
         // ... so the next trigger goes through the status again
         sync.requestDeviceSync(SHADE(), ['shadePositionOutside']);
-        await delay(60);
+        await waitFor(() => structure.written.length === 1);
         expect(structure.written).to.deep.equal([{ id: 'devices.m1.shade1.shadePositionOutside', value: 40 }]);
         expect(structure.classicReads, 'no second classic read').to.have.lengthOf(1);
     });
@@ -415,7 +433,7 @@ describe('Smart Home output sync', function () {
         // The entry is older than the interval now - the next trigger probes the status,
         // the answer carries a value and heals the learning for good
         sync.requestDeviceSync(SHADE(), ['shadePositionOutside']);
-        await delay(60);
+        await waitFor(() => structure.written.length === 1);
         expect(statusCalls, 'the probe went through the status').to.equal(1);
         expect(structure.written).to.deep.equal([{ id: 'devices.m1.shade1.shadePositionOutside', value: 70 }]);
         expect(sync.undeliverable.size).to.equal(0);
@@ -743,7 +761,10 @@ describe('Scene names and zone temperature through the Smart Home API', function
     });
 });
 
-describe('Activity counters', () => {
+describe('Activity counters', function () {
+    // Zwei absichtlich scheiternde Verbindungsaufbauten - auf langsamen CI-Runnern
+    // kann das laenger dauern als die 2 s Mocha-Standard-Timeout
+    this.timeout(10000);
     const ActivityCounter = require('../lib/activityCounter');
 
     it('sums per metric over the rolling window and forgets the rest', () => {
