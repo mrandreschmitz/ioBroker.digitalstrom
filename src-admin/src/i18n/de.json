@@ -26,7 +26,6 @@
     "section_notes": "Hinweise",
     "info_tls": "Ein digitalSTROM-Server wird mit einem selbstsignierten Zertifikat ausgeliefert, deshalb ist die Prüfung standardmäßig aus. Die Verbindung ist verschlüsselt, der Adapter überprüft aber nicht, mit wem er spricht. Betreibe DSS und ioBroker in einem vertrauenswürdigen Netzsegment oder verwende einen Hostnamen mit gültigem Zertifikat.",
     "app_subtitle": "Anbindung einer digitalSTROM-Installation",
-    "token_saved": "App-Token ist gespeichert",
     "token_missing": "Noch kein App-Token hinterlegt",
     "unit_seconds": "Sekunden",
     "card_credentials": "Anmeldedaten",
@@ -38,7 +37,6 @@
     "label_smartHomeApiKey": "API-Key",
     "help_smartHomeApiKey": "Wird aus dem vorhandenen App-Token erzeugt, ein Passwort ist dafür nicht nötig. Im dSS sichtbar unter System > Zugriffsberechtigung.",
     "button_createSmartHomeKey": "API-Key erstellen",
-    "key_saved": "API-Key ist hinterlegt",
     "key_missing": "Noch kein API-Key hinterlegt",
     "info_token_role": "Der App-Token ist der Grundzugang des Adapters: Über ihn kommen **Tasterdrücke, Sensorwerte und alle Ereignisse in Echtzeit** an, und **sämtliche Schaltbefehle** laufen darüber. Ohne ihn geht nichts – erstelle ihn einmalig mit deinen dSS-Anmeldedaten.",
     "tab_status": "Status",
@@ -62,5 +60,6 @@
     "key_present": "API-Schlüssel vorhanden",
     "key_created": "API-Schlüssel erstellt und übernommen – mit „Speichern\" wird er dauerhaft gesichert.",
     "section_why": "Warum zwei Schnittstellen?",
-    "info_why": "Dein digitalSTROM-Server bietet zwei Schnittstellen mit unterschiedlichen Stärken – und dieser Adapter nutzt bewusst beide. Der App-Token liefert **Ereignisse in Echtzeit** (Tasterdrücke, Sensorwerte, Binäreingänge) und führt **alle Schaltbefehle** aus. Die Smart Home API bündelt **alle Zähler- und Ausgangswerte in je einem einzigen Request**. Zusammen heißt das: Der Adapter startet in Sekunden statt Minuten, die Werte sind nach Szenenaufrufen schneller aktuell, und dein dSS wird deutlich entlastet – bei voller Zuverlässigkeit, denn antwortet die Smart Home API einmal nicht, übernimmt automatisch der bewährte Weg. Welcher Weg gerade arbeitet, zeigt der Tab „Status\"."
+    "info_why": "Dein digitalSTROM-Server bietet zwei Schnittstellen mit unterschiedlichen Stärken – und dieser Adapter nutzt bewusst beide. Der App-Token liefert **Ereignisse in Echtzeit** (Tasterdrücke, Sensorwerte, Binäreingänge) und führt **alle Schaltbefehle** aus. Die Smart Home API bündelt **alle Zähler- und Ausgangswerte in je einem einzigen Request**. Zusammen heißt das: Der Adapter startet in Sekunden statt Minuten, die Werte sind nach Szenenaufrufen schneller aktuell, und dein dSS wird deutlich entlastet – bei voller Zuverlässigkeit, denn antwortet die Smart Home API einmal nicht, übernimmt automatisch der bewährte Weg. Welcher Weg gerade arbeitet, zeigt der Tab „Status\".",
+    "status_connection_help": "Klassische Schnittstelle ist erreichbar und angemeldet"
 }

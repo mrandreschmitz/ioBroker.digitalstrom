@@ -632,6 +632,8 @@ class Digitalstrom extends utils.Adapter {
                                     this.resyncSceneStates();
 
                                     this.clearAdditionalObjects();
+
+                                    this.startNotificationChannel();
                                 });
                             });
                         });
@@ -743,6 +745,46 @@ class Digitalstrom extends utils.Adapter {
      */
     static looksLikeAppToken(token) {
         return typeof token === 'string' && /^[0-9a-f]{32,}$/i.test(token.trim());
+    }
+
+    /**
+     * Opens the notification websocket of the Smart Home API as a safety net.
+     *
+     * The notifications carry no payload - they only say THAT something changed, and
+     * they fire for every meter tick. Everything driven by buttons and scenes is
+     * already reported precisely by the classic events, so the reaction here is a
+     * hard rate-limited reconciliation (see DSSStructure.reconcileOutputValues): it
+     * catches changes made past ioBroker, e.g. a third-party app writing an output
+     * directly. The client reconnects on its own; a dSS without the websocket just
+     * leaves the adapter running like before.
+     */
+    startNotificationChannel() {
+        if (!this.smartHome || !this.dssStruct) {
+            return;
+        }
+        this.smartHome.on('statusChanged', () => {
+            if (this.isStopping() || !this.dssStruct) {
+                return;
+            }
+            if (this.dssStruct.reconcileOutputValues()) {
+                this.log.debug('Smart Home notification: reconciling the output values');
+            }
+        });
+        this.smartHome.on('structureChanged', () => {
+            // The classic model_ready event reports the same and restarts the adapter
+            this.log.debug('The dSS reports a structure change');
+        });
+        this.smartHome.on('notificationConnected', () => this.log.debug('Smart Home notification channel connected'));
+        this.smartHome.startNotifications().then(
+            () =>
+                this.log.info(
+                    'Smart Home notification channel is active - changes made outside of ioBroker are reconciled automatically',
+                ),
+            err =>
+                this.log.info(
+                    `Smart Home notification channel is not available (${configUtils.errorMessage(err)}) - the adapter works without it`,
+                ),
+        );
     }
 
     /**

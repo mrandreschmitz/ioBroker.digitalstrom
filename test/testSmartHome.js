@@ -78,6 +78,13 @@ describe('Smart Home API client', function () {
             expect(values.values[0].attributes.value).to.equal(139);
             expect(mock.requests, 'one request for all meters').to.have.lengthOf(1);
         });
+
+        it('reads the scenarios with their user given names', async () => {
+            client = createClient();
+            const answer = await client.getScenarios();
+            expect(answer.scenarios[0].attributes.name).to.equal('Hell');
+            expect(mock.requests[0].path).to.equal('/api/v1/apartment/scenarios');
+        });
     });
 
     describe('errors', () => {

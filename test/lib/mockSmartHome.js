@@ -92,6 +92,25 @@ function createMockSmartHome() {
             if (req.method === 'GET' && /^\/api\/v1\/apartment\/zones\/[^/]+\/status$/.test(url.pathname)) {
                 return send(200, { data: status.included.zones[0] });
             }
+            if (req.method === 'GET' && url.pathname === '/api/v1/apartment/scenarios') {
+                return send(200, {
+                    data: {
+                        scenarios: [
+                            {
+                                id: 'applicationZone-z1-g1-s17',
+                                type: 'applicationZoneScenario',
+                                attributes: { name: 'Hell', actionId: 'preset2' },
+                            },
+                            {
+                                id: 'applicationZone-z1-g1-s18',
+                                type: 'applicationZoneScenario',
+                                attributes: { name: 'Licht' },
+                            },
+                            { id: 'applicationZone-z2-g2-s5', type: 'applicationZoneScenario', attributes: {} },
+                        ],
+                    },
+                });
+            }
             if (req.method === 'GET' && url.pathname === '/api/v1/apartment/meterings/values') {
                 return send(200, {
                     data: { values: [{ id: 'apartment-power', attributes: { value: 139 } }] },

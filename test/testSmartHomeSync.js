@@ -398,3 +398,120 @@ describe('Smart Home output sync', function () {
         expect(structure.classicReads).to.have.lengthOf(0);
     });
 });
+
+describe('Scene names and zone temperature through the Smart Home API', function () {
+    this.timeout(10000);
+
+    const DSSStructure = require('../lib/dssStructure');
+    const silentLog = { silly: () => {}, debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+
+    /**
+     * @param {any} smartHome
+     * @param {object} [options]
+     * @returns {any}
+     */
+    function createStructure(smartHome, options) {
+        return /** @type {any} */ (
+            new DSSStructure({
+                dss: {},
+                dssQueue: {},
+                adapter: { isStopping: () => false, setState: () => {}, config: {}, log: silentLog },
+                smartHome,
+                ...options,
+            })
+        );
+    }
+
+    it('loads the scenario names once and keys them by zone, group and scene', done => {
+        const struct = createStructure({
+            getScenarios: async () => ({
+                scenarios: [
+                    { id: 'applicationZone-z1-g1-s17', attributes: { name: 'Hell' } },
+                    { id: 'applicationZone-z4-g48-s5', attributes: { name: 'Bad warm' } },
+                    // Szenen ohne Namen und fremde Ids liefern keinen Eintrag
+                    { id: 'applicationZone-z2-g2-s5', attributes: {} },
+                    { id: 'somethingElse', attributes: { name: 'x' } },
+                ],
+            }),
+        });
+        struct.loadScenarioNames(() => {
+            expect(struct.scenarioNames).to.deep.equal({ '1.1.17': 'Hell', '4.48.5': 'Bad warm' });
+            done();
+        });
+    });
+
+    it('keeps starting when the scenario request fails', done => {
+        const struct = createStructure({
+            getScenarios: async () => {
+                throw new Error('gone');
+            },
+        });
+        struct.loadScenarioNames(() => {
+            expect(struct.scenarioNames).to.deep.equal({});
+            done();
+        });
+    });
+
+    it('writes setpoint and control value of a zone from the status answer', () => {
+        const struct = createStructure(null);
+        const written = [];
+        struct.setStateSafe = (id, value) => written.push({ id, value });
+        struct.zoneSensorBaseIds['4'] = 'apartment.0.4.sensors';
+        struct.dssObjects['apartment.0.4.sensors.NominalValue'] = {};
+        struct.dssObjects['apartment.0.4.sensors.ControlValue'] = {};
+
+        const count = struct.applyZoneTemperatureStatus({
+            included: {
+                zones: [
+                    {
+                        id: '4',
+                        attributes: {
+                            applications: [
+                                // Modus-Strings werden bewusst NICHT uebernommen
+                                { id: 'temperature', setpoint: 21.5, controlValue: 40, mode: 'heating' },
+                                { id: 'lights', status: 'on' },
+                            ],
+                        },
+                    },
+                    // Unbekannte Zone und Zone ohne Temperaturregelung sind folgenlos
+                    { id: '9', attributes: { applications: [{ id: 'temperature', setpoint: 20 }] } },
+                    { id: '4711', attributes: { applications: [] } },
+                ],
+            },
+        });
+
+        expect(count).to.equal(2);
+        expect(written).to.deep.equal([
+            { id: 'apartment.0.4.sensors.NominalValue', value: 21.5 },
+            { id: 'apartment.0.4.sensors.ControlValue', value: 40 },
+        ]);
+    });
+
+    // Die Meldungen kommen im Sekundentakt (jede Zaehleraenderung erzeugt eine) und
+    // jeder Abgleich kostet einen 59-KB-Statusread - deshalb die harte Ratenbremse
+    it('rate limits the notification driven reconciliation', () => {
+        let nowValue = 0;
+        const struct = createStructure(null, { now: () => nowValue, outputReconcileMinInterval: 1000 });
+        struct.adapter.config = { initializeOutputValues: true };
+        const requests = [];
+        struct.smartHomeSync = {
+            requestDeviceSync: dev => {
+                requests.push(dev.dSUID);
+                return true;
+            },
+        };
+        struct.devicesByDsuid = {
+            a: { dSUID: 'a', outputChannelList: { brightness: 'devices.m.a.brightness' } },
+            b: { dSUID: 'b', outputChannelList: {} },
+            c: { dSUID: 'c' },
+        };
+
+        expect(struct.reconcileOutputValues(), 'the first notification reconciles').to.equal(true);
+        expect(requests, 'only devices with output channels').to.deep.equal(['a']);
+        nowValue = 500;
+        expect(struct.reconcileOutputValues(), 'inside the interval nothing happens').to.equal(false);
+        nowValue = 1500;
+        expect(struct.reconcileOutputValues(), 'after the interval it reconciles again').to.equal(true);
+        expect(requests).to.deep.equal(['a', 'a']);
+    });
+});

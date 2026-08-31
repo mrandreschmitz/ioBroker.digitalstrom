@@ -33,6 +33,27 @@ Rules learned from live measurements against a real dSS:
 - A failed status request falls back to the classic reads immediately and pauses the Smart Home reads
   for five minutes.
 
+## Notification websocket
+
+The websocket carries no payload - every notification only says THAT something changed, and one
+fires for every meter tick (measured: 17 in 75 seconds). Buttons and scenes are already reported
+precisely by the classic events, so the adapter reacts with a hard rate limit: at most every five
+minutes a notification triggers one reconciliation of all output values through the usual status
+request. That catches changes made past ioBroker - for example a third-party app writing an output
+directly - without adding steady load. The channel pings silent connections, reconnects on its own,
+and a dSS that does not offer it leaves the adapter running exactly like before.
+
+## Zone temperature and scene names
+
+Every status answer also carries the room temperature control of each zone. The adapter takes over
+`setpoint` (°C) and `controlValue` (%) for the existing `sensors.NominalValue` and
+`sensors.ControlValue` states - verified value-identical against a real installation. The operation
+mode strings stay with the classic path, their numeric mapping is not verified.
+
+At startup one request to `/api/v1/apartment/scenarios` loads the scene names the user gave in
+digitalSTROM. They fill the gaps the classic `getReachableScenes` naming leaves; where the classic
+answer already delivers a name, that name wins unchanged.
+
 ## Requirements and activation
 
 - dSS firmware 1.19 or newer

@@ -170,6 +170,16 @@ It is published under the same MIT license; the original copyright notice is kep
 * Groundwork hardening of the notification websocket (still unused): dead connections are detected
   by pinging after 30 s of silence and reconnecting after 90 s, fragmented messages are capped in
   total size, and the debounce defaults follow the measured reality (5 s coalescing, 15 s maximum)
+* **The notification websocket is now used - as a deliberately throttled safety net.** Every meter
+  tick fires a payload-free notification (measured: 17 in 75 seconds), while buttons and scenes are
+  already reported precisely by the classic events. A notification therefore triggers a
+  reconciliation of all output values at most every five minutes: it catches what happens past
+  ioBroker - a third-party app writing an output directly - without adding steady load. The channel
+  reconnects on its own, and a dSS without it changes nothing
+* **Each status answer also refreshes the room temperature control of every zone** - setpoint and
+  control value, verified degree- and percent-identical against a real installation; the operation
+  modes stay with the classic path. And the scene names given in digitalSTROM are loaded once from
+  the new API to fill the gaps the classic naming leaves
 * **The settings explain the hybrid approach and show it working.** The connection tab walks
   through three numbered steps - server address (entered once, it serves both interfaces), the app
   token as the base access in its natural order (credentials first, the created token lands below),
