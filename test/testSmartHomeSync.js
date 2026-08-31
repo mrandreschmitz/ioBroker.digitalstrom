@@ -308,6 +308,77 @@ describe('Smart Home output sync', function () {
         expect(lightValues).to.deep.equal([Math.round(50 * 2.55)]);
     });
 
+    // Nicht nur das Fake: die ECHTE DSSStructure muss den Sync anlegen und ihre
+    // Szenen-/Initial-Pfade wirklich hindurch routen
+    it('is wired into the real structure', async () => {
+        const { EventEmitter } = require('node:events');
+        const DSSStructure = require('../lib/dssStructure');
+        const classicReads = [];
+        let statusCalls = 0;
+        const struct = /** @type {any} */ (
+            new DSSStructure({
+                dss: new EventEmitter(),
+                dssQueue: {
+                    queueUpdateOutputValue: (dev, index, length, prio, callback) => {
+                        classicReads.push({ index, length, prio });
+                        setImmediate(() => callback && callback(null, 0));
+                    },
+                    queueSetOutputValue: () => {},
+                    pushQueryQueue: (channel, entry, prio, callback) =>
+                        setImmediate(() => callback && callback(null, { ok: true })),
+                },
+                adapter: {
+                    log: { silly: () => {}, debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+                    config: { initializeOutputValues: true, usePresetValues: false },
+                    setState: () => {},
+                    isStopping: () => false,
+                },
+                smartHome: {
+                    getApartmentStatus: async () => {
+                        statusCalls++;
+                        return {
+                            included: {
+                                dsDevices: [
+                                    statusDevice('dev1', {
+                                        shadePositionOutside: 32.004272526131075,
+                                        shadeOpeningAngleOutside: 50,
+                                    }),
+                                ],
+                            },
+                        };
+                    },
+                },
+                smartHomeSyncOptions: { debounce: 20, followUpDelay: 30, maxFollowUps: 1 },
+            })
+        );
+        const written = [];
+        struct.setStateSafe = (id, value) => written.push({ id, value });
+        const positionId = 'devices.m1.dev1.shadePositionOutside';
+        const angleId = 'devices.m1.dev1.shadeOpeningAngleOutside';
+        struct.dssObjects[positionId] = { type: 'state', common: {}, native: {} };
+        struct.dssObjects[angleId] = { type: 'state', common: {}, native: {} };
+
+        struct.createShaderDevice(
+            {
+                dSUID: 'dev1',
+                meterDSUID: 'm1',
+                name: 'Rollladen',
+                outputChannelList: { shadePositionOutside: positionId, shadeOpeningAngleOutside: angleId },
+            },
+            'devices.m1.dev1',
+            () => {},
+        );
+        await delay(80);
+
+        expect(statusCalls, 'the initial reads went through ONE status request').to.equal(1);
+        expect(classicReads, 'no classic read was queued').to.have.lengthOf(0);
+        expect(written.sort((a, b) => a.id.localeCompare(b.id))).to.deep.equal([
+            { id: angleId, value: 50 },
+            { id: positionId, value: 32 },
+        ]);
+        struct.clearTimeouts();
+    });
+
     it('does nothing after stop()', async () => {
         const structure = createFakeStructure();
         let statusCalls = 0;

@@ -139,11 +139,13 @@ describe('Smart Home API client', function () {
             } catch (err) {
                 caught = err;
             }
+            // Before stop(), which clears the set unconditionally and would hide a leak
+            const openRequests = brokenClient.activeRequests.size;
             brokenClient.stop();
             await new Promise(resolve => broken.close(() => resolve(undefined)));
             expect(caught, 'the request must fail').to.not.equal(null);
             expect(caught.message).to.not.contain('the request hangs');
-            expect(brokenClient.activeRequests.size, 'the request is cleaned up').to.equal(0);
+            expect(openRequests, 'the request is cleaned up').to.equal(0);
         });
 
         it('sends no request after stop()', async () => {
@@ -429,8 +431,10 @@ describe('Websocket watchdog', function () {
             host: '127.0.0.1',
             port: server.port,
             path: '/api/v1/apartment/notifications',
-            pingInterval: 60,
-            idleTimeout: 150,
+            pingInterval: 50,
+            // Generous against event loop stalls on a crowded CI runner - the point is
+            // "answered pings keep it alive", not the exact timing
+            idleTimeout: 400,
         });
         let closedEarly = false;
         socket.on('close', () => (closedEarly = true));
@@ -460,6 +464,8 @@ describe('Meter values through the Smart Home API', () => {
     function createStructure(overrides) {
         const written = [];
         const warnings = [];
+        const errors = [];
+        const restarts = [];
         const infoStates = [];
         const struct = /** @type {any} */ (
             new DSSStructure({
@@ -468,12 +474,13 @@ describe('Meter values through the Smart Home API', () => {
                 adapter: {
                     isStopping: () => false,
                     setState: (id, value, ack) => infoStates.push({ id, value, ack }),
+                    restartAdapter: delay => restarts.push(delay),
                     log: {
                         silly: () => {},
                         debug: () => {},
                         info: () => {},
                         warn: message => warnings.push(message),
-                        error: () => {},
+                        error: message => errors.push(message),
                     },
                 },
                 ...overrides,
@@ -483,6 +490,8 @@ describe('Meter values through the Smart Home API', () => {
         struct.setStateSafe = (id, value) => written.push({ id, value });
         struct.written = written;
         struct.warnings = warnings;
+        struct.errors = errors;
+        struct.restarts = restarts;
         struct.infoStates = infoStates;
         return struct;
     }
@@ -671,8 +680,10 @@ describe('Meter values through the Smart Home API', () => {
     });
 
     // main.js plant den naechsten Poll-Zyklus ausschliesslich in diesem Callback - wirft
-    // der Callback selbst, darf der Zyklus weder doppelt laufen noch lautlos enden
-    it('runs the callback exactly once even when the callback throws', done => {
+    // der Callback selbst, darf der Zyklus weder doppelt laufen noch lautlos enden.
+    // Frueher endete so ein Fehler als unhandled rejection und js-controller startete den
+    // Adapter neu; dieses Sicherheitsnetz stellt der Neustart wieder her.
+    it('restarts the adapter instead of silencing a throwing poll callback', done => {
         const struct = createStructure({
             smartHome: {
                 getMeteringValues: async () => ({
@@ -691,6 +702,8 @@ describe('Meter values through the Smart Home API', () => {
             if (calls === 1) {
                 setTimeout(() => {
                     expect(calls, 'the callback must not run twice').to.equal(1);
+                    expect(struct.errors.join(' ')).to.contain('poll callback threw');
+                    expect(struct.restarts, 'the safety net of the old behaviour').to.deep.equal([30000]);
                     done();
                 }, 50);
                 throw new Error('a broken consumer');
