@@ -140,6 +140,37 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ## Changelog
 
+### 2.4.18 (2026-08-31)
+
+* **Device output values can be read through the Smart Home API.** With the option enabled, the
+  initial reads at startup and the re-reads after every scene call are served by ONE apartment
+  status request (~59 KB, ~100 ms for every device at once) instead of one throttled classic read
+  per output channel - the part of the startup that could take minutes on large installations.
+  The status delivers each output already in the scale of the ioBroker states, verified offline
+  against a real object export: every comparable value matches, and 132 channel states the classic
+  path never managed to fill (hue, colortemp, x, y of the lights) finally get their values
+* The rules learned from live measurements are built in: an output that is currently **moving
+  carries no value** in the status and keeps its last state (asked again after 15 s, at most four
+  times, then the classic read has the last word); an answer that was already on its way never
+  satisfies a trigger that arrived after it left; boolean channels stay on the classic read; a
+  failed status request falls back to the classic reads at once and pauses the Smart Home path for
+  five minutes. With the option off, the values behave exactly as before - the only difference is
+  that requests which never worked are no longer sent (a light's colortemp read always went out
+  broken and only ever produced a warning)
+* **The new-API client cannot hang any more.** A connection dying in the middle of a response body
+  used to leave the request pending forever - no error, no retry. The classic client always had
+  this handler, the new one was missing it. A wrong password during key creation now surfaces the
+  actual answer of the dSS instead of a generic sentence
+* **The API key dialog uses the app token from the form.** Creating the app token and the API key
+  in one visit used to fail with "Please create or enter the App-Token first", because the instance
+  only knew the SAVED token. A stored API key that does not look like one (typically: js-controller
+  could not decrypt it after a backup restore) is called out at startup instead of an anonymous
+  HTTP 401, and a dSS without /api/v1 (HTTP 404) backs off to the maximum right away and says so
+  once instead of warning every hour
+* Groundwork hardening of the notification websocket (still unused): dead connections are detected
+  by pinging after 30 s of silence and reconnecting after 90 s, fragmented messages are capped in
+  total size, and the debounce defaults follow the measured reality (5 s coalescing, 15 s maximum)
+
 ### 2.4.15 (2026-08-30)
 
 * **The dialog scrolls by itself now.** It used `minHeight: 100%` and relied on the surrounding frame
