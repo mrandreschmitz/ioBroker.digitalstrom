@@ -525,6 +525,243 @@ describe('DSSStructure', () => {
         });
     });
 
+    // Die Offset-Reads erreichen vDC-Ausgaenge nicht (live verifiziert: HTTP 500
+    // "deviceOutputIndex:255"), der benannte Read device/getOutputChannelValue2
+    // beantwortet sie - eine Antwort traegt ALLE Kanaele in der offiziellen
+    // Kanalskala (live verifiziert gegen 4 Sonos und ein vDC-Farblicht)
+    describe('vDC named channel reads', () => {
+        function vdcContext(answer) {
+            const reads = [];
+            const written = [];
+            const infoStates = [];
+            const struct = createStructure({
+                dssQueue: {
+                    queueReadOutputChannels: (dev, prio, callback) => {
+                        reads.push({ dSUID: dev.dSUID, prio });
+                        setImmediate(() => callback(...answer));
+                    },
+                },
+                adapter: {
+                    log: silentLogger,
+                    config: {},
+                    setState: (id, value, ack) => infoStates.push({ id, value, ack }),
+                    isStopping: () => false,
+                },
+            });
+            struct.setStateSafe = (id, value) => written.push({ id, value });
+            const dev = {
+                dSUID: 'sonos1',
+                meterDSUID: 'm1',
+                isVdcDevice: true,
+                outputChannelList: {
+                    audioVolume: 'devices.m1.sonos1.audioVolume',
+                    powerState: 'devices.m1.sonos1.powerState',
+                },
+            };
+            return { struct, dev, reads, written, infoStates };
+        }
+
+        const SONOS_ANSWER = [
+            null,
+            {
+                audioVolume: { value: 14.4, age: 12.5 },
+                powerState: { value: 0, age: null },
+                // Kanaele ohne ioBroker-State und ohne Zahlenwert bleiben folgenlos
+                contentSource: { value: '', age: null },
+                repeatMode: { value: 0, age: 1 },
+            },
+        ];
+
+        it('serves channels without an offset read through the named read', done => {
+            const { struct, dev, reads, written, infoStates } = vdcContext(SONOS_ANSWER);
+            struct.queueClassicOutputRead(dev, 'audioVolume', 'medium');
+            setTimeout(() => {
+                expect(reads).to.deep.equal([{ dSUID: 'sonos1', prio: 'medium' }]);
+                expect(written.sort((a, b) => a.id.localeCompare(b.id))).to.deep.equal([
+                    { id: 'devices.m1.sonos1.audioVolume', value: 14 },
+                    { id: 'devices.m1.sonos1.powerState', value: 0 },
+                ]);
+                expect(infoStates).to.deep.equal([{ id: 'info.outputApi', value: 'classic', ack: true }]);
+                done();
+            }, 20);
+        });
+
+        it('coalesces the channels of one device into one request', done => {
+            const { struct, dev, reads, written } = vdcContext(SONOS_ANSWER);
+            struct.queueClassicOutputRead(dev, 'audioVolume', 'medium');
+            struct.queueClassicOutputRead(dev, 'powerState', 'medium');
+            setTimeout(() => {
+                expect(reads, 'one answer serves every channel').to.have.lengthOf(1);
+                expect(written).to.have.lengthOf(2);
+                done();
+            }, 20);
+        });
+
+        it('keeps info.outputApi untouched without the report flag', done => {
+            const { struct, dev, infoStates, written } = vdcContext(SONOS_ANSWER);
+            struct.queueClassicOutputRead(dev, 'audioVolume', 'medium', { report: false });
+            setTimeout(() => {
+                expect(written).to.have.lengthOf(2);
+                expect(infoStates).to.have.lengthOf(0);
+                done();
+            }, 20);
+        });
+
+        it('remembers a dSS that rejects the call', done => {
+            // Der echte Vertrag: requestAsync wirft ok:false-Antworten als Error-Objekt,
+            // die Ablehnung steht in dessen message
+            const { struct, dev, reads } = vdcContext([
+                new Error(
+                    'Error response for /json/device/getOutputChannelValue2: This call is currently only supported on vDCs',
+                ),
+            ]);
+            struct.queueClassicOutputRead(dev, 'audioVolume', 'medium');
+            setTimeout(() => {
+                struct.queueClassicOutputRead(dev, 'audioVolume', 'medium');
+                setTimeout(() => {
+                    expect(reads, 'after the rejection no further request').to.have.lengthOf(1);
+                    done();
+                }, 20);
+            }, 20);
+        });
+
+        // Ein Farblicht liefert CIE x/y als 0..1 - die States halten 0..10000
+        it('scales the CIE x/y coordinates to the state range', done => {
+            const { struct, reads, written } = vdcContext([
+                null,
+                {
+                    hue: { value: 168.35106151615946, age: 1 },
+                    saturation: { value: 100, age: 1 },
+                    colortemp: { value: 100, age: null },
+                    x: { value: 0.225, age: 1 },
+                    y: { value: 0.3944, age: 1 },
+                },
+            ]);
+            const light = {
+                dSUID: 'hue1',
+                meterDSUID: 'm1',
+                isVdcDevice: true,
+                outputChannelList: {
+                    hue: 'devices.m1.hue1.hue',
+                    saturation: 'devices.m1.hue1.saturation',
+                    colortemp: 'devices.m1.hue1.colortemp',
+                    x: 'devices.m1.hue1.x',
+                    y: 'devices.m1.hue1.y',
+                },
+            };
+            struct.queueClassicOutputRead(light, 'hue', 'medium');
+            setTimeout(() => {
+                expect(reads).to.have.lengthOf(1);
+                expect(written.sort((a, b) => a.id.localeCompare(b.id))).to.deep.equal([
+                    { id: 'devices.m1.hue1.colortemp', value: 100 },
+                    { id: 'devices.m1.hue1.hue', value: 168 },
+                    { id: 'devices.m1.hue1.saturation', value: 100 },
+                    { id: 'devices.m1.hue1.x', value: 2250 },
+                    { id: 'devices.m1.hue1.y', value: 3944 },
+                ]);
+                done();
+            }, 20);
+        });
+
+        it('upgrades the report wish of a joining caller', done => {
+            const { struct, dev, reads, infoStates } = vdcContext(SONOS_ANSWER);
+            struct.queueClassicOutputRead(dev, 'audioVolume', 'medium', { report: false });
+            // Springt auf den laufenden Read auf und darf melden - der Read uebernimmt das
+            struct.queueClassicOutputRead(dev, 'powerState', 'medium');
+            setTimeout(() => {
+                expect(reads).to.have.lengthOf(1);
+                expect(infoStates).to.deep.equal([{ id: 'info.outputApi', value: 'classic', ack: true }]);
+                done();
+            }, 20);
+        });
+
+        it('leaves native devices to the offset read path', done => {
+            const { struct, reads } = vdcContext(SONOS_ANSWER);
+            struct.queueClassicOutputRead(
+                { dSUID: 'native1', meterDSUID: 'm1', isVdcDevice: false, outputChannelList: {} },
+                'powerLevel',
+                'medium',
+            );
+            setTimeout(() => {
+                expect(reads, 'no named read for a native terminal').to.have.lengthOf(0);
+                done();
+            }, 20);
+        });
+    });
+
+    // Als invalid markierte Metering-Sensoren liefern ohne Event nie einen Wert -
+    // ein Drucker im Standby sendet monatelang keins. Ein einmaliger Bus-Read mit
+    // niedriger Prioritaet fuellt den State (live verifiziert: die Steckdose
+    // beantwortet device/getSensorValue fuer alle fuenf Sensoren)
+    describe('initial device sensor reads', () => {
+        function sensorContext(sensors) {
+            const sensorReads = [];
+            const written = [];
+            const struct = createStructure({
+                dss: new EventEmitter(),
+                dssQueue: {
+                    queueReadSensorValue: (dev, sensorIndex, prio, callback) => {
+                        sensorReads.push({ dSUID: dev.dSUID, sensorIndex, prio });
+                        setImmediate(() => callback(null, 30));
+                    },
+                    queueUpdateOutputValue: (dev, index, length, prio, callback) =>
+                        setImmediate(() => callback && callback(null, 0)),
+                    pushQueryQueue: (circuit, entry, prio, callback) =>
+                        setImmediate(() => callback && callback(null, { ok: true })),
+                },
+                adapter: {
+                    log: silentLogger,
+                    config: {},
+                    setState: () => {},
+                    isStopping: () => false,
+                },
+            });
+            struct.setStateSafe = (id, value) => written.push({ id, value });
+            const dev = {
+                dSUID: 'dev1',
+                meterDSUID: 'meter1',
+                zoneID: 5,
+                name: 'Steckdose',
+                hwInfo: 'SW-KL200',
+                isValid: true,
+                isPresent: true,
+                outputMode: 1,
+                sensorInputCount: sensors.length,
+                sensors,
+                outputChannels: [],
+            };
+            return { struct, dev, sensorReads, written };
+        }
+
+        it('reads an invalid metering sensor once at low priority', done => {
+            const { struct, dev, sensorReads, written } = sensorContext([
+                { type: 4, valid: false, value: 0 },
+                // Energy meter (6): native Aufloesung unverifiziert - bleibt bei den Events
+                { type: 6, valid: false, value: 0 },
+            ]);
+            struct.createDevice(dev, () => {
+                setTimeout(() => {
+                    expect(sensorReads).to.deep.equal([{ dSUID: 'dev1', sensorIndex: 0, prio: 'low' }]);
+                    expect(written).to.deep.equal([{ id: 'devices.meter1.dev1.sensors.0', value: 30 }]);
+                    struct.clearTimeouts();
+                    done();
+                }, 20);
+            });
+        });
+
+        it('trusts a value the structure already delivered', done => {
+            const { struct, dev, sensorReads } = sensorContext([{ type: 4, valid: true, value: 42 }]);
+            struct.createDevice(dev, () => {
+                setTimeout(() => {
+                    expect(sensorReads, 'no bus read for a valid sensor').to.have.lengthOf(0);
+                    expect(struct.initialObjectValues['devices.meter1.dev1.sensors.0']).to.equal(42);
+                    struct.clearTimeouts();
+                    done();
+                }, 20);
+            });
+        });
+    });
+
     describe('apartment ventilation status', () => {
         // Regression: the state was created as boolean, which turned every status code
         // other than 0 into "true" and lost the difference between malfunction and service.

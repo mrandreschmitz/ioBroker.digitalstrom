@@ -406,6 +406,32 @@ describe('Smart Home output sync', function () {
         expect(structure.classicReads, 'no second classic read').to.have.lengthOf(1);
     });
 
+    // CIE x/y kommen im Status als 0..1 (live: 0.2235/0.3921) - die States halten
+    // 0..10000. Ohne die Skalierung machte Math.round seit 2.4.18 aus jeder
+    // Koordinate 0 oder 1
+    it('scales the CIE x/y coordinates of the status to the state range', async () => {
+        const structure = createFakeStructure();
+        const sync = createSync(structure, {
+            getApartmentStatus: async () => ({
+                included: { dsDevices: [statusDevice('hue1', { x: 0.2235, y: 0.3921 })] },
+            }),
+        });
+
+        sync.requestDeviceSync(
+            {
+                dSUID: 'hue1',
+                outputChannelList: { x: 'devices.m1.hue1.x', y: 'devices.m1.hue1.y' },
+            },
+            ['x', 'y'],
+        );
+        await delay(60);
+
+        expect(structure.written.sort((a, b) => a.id.localeCompare(b.id))).to.deep.equal([
+            { id: 'devices.m1.hue1.x', value: 2235 },
+            { id: 'devices.m1.hue1.y', value: 3921 },
+        ]);
+    });
+
     // Wuerde die ganze Anlage gelernt (degradierte 200-Antworten ohne Werte), liefe nie
     // wieder ein Status-Request und die Heilung koennte nie greifen - deshalb wird ein
     // gelernter Kanal nach relearnInterval einmal neu ueber den Status probiert

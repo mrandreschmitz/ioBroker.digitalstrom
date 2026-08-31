@@ -45,3 +45,11 @@ eslint.config.mjs
 prettier.config.mjs
 .prettierignore
 .releaseconfig.json
+
+# digitalSTROM-Dokumentation - urheberrechtlich geschuetzt, bleibt lokal
+API-dss-json.pdf
+*.pdf
+
+# README-Material - im Repo noetig, im installierten Paket nicht
+docs/
+img/

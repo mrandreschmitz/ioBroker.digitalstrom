@@ -109,7 +109,8 @@ what serves everything else, so as long as devices, scenes and sensors keep upda
 
 `info.outputApi` does the same for the device output values, with one refinement: single channels the
 status structurally never delivers (measured: the outputs of audio devices are missing from the status
-entirely, a switched socket reports its `powerLevel` under the id `powerState` - its `level` field is
+entirely - since 2.4.21 the named classic read `device/getOutputChannelValue2` serves them instead -
+a switched socket reports its `powerLevel` under the id `powerState` - its `level` field is
 0..1, measured live 0 while off and 1 while powering a device, and is scaled to the 0..100 state - and
 the class-64 shade values appear only under the `...Outside` ids) are handed to the classic read
 WITHOUT flipping the state - the Smart Home API stays in charge of everything else, and the two known id mismatches are

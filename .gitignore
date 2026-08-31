@@ -17,3 +17,7 @@ admin/i18n/*/flat.txt
 
 # Probe-Ausgabe: enthaelt API-Key und die komplette Wohnungsstruktur
 ds-probe/
+
+# digitalSTROM-Dokumentation - urheberrechtlich geschuetzt, bleibt lokal
+API-dss-json.pdf
+*.pdf

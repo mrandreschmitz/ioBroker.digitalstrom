@@ -260,6 +260,27 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
 
+### 2.4.21 (2026-08-31)
+
+* **vDC-Ausgänge bekommen einen funktionierenden klassischen Read.** Der Offset-Read erreichte
+  vDC-Geräte nie (der dSS antwortet „Could not find item. deviceOutputIndex:255"), ihre Kanäle
+  füllten sich also nur, wenn der Smart-Home-Status sie lieferte. Kanäle ohne Offset nutzen jetzt
+  den benannten Read `device/getOutputChannelValue2` - live gegen einen dSS20 1.19.13 verifiziert:
+  Lautstärke und Power-State von Sonos-Playern bekommen zum ersten Mal überhaupt Werte, und
+  Farbwerte funktionieren auch klassisch - damit bekommen sie auch Anlagen ohne Smart Home API.
+  Eine Antwort trägt alle Kanäle des Geräts, gleichzeitige Anfragen werden zu einer gebündelt;
+  native Klemmen werden über das Struktur-Flag gefiltert, und ein dSS, der den Aufruf dennoch
+  ablehnt, wird je Gerät gemerkt
+* **Als invalid markierte Metering-Sensoren werden beim Start einmal gelesen** (niedrige
+  Priorität, ein Bus-Read je Sensor): Wirkleistung, Ausgangsstrom und Scheinleistung messender
+  Klemmen. Ein Gerät mit konstantem Verbrauch - ein Drucker im Standby - sendet unter Umständen
+  monatelang kein Sensor-Event, diese States blieben seit dem Anlegen ihrer Objekte leer.
+  Energiezähler und High-Range-Strom haben unverifizierte native Auflösungen und bleiben bewusst
+  bei den Events
+* **Die CIE-x/y-Farbkoordinaten kommen richtig skaliert an.** Die Kanalskala liefert sie als
+  0..1, die States halten 0..10000 - seit 2.4.18 rundete der Smart-Home-Pfad jede Koordinate auf
+  0 oder 1 zusammen; der neue benannte Read wendet denselben korrigierten Faktor an
+
 ### 2.4.20 (2026-08-31)
 
 * **Der Power-Level-Alias skaliert jetzt richtig.** Der Live-Smoke-Test von 2.4.19 widerlegte die

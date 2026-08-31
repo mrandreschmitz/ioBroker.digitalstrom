@@ -181,6 +181,26 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ## Changelog
 
+### 2.4.21 (2026-08-31)
+
+* **vDC outputs get a working classic read.** The offset based read never reached vDC devices
+  (the dSS answers "Could not find item. deviceOutputIndex:255"), so their channels only filled
+  when the Smart Home API status carried them. Channels without an offset now use the named read
+  `device/getOutputChannelValue2` - verified live against a dSS20 1.19.13: the audio volume and
+  power state of Sonos players get values for the first time ever, and colour values work
+  classically as well, so installations without the Smart Home API get them too. One answer
+  carries every channel of the device and concurrent requests are coalesced into one; native
+  terminals are filtered by the structure flag, and a dSS that still rejects the call is
+  remembered per device
+* **Metering sensors the dSS marks invalid are read once at startup** (low priority, one bus read
+  per sensor): active power, output current and apparent power of measuring terminals. A device
+  with constant consumption - a printer in standby - may not send a sensor event for months, so
+  these states stayed empty since their objects were created. Energy meter and high range current
+  natives have unverified resolutions and deliberately stay with the events
+* **The CIE x/y colour coordinates arrive correctly scaled.** The channel scale delivers them as
+  0..1 while the states hold 0..10000 - since 2.4.18 rounding collapsed every coordinate to 0
+  or 1 on the Smart Home API path; the new named read applies the same corrected factor
+
 ### 2.4.20 (2026-08-31)
 
 * **The power level alias scales correctly.** The live smoke test of 2.4.19 refuted the assumed
