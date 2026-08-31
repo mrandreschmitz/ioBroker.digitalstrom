@@ -170,6 +170,12 @@ It is published under the same MIT license; the original copyright notice is kep
 * Groundwork hardening of the notification websocket (still unused): dead connections are detected
   by pinging after 30 s of silence and reconnecting after 90 s, fragmented messages are capped in
   total size, and the debounce defaults follow the measured reality (5 s coalescing, 15 s maximum)
+* **The settings explain the hybrid approach and show it working.** The connection tab walks
+  through three numbered steps - server address (entered once, it serves both interfaces), the app
+  token as the base access in its natural order (credentials first, the created token lands below),
+  and the Smart Home API key as the accelerator - side by side on a PC screen. A new status tab
+  shows the division of labour live: which interface currently delivers events, meter values and
+  output values, backed by the new state `info.outputApi`, the counterpart of `info.meteringApi`
 
 ### 2.4.15 (2026-08-30)
 

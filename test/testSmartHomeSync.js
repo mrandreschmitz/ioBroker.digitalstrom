@@ -314,6 +314,7 @@ describe('Smart Home output sync', function () {
         const { EventEmitter } = require('node:events');
         const DSSStructure = require('../lib/dssStructure');
         const classicReads = [];
+        const infoStates = [];
         let statusCalls = 0;
         const struct = /** @type {any} */ (
             new DSSStructure({
@@ -330,7 +331,7 @@ describe('Smart Home output sync', function () {
                 adapter: {
                     log: { silly: () => {}, debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
                     config: { initializeOutputValues: true, usePresetValues: false },
-                    setState: () => {},
+                    setState: (id, value, ack) => infoStates.push({ id, value, ack }),
                     isStopping: () => false,
                 },
                 smartHome: {
@@ -372,6 +373,8 @@ describe('Smart Home output sync', function () {
 
         expect(statusCalls, 'the initial reads went through ONE status request').to.equal(1);
         expect(classicReads, 'no classic read was queued').to.have.lengthOf(0);
+        // Die Arbeitsteilung ist sichtbar: info.outputApi zeigt den liefernden Weg
+        expect(infoStates).to.deep.equal([{ id: 'info.outputApi', value: 'smarthome', ack: true }]);
         expect(written.sort((a, b) => a.id.localeCompare(b.id))).to.deep.equal([
             { id: angleId, value: 50 },
             { id: positionId, value: 32 },

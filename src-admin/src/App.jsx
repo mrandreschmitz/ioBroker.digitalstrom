@@ -20,7 +20,7 @@ export default class App extends GenericApp {
             sentryDSN: '',
         });
         this.dialogTheme = buildTheme();
-        this.state = { ...this.state, alive: false };
+        this.state = { ...this.state, alive: false, status: { connected: false, meteringApi: '', outputApi: '' } };
     }
 
     async onConnectionReady() {
@@ -29,14 +29,35 @@ export default class App extends GenericApp {
         const state = await this.socket.getState(id);
         this.setState({ alive: !!(state && state.val) });
         await this.socket.subscribeState(id, this.onAliveChanged);
+
+        // The status tab shows live which interface serves which task
+        this.statusIds = ['info.connection', 'info.meteringApi', 'info.outputApi'].map(
+            suffix => `${this.adapterName}.${this.instance}.${suffix}`,
+        );
+        for (const statusId of this.statusIds) {
+            this.applyStatusState(statusId, await this.socket.getState(statusId));
+            await this.socket.subscribeState(statusId, this.applyStatusState);
+        }
     }
 
     onAliveChanged = (_id, state) => this.setState({ alive: !!(state && state.val) });
+
+    applyStatusState = (id, state) => {
+        const value = state ? state.val : null;
+        if (id.endsWith('.info.connection')) {
+            this.setState(old => ({ status: { ...old.status, connected: !!value } }));
+        } else if (id.endsWith('.info.meteringApi')) {
+            this.setState(old => ({ status: { ...old.status, meteringApi: value || '' } }));
+        } else if (id.endsWith('.info.outputApi')) {
+            this.setState(old => ({ status: { ...old.status, outputApi: value || '' } }));
+        }
+    };
 
     componentWillUnmount() {
         if (this.aliveId) {
             this.socket.unsubscribeState(this.aliveId, this.onAliveChanged);
         }
+        (this.statusIds || []).forEach(statusId => this.socket.unsubscribeState(statusId, this.applyStatusState));
         super.componentWillUnmount();
     }
 
@@ -60,6 +81,7 @@ export default class App extends GenericApp {
                 <Settings
                     native={this.state.native}
                     alive={this.state.alive}
+                    status={this.state.status}
                     t={key => I18n.t(key)}
                     onChange={(attr, value) => this.updateNativeValue(attr, value)}
                     onSendTo={this.sendToInstance}

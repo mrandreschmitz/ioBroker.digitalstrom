@@ -52,14 +52,18 @@ function Preview() {
     const noscroll = params.get('noscroll') === '1';
     const words = dict[lang] || dict.en;
     const [native, setNative] = useState({
-        host: '10.13.10.4',
+        host: '192.168.1.10',
         validateCertificate: false,
         appToken: '0123456789abcdef0123456789abcdef',
+        useSmartHomeApi: true,
+        smartHomeApiKey: 'fedcba9876543210fedcba9876543210',
         dataPollInterval: 100,
         usePresetValues: true,
         initializeOutputValues: true,
         deleteUnknownObjects: false,
     });
+    // Sample of a running hybrid instance for the status tab
+    const status = { connected: true, meteringApi: 'smarthome', outputApi: 'smarthome' };
 
     return (
         <ThemeProvider theme={buildTheme()}>
@@ -74,6 +78,7 @@ function Preview() {
                         onChange={(attr, value) => setNative(n => ({ ...n, [attr]: value }))}
                         onSendTo={async () => ({ appToken: 'ffffffffffffffffffffffffffffffff' })}
                         alive
+                        status={status}
                         initialTab={initialTab}
                         t={key => words[key] || key}
                     />

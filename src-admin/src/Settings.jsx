@@ -26,6 +26,8 @@ import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import BoltIcon from '@mui/icons-material/Bolt';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 
 import { cardSx, DS_GREEN } from './theme.js';
 
@@ -40,11 +42,40 @@ import { cardSx, DS_GREEN } from './theme.js';
  */
 const SAVE_BAR_SPACE = 16;
 
-/** One raised card with an icon and a title. */
-function Card({ icon, title, children }) {
+/**
+ * Renders the **bold** markers of a translated text as real bold text, so the
+ * translations can emphasise which data travels over which interface.
+ *
+ * @param {string} text
+ */
+function richText(text) {
+    return text.split('**').map((part, index) => (index % 2 ? <strong key={index}>{part}</strong> : part));
+}
+
+/** One raised card with an icon, a title and an optional step number of the setup flow. */
+function Card({ icon, title, step, children }) {
     return (
         <Paper sx={cardSx}>
             <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 2 }}>
+                {step ? (
+                    <Box
+                        sx={{
+                            width: 26,
+                            height: 26,
+                            borderRadius: '50%',
+                            bgcolor: DS_GREEN,
+                            color: '#fff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 14,
+                            fontWeight: 700,
+                            flexShrink: 0,
+                        }}
+                    >
+                        {step}
+                    </Box>
+                ) : null}
                 <Box sx={{ color: DS_GREEN, display: 'flex' }}>{icon}</Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
                     {title}
@@ -53,6 +84,23 @@ function Card({ icon, title, children }) {
             <Divider sx={{ mb: 2.5, borderColor: '#eef2f5' }} />
             {children}
         </Paper>
+    );
+}
+
+/** One row of the division-of-labour table: what runs, and over which interface. */
+function ApiRow({ label, help, chip }) {
+    return (
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }} sx={{ py: 1.25 }}>
+            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                <Typography sx={{ fontWeight: 500 }}>{label}</Typography>
+                {help ? (
+                    <Typography variant="body2" color="text.secondary">
+                        {help}
+                    </Typography>
+                ) : null}
+            </Box>
+            <Box sx={{ flexShrink: 0 }}>{chip}</Box>
+        </Stack>
     );
 }
 
@@ -74,11 +122,20 @@ function OptionRow({ checked, onChange, label, help }) {
     );
 }
 
-export default function Settings({ native, onChange, onSendTo, alive, t, initialTab = 0 }) {
+export default function Settings({ native, onChange, onSendTo, alive, t, initialTab = 0, status = null }) {
     const [tab, setTab] = useState(initialTab);
     // Not every field has an explanation. Both this preview and I18n return the key
     // itself when a text is missing, which must not end up on the screen.
     const th = key => (t(key) === key ? '' : t(key));
+    // Which interface delivered the last reading - the chips of the status tab
+    const apiChip = value =>
+        value === 'smarthome' ? (
+            <Chip size="small" color="success" icon={<BoltIcon />} label={t('api_smarthome')} />
+        ) : value === 'classic' ? (
+            <Chip size="small" variant="outlined" icon={<KeyIcon />} label={t('api_classic')} />
+        ) : (
+            <Chip size="small" variant="outlined" label={t('api_waiting')} />
+        );
     const [credentials, setCredentials] = useState({ username: '', password: '' });
     const [showToken, setShowToken] = useState(false);
     const [tokenState, setTokenState] = useState({ running: false, error: '', done: false });
@@ -176,6 +233,7 @@ export default function Settings({ native, onChange, onSendTo, alive, t, initial
 
                 <Tabs value={tab} onChange={(_e, v) => setTab(v)} sx={{ mt: 1.5 }} textColor="primary" indicatorColor="primary">
                     <Tab icon={<CableIcon fontSize="small" />} iconPosition="start" label={t('tab_connection')} />
+                    <Tab icon={<SwapHorizIcon fontSize="small" />} iconPosition="start" label={t('tab_status')} />
                     <Tab icon={<TuneIcon fontSize="small" />} iconPosition="start" label={t('tab_settings')} />
                     <Tab icon={<InfoOutlinedIcon fontSize="small" />} iconPosition="start" label={t('tab_notes')} />
                 </Tabs>
@@ -183,10 +241,20 @@ export default function Settings({ native, onChange, onSendTo, alive, t, initial
 
             {/* The admin lays its save bar OVER the content, so the space below has to be
                 kept free here - see SAVE_BAR_SPACE. */}
-            <Box sx={{ px: { xs: 2, sm: 4 }, pt: 3, pb: SAVE_BAR_SPACE, maxWidth: 1080 }}>
+            <Box sx={{ px: { xs: 2, sm: 4 }, pt: 3, pb: SAVE_BAR_SPACE, maxWidth: 1400 }}>
                 {tab === 0 ? (
-                    <>
-                        <Card icon={<RouterIcon />} title={t('section_server')}>
+                    // Auf einem PC-Bildschirm ist Platz genug: 1 und 2 nebeneinander,
+                    // 3 unter der 1. Auf schmalen Fenstern stapelt sich alles wie gehabt.
+                    <Box
+                        sx={{
+                            display: 'grid',
+                            gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                            columnGap: 3,
+                            alignItems: 'start',
+                        }}
+                    >
+                        <Box sx={{ minWidth: 0 }}>
+                        <Card icon={<RouterIcon />} title={t('section_server')} step={1}>
                             <Alert severity="info" icon={<InfoOutlinedIcon fontSize="inherit" />} sx={{ mb: 2.5 }}>
                                 {t('info_server')}
                             </Alert>
@@ -206,9 +274,54 @@ export default function Settings({ native, onChange, onSendTo, alive, t, initial
                                 />
                             </Stack>
                         </Card>
+                        </Box>
 
-                        <Card icon={<KeyIcon />} title={t('section_token')}>
+                        <Box sx={{ minWidth: 0, gridColumn: { md: '2' }, gridRow: { md: '1 / span 2' } }}>
+                        <Card icon={<KeyIcon />} title={t('section_token')} step={2}>
                             <Stack spacing={2.5}>
+                                <Alert severity="info" icon={<InfoOutlinedIcon fontSize="inherit" />}>
+                                    {richText(t('info_token_role'))}
+                                </Alert>
+
+                                {/* Einrichtungsreihenfolge: erst die Anmeldedaten, der
+                                    erstellte Token landet im Feld darunter */}
+                                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ maxWidth: 640 }}>
+                                    <TextField
+                                        label={t('label_username')}
+                                        value={credentials.username}
+                                        autoComplete="off"
+                                        onChange={e => setCredentials(c => ({ ...c, username: e.target.value }))}
+                                    />
+                                    <TextField
+                                        label={t('label_password')}
+                                        type="password"
+                                        value={credentials.password}
+                                        autoComplete="new-password"
+                                        onChange={e => setCredentials(c => ({ ...c, password: e.target.value }))}
+                                    />
+                                </Stack>
+                                <Typography variant="body2" color="text.secondary" sx={{ mt: -1.5 }}>
+                                    {t('info_token')}
+                                </Typography>
+
+                                <Box>
+                                    <Button
+                                        variant="contained"
+                                        disabled={!canCreate || alive === false}
+                                        onClick={createToken}
+                                        startIcon={
+                                            tokenState.running ? <CircularProgress size={16} color="inherit" /> : <KeyIcon />
+                                        }
+                                    >
+                                        {t('button_createToken')}
+                                    </Button>
+                                </Box>
+
+                                {tokenState.error ? <Alert severity="error">{tokenState.error}</Alert> : null}
+                                {tokenState.done ? <Alert severity="success">{t('token_created')}</Alert> : null}
+
+                                <Divider sx={{ borderColor: '#eef2f5' }} />
+
                                 <Box>
                                     <TextField
                                         label={t('label_appToken')}
@@ -241,55 +354,19 @@ export default function Settings({ native, onChange, onSendTo, alive, t, initial
                                             variant="outlined"
                                             color={native.appToken ? 'success' : 'default'}
                                             icon={native.appToken ? <CheckCircleIcon /> : undefined}
-                                            label={native.appToken ? t('token_saved') : t('token_missing')}
+                                            label={native.appToken ? t('token_present') : t('token_missing')}
                                         />
                                     </Box>
                                 </Box>
-
-                                <Divider sx={{ borderColor: '#eef2f5' }} />
-
-                                <Alert severity="info" icon={<InfoOutlinedIcon fontSize="inherit" />}>
-                                    {t('info_token')}
-                                </Alert>
-
-                                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ maxWidth: 640 }}>
-                                    <TextField
-                                        label={t('label_username')}
-                                        value={credentials.username}
-                                        autoComplete="off"
-                                        onChange={e => setCredentials(c => ({ ...c, username: e.target.value }))}
-                                    />
-                                    <TextField
-                                        label={t('label_password')}
-                                        type="password"
-                                        value={credentials.password}
-                                        autoComplete="new-password"
-                                        onChange={e => setCredentials(c => ({ ...c, password: e.target.value }))}
-                                    />
-                                </Stack>
-
-                                <Box>
-                                    <Button
-                                        variant="contained"
-                                        disabled={!canCreate || alive === false}
-                                        onClick={createToken}
-                                        startIcon={
-                                            tokenState.running ? <CircularProgress size={16} color="inherit" /> : <KeyIcon />
-                                        }
-                                    >
-                                        {t('button_createToken')}
-                                    </Button>
-                                </Box>
-
-                                {tokenState.error ? <Alert severity="error">{tokenState.error}</Alert> : null}
-                                {tokenState.done ? <Alert severity="success">{t('token_saved')}</Alert> : null}
                             </Stack>
                         </Card>
+                        </Box>
 
-                        <Card icon={<KeyIcon />} title={t('section_smartHome')}>
+                        <Box sx={{ minWidth: 0, gridColumn: { md: '1' } }}>
+                        <Card icon={<BoltIcon />} title={t('section_smartHome')} step={3}>
                             <Stack spacing={2.5}>
                                 <Alert severity="info" icon={<InfoOutlinedIcon fontSize="inherit" />}>
-                                    {t('info_smartHome')}
+                                    {richText(t('info_smartHome'))}
                                 </Alert>
 
                                 <OptionRow
@@ -331,7 +408,7 @@ export default function Settings({ native, onChange, onSendTo, alive, t, initial
                                             variant="outlined"
                                             color={native.smartHomeApiKey ? 'success' : 'default'}
                                             icon={native.smartHomeApiKey ? <CheckCircleIcon /> : undefined}
-                                            label={native.smartHomeApiKey ? t('key_saved') : t('key_missing')}
+                                            label={native.smartHomeApiKey ? t('key_present') : t('key_missing')}
                                         />
                                     </Box>
                                 </Box>
@@ -354,13 +431,66 @@ export default function Settings({ native, onChange, onSendTo, alive, t, initial
                                 </Box>
 
                                 {keyState.error ? <Alert severity="error">{keyState.error}</Alert> : null}
-                                {keyState.done ? <Alert severity="success">{t('key_saved')}</Alert> : null}
+                                {keyState.done ? <Alert severity="success">{t('key_created')}</Alert> : null}
                             </Stack>
                         </Card>
-                    </>
+                        </Box>
+                    </Box>
                 ) : null}
 
                 {tab === 1 ? (
+                    <Card icon={<SwapHorizIcon />} title={t('section_status')}>
+                        <Stack spacing={2.5}>
+                            <Alert severity="info" icon={<InfoOutlinedIcon fontSize="inherit" />}>
+                                {t('info_status')}
+                            </Alert>
+                            {alive === false ? <Alert severity="warning">{t('status_not_running')}</Alert> : null}
+                            <Stack divider={<Divider sx={{ borderColor: '#eef2f5' }} />}>
+                                <ApiRow
+                                    label={t('status_connection')}
+                                    help={th('status_connection_help')}
+                                    chip={
+                                        <Chip
+                                            size="small"
+                                            color={status && status.connected ? 'success' : 'default'}
+                                            variant={status && status.connected ? 'filled' : 'outlined'}
+                                            icon={status && status.connected ? <CheckCircleIcon /> : undefined}
+                                            label={
+                                                status && status.connected
+                                                    ? t('status_connected')
+                                                    : t('status_disconnected')
+                                            }
+                                        />
+                                    }
+                                />
+                                <ApiRow
+                                    label={t('status_events')}
+                                    help={th('status_events_help')}
+                                    chip={
+                                        <Chip
+                                            size="small"
+                                            variant="outlined"
+                                            icon={<KeyIcon />}
+                                            label={t('api_classic')}
+                                        />
+                                    }
+                                />
+                                <ApiRow
+                                    label={t('status_meters')}
+                                    help={th('status_meters_help')}
+                                    chip={apiChip(status && status.meteringApi)}
+                                />
+                                <ApiRow
+                                    label={t('status_outputs')}
+                                    help={th('status_outputs_help')}
+                                    chip={apiChip(status && status.outputApi)}
+                                />
+                            </Stack>
+                        </Stack>
+                    </Card>
+                ) : null}
+
+                {tab === 2 ? (
                     <>
                         <Card icon={<TimerIcon />} title={t('section_options')}>
                             <TextField
@@ -399,12 +529,19 @@ export default function Settings({ native, onChange, onSendTo, alive, t, initial
                     </>
                 ) : null}
 
-                {tab === 2 ? (
-                    <Card icon={<InfoOutlinedIcon />} title={t('section_notes')}>
+                {tab === 3 ? (
+                    <>
+                        <Card icon={<SwapHorizIcon />} title={t('section_why')}>
+                            <Typography variant="body2" sx={{ lineHeight: 1.7 }}>
+                                {richText(t('info_why'))}
+                            </Typography>
+                        </Card>
+                        <Card icon={<InfoOutlinedIcon />} title={t('section_notes')}>
                         <Alert severity="info" icon={<InfoOutlinedIcon fontSize="inherit" />}>
                             {t('info_tls')}
                         </Alert>
-                    </Card>
+                        </Card>
+                    </>
                 ) : null}
             </Box>
         </Box>
