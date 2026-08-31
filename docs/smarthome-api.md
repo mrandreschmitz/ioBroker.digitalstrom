@@ -1,14 +1,37 @@
-# Smart Home API meter path
+# Smart Home API paths
 
-The adapter uses the digitalSTROM Smart Home API only for the optional bulk read of meter values:
+The adapter uses the digitalSTROM Smart Home API for two optional bulk reads:
 
 ```text
-GET /api/v1/apartment/meterings/values
+GET /api/v1/apartment/meterings/values   (all meter values, one request)
+GET /api/v1/apartment/status             (all device output values, one request)
 ```
 
 All structure reads, device and zone commands, sensor values, button events and scene events continue
 to use the classic dSS JSON API. The notification websocket and the other methods implemented by the
 client are not started by the adapter.
+
+## Output values
+
+With the option enabled, the initial output reads at startup and the re-reads after a scene call are
+served by ONE apartment status request instead of one classic read per output channel. Triggers are
+collected for two seconds, so a room scene across many devices still costs a single request.
+
+The status delivers each output already in the scale the ioBroker states use: the API normalizes every
+channel to its official value range (brightness 0..100, colortemp 0..1000, ...), which is exactly the
+`classic * max / nativeMax` conversion of the classic read callbacks. Values are rounded to whole
+numbers like before, and the brightness of a light goes through the same helper that maintains the
+boolean `.state` including the switch threshold.
+
+Rules learned from live measurements against a real dSS:
+
+- An output that is currently moving carries NO `value` field in the status. Missing means
+  "unchanged", never null. The channel is asked again after 15 seconds, up to four times - after that
+  the classic read delivers whatever it can.
+- Boolean output channels (`airLouverAuto`, `airFlowAuto`) stay on the classic read; their 0/1
+  representation in the new API is not verified.
+- A failed status request falls back to the classic reads immediately and pauses the Smart Home reads
+  for five minutes.
 
 ## Requirements and activation
 

@@ -196,8 +196,10 @@ describe('Smart Home output sync', function () {
         expect(sync.requestDeviceSync(shade, ['shadePositionOutside'])).to.equal(false);
     });
 
-    // Boolean-Kanaele (airLouverAuto & Co) sind gegen die neue API nicht verifiziert -
-    // ihr klassischer Read kennt die 0/1-Semantik
+    // Boolean-Kanaele (airLouverAuto & Co) sind gegen die neue API nicht verifiziert.
+    // Der Sync reicht sie an queueClassicOutputRead durch - ob dort wirklich ein Request
+    // entsteht, entscheidet der channelIndex des Kanals (heute: nein, debug-Skip). Wichtig
+    // ist, dass NIE ein geratener Wert geschrieben wird.
     it('hands boolean channels to the classic read instead of guessing', async () => {
         const structure = createFakeStructure();
         const sync = createSync(structure, {
@@ -229,6 +231,81 @@ describe('Smart Home output sync', function () {
         expect(structure.classicReads).to.deep.equal([
             { dSUID: 'shade1', outputType: 'shadePositionOutside', prio: 'medium' },
         ]);
+    });
+
+    // Ein Trigger, der eintrifft, waehrend die Statusabfrage schon unterwegs ist, darf
+    // nicht mit deren Antwort bedient werden - die zeigt den Stand von DAVOR
+    it('does not satisfy a trigger with an answer that was already on its way', async () => {
+        const structure = createFakeStructure();
+        let statusCalls = 0;
+        /** @type {(value: any) => void} */
+        let resolveFirst = () => {};
+        const sync = createSync(structure, {
+            getApartmentStatus: () => {
+                statusCalls++;
+                if (statusCalls === 1) {
+                    return new Promise(resolve => (resolveFirst = resolve));
+                }
+                return Promise.resolve({
+                    included: { dsDevices: [statusDevice('shade1', { shadePositionOutside: 55 })] },
+                });
+            },
+        });
+
+        sync.requestDeviceSync(SHADE(), ['shadePositionOutside']);
+        await delay(40);
+        expect(statusCalls, 'the first read is on its way').to.equal(1);
+        // The blind starts moving AGAIN while the answer is in flight
+        sync.requestDeviceSync(SHADE(), ['shadePositionOutside']);
+        // ... and the in-flight answer carries the position from before that move
+        resolveFirst({ included: { dsDevices: [statusDevice('shade1', { shadePositionOutside: 10 })] } });
+        await delay(80);
+
+        expect(statusCalls, 'a second read serves the second trigger').to.equal(2);
+        expect(
+            structure.written.map(write => write.value),
+            'the stale 10 must never be written',
+        ).to.deep.equal([55]);
+    });
+
+    it('pulls a far follow-up timer forward for a fresh trigger', async () => {
+        const structure = createFakeStructure();
+        let statusCalls = 0;
+        const sync = createSync(
+            structure,
+            {
+                getApartmentStatus: async () => {
+                    statusCalls++;
+                    return {
+                        included: {
+                            dsDevices: [
+                                // The blind never answers, the light always does
+                                statusDevice('shade1', { shadePositionOutside: undefined }),
+                                statusDevice('light1', { brightness: 50 }),
+                            ],
+                        },
+                    };
+                },
+            },
+            { followUpDelay: 5000 },
+        );
+
+        sync.requestDeviceSync(SHADE(), ['shadePositionOutside']);
+        await delay(40);
+        expect(statusCalls).to.equal(1);
+        // The follow-up timer is armed for 5 s - the light must not wait for it
+        const lightValues = [];
+        sync.requestDeviceSync(
+            {
+                dSUID: 'light1',
+                outputChannelList: { brightness: 'devices.m1.light1.brightness' },
+                applyNativeLightValue: value => lightValues.push(value),
+            },
+            ['brightness'],
+        );
+        await delay(60);
+        expect(statusCalls, 'the fresh trigger pulled the read forward').to.equal(2);
+        expect(lightValues).to.deep.equal([Math.round(50 * 2.55)]);
     });
 
     it('does nothing after stop()', async () => {
