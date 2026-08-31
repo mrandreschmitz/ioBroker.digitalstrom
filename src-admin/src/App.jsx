@@ -20,7 +20,11 @@ export default class App extends GenericApp {
             sentryDSN: '',
         });
         this.dialogTheme = buildTheme();
-        this.state = { ...this.state, alive: false, status: { connected: false, meteringApi: '', outputApi: '' } };
+        this.state = {
+            ...this.state,
+            alive: false,
+            status: { connected: false, meteringApi: '', outputApi: '', activity: null },
+        };
     }
 
     async onConnectionReady() {
@@ -30,8 +34,8 @@ export default class App extends GenericApp {
         this.setState({ alive: !!(state && state.val) });
         await this.socket.subscribeState(id, this.onAliveChanged);
 
-        // The status tab shows live which interface serves which task
-        this.statusIds = ['info.connection', 'info.meteringApi', 'info.outputApi'].map(
+        // The status tab shows live which interface serves which task, and how much
+        this.statusIds = ['info.connection', 'info.meteringApi', 'info.outputApi', 'info.apiActivity'].map(
             suffix => `${this.adapterName}.${this.instance}.${suffix}`,
         );
         for (const statusId of this.statusIds) {
@@ -50,6 +54,19 @@ export default class App extends GenericApp {
             this.setState(old => ({ status: { ...old.status, meteringApi: value || '' } }));
         } else if (id.endsWith('.info.outputApi')) {
             this.setState(old => ({ status: { ...old.status, outputApi: value || '' } }));
+        } else if (id.endsWith('.info.apiActivity')) {
+            let parsed = null;
+            try {
+                parsed = value ? JSON.parse(String(value)) : null;
+            } catch {
+                parsed = null;
+            }
+            // Nur eine vollstaendige Antwort anzeigen - halbe Objekte wuerden im
+            // Status-Tab zu "undefined"-Zahlen fuehren
+            if (parsed && (!parsed.classic || !parsed.smarthome)) {
+                parsed = null;
+            }
+            this.setState(old => ({ status: { ...old.status, activity: parsed } }));
         }
     };
 

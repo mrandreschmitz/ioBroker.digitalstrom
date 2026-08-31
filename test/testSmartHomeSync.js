@@ -23,8 +23,13 @@ function createFakeStructure() {
         setStateSafe(id, value) {
             written.push({ id, value });
         },
-        queueClassicOutputRead(dev, outputType, prio) {
-            classicReads.push({ dSUID: dev.dSUID, outputType, prio });
+        queueClassicOutputRead(dev, outputType, prio, options) {
+            classicReads.push({
+                dSUID: dev.dSUID,
+                outputType,
+                prio,
+                report: !options || options.report !== false,
+            });
         },
         adapterLog: {
             silly: () => {},
@@ -167,8 +172,10 @@ describe('Smart Home output sync', function () {
         sync.requestDeviceSync(SHADE(), ['shadePositionOutside']);
         await delay(250);
 
+        // report: false - a single undeliverable channel does not put the classic
+        // path in charge, so info.outputApi stays untouched
         expect(structure.classicReads).to.deep.equal([
-            { dSUID: 'shade1', outputType: 'shadePositionOutside', prio: 'medium' },
+            { dSUID: 'shade1', outputType: 'shadePositionOutside', prio: 'medium', report: false },
         ]);
         expect(structure.written).to.have.lengthOf(0);
     });
@@ -189,6 +196,8 @@ describe('Smart Home output sync', function () {
             'shadeOpeningAngleOutside',
             'shadePositionOutside',
         ]);
+        // Here the classic path really takes over - these reads DO report
+        expect(structure.classicReads.every(read => read.report)).to.equal(true);
         expect(structure.warnings, 'the fallback is said once').to.have.lengthOf(1);
         expect(structure.warnings[0]).to.contain('classic API');
         // During the backoff every new trigger goes classic right away
@@ -215,7 +224,9 @@ describe('Smart Home output sync', function () {
         await delay(60);
 
         expect(structure.written).to.have.lengthOf(0);
-        expect(structure.classicReads).to.deep.equal([{ dSUID: 'vent1', outputType: 'airLouverAuto', prio: 'medium' }]);
+        expect(structure.classicReads).to.deep.equal([
+            { dSUID: 'vent1', outputType: 'airLouverAuto', prio: 'medium', report: false },
+        ]);
     });
 
     it('treats a device the status does not know like a moving output', async () => {
@@ -229,7 +240,7 @@ describe('Smart Home output sync', function () {
 
         // Never applied, so after the follow-ups the classic read has the last word
         expect(structure.classicReads).to.deep.equal([
-            { dSUID: 'shade1', outputType: 'shadePositionOutside', prio: 'medium' },
+            { dSUID: 'shade1', outputType: 'shadePositionOutside', prio: 'medium', report: false },
         ]);
     });
 
@@ -308,6 +319,190 @@ describe('Smart Home output sync', function () {
         expect(lightValues).to.deep.equal([Math.round(50 * 2.55)]);
     });
 
+    // Manche Kanaele beantwortet der Status STRUKTURELL nie (gemessen: die Outputs von
+    // Audio-Geraeten fehlen komplett). Nach zwei verbrauchten Follow-up-Budgets wird
+    // das gelernt - ab dann sofort klassisch, ohne 60 s Warten und ohne Status-Requests.
+    it('learns a channel the status never answers and serves it classically right away', async () => {
+        const structure = createFakeStructure();
+        let statusCalls = 0;
+        const sync = createSync(structure, {
+            getApartmentStatus: async () => {
+                statusCalls++;
+                return { included: { dsDevices: [] } };
+            },
+        });
+
+        sync.requestDeviceSync(SHADE(), ['shadePositionOutside']);
+        await delay(250);
+        sync.requestDeviceSync(SHADE(), ['shadePositionOutside']);
+        await delay(250);
+        expect(statusCalls, 'two full follow-up budgets were burned').to.equal(6);
+        expect(structure.classicReads).to.have.lengthOf(2);
+
+        // The third trigger goes classic immediately - no debounce, no status request
+        expect(sync.requestDeviceSync(SHADE(), ['shadePositionOutside'])).to.equal(true);
+        expect(structure.classicReads).to.have.lengthOf(3);
+        expect(structure.classicReads[2]).to.deep.equal({
+            dSUID: 'shade1',
+            outputType: 'shadePositionOutside',
+            prio: 'medium',
+            report: false,
+        });
+        await delay(100);
+        expect(statusCalls, 'the learned channel costs no further status request').to.equal(6);
+    });
+
+    it('forgets a learned gap once the status answers the channel again', async () => {
+        const structure = createFakeStructure();
+        const sync = createSync(structure, {
+            getApartmentStatus: async () => ({
+                included: {
+                    dsDevices: [
+                        statusDevice('shade1', { shadePositionOutside: 40 }),
+                        statusDevice('light1', { brightness: 50 }),
+                    ],
+                },
+            }),
+        });
+
+        sync.undeliverable.set('shade1|shadePositionOutside', sync.now());
+        expect(sync.requestDeviceSync(SHADE(), ['shadePositionOutside']), 'learned goes classic').to.equal(true);
+        expect(structure.classicReads).to.have.lengthOf(1);
+
+        // The next status answer (fetched for the light) carries the value - unlearned
+        sync.requestDeviceSync(
+            {
+                dSUID: 'light1',
+                outputChannelList: { brightness: 'devices.m1.light1.brightness' },
+                applyNativeLightValue: () => {},
+            },
+            ['brightness'],
+        );
+        await delay(60);
+        expect(sync.undeliverable.size, 'the gap healed itself').to.equal(0);
+
+        // ... so the next trigger goes through the status again
+        sync.requestDeviceSync(SHADE(), ['shadePositionOutside']);
+        await delay(60);
+        expect(structure.written).to.deep.equal([{ id: 'devices.m1.shade1.shadePositionOutside', value: 40 }]);
+        expect(structure.classicReads, 'no second classic read').to.have.lengthOf(1);
+    });
+
+    // Wuerde die ganze Anlage gelernt (degradierte 200-Antworten ohne Werte), liefe nie
+    // wieder ein Status-Request und die Heilung koennte nie greifen - deshalb wird ein
+    // gelernter Kanal nach relearnInterval einmal neu ueber den Status probiert
+    it('probes a learned channel through the status again after the relearn interval', async () => {
+        const structure = createFakeStructure();
+        let statusCalls = 0;
+        const sync = createSync(
+            structure,
+            {
+                getApartmentStatus: async () => {
+                    statusCalls++;
+                    return { included: { dsDevices: [statusDevice('shade1', { shadePositionOutside: 70 })] } };
+                },
+            },
+            { relearnInterval: 50 },
+        );
+
+        sync.undeliverable.set('shade1|shadePositionOutside', sync.now());
+        // Fresh entry: still classic, no status request
+        sync.requestDeviceSync(SHADE(), ['shadePositionOutside']);
+        await delay(60);
+        expect(statusCalls).to.equal(0);
+        expect(structure.classicReads).to.have.lengthOf(1);
+
+        // The entry is older than the interval now - the next trigger probes the status,
+        // the answer carries a value and heals the learning for good
+        sync.requestDeviceSync(SHADE(), ['shadePositionOutside']);
+        await delay(60);
+        expect(statusCalls, 'the probe went through the status').to.equal(1);
+        expect(structure.written).to.deep.equal([{ id: 'devices.m1.shade1.shadePositionOutside', value: 70 }]);
+        expect(sync.undeliverable.size).to.equal(0);
+        expect(structure.classicReads, 'no second classic read').to.have.lengthOf(1);
+    });
+
+    // Der dSS meldet die eine class-64-Shade-Bank nur unter den ...Outside-Ids, obwohl
+    // GR-KL300-Bloecke auch die ...Indoor-Kanaele deklarieren. Der klassische Read
+    // (getConfig class 64) wuerde beiden denselben Wert liefern - der Alias auch.
+    it('serves the declared indoor shade channels from the outside ids of the status', async () => {
+        const structure = createFakeStructure();
+        const sync = createSync(structure, {
+            getApartmentStatus: async () => ({
+                included: {
+                    dsDevices: [statusDevice('umr1', { shadePositionOutside: 100, shadeOpeningAngleOutside: 25.2 })],
+                },
+            }),
+        });
+
+        sync.requestDeviceSync(
+            {
+                dSUID: 'umr1',
+                outputChannelList: {
+                    shadePositionIndoor: 'devices.m1.umr1.shadePositionIndoor',
+                    shadeOpeningAngleIndoor: 'devices.m1.umr1.shadeOpeningAngleIndoor',
+                },
+            },
+            ['shadePositionIndoor', 'shadeOpeningAngleIndoor'],
+        );
+        await delay(60);
+
+        expect(structure.written.sort((a, b) => a.id.localeCompare(b.id))).to.deep.equal([
+            { id: 'devices.m1.umr1.shadeOpeningAngleIndoor', value: 25 },
+            { id: 'devices.m1.umr1.shadePositionIndoor', value: 100 },
+        ]);
+        expect(structure.classicReads).to.have.lengthOf(0);
+    });
+
+    // Eine geschaltete Steckdose (SW-KL200) deklariert powerLevel, der Status meldet
+    // den Wert aber als level-Feld eines powerState-Outputs. Die 0..100-Skala des
+    // level-Felds ist ANGENOMMEN (wie alle gemessenen Statuswerte; der einzige
+    // Live-Messwert ist bisher 0 und damit skalenneutral) - zeigt eine eingeschaltete
+    // Steckdose je powerLevel 1 statt 100, gehoert der Alias umgerechnet
+    it('maps the power level a socket reports as the level of its powerState output', async () => {
+        const structure = createFakeStructure();
+        const sync = createSync(structure, {
+            getApartmentStatus: async () => ({
+                included: {
+                    dsDevices: [
+                        {
+                            id: 'socket1',
+                            type: 'dsDeviceStatus',
+                            attributes: {
+                                functionBlocks: [
+                                    {
+                                        id: 'socket1',
+                                        outputs: [
+                                            { id: 'powerState', value: 2, status: 'ok', targetValue: 2, level: 100 },
+                                        ],
+                                    },
+                                ],
+                            },
+                        },
+                    ],
+                },
+            }),
+        });
+
+        sync.requestDeviceSync(
+            {
+                dSUID: 'socket1',
+                outputChannelList: {
+                    powerLevel: 'devices.m1.socket1.powerLevel',
+                    powerState: 'devices.m1.socket1.powerState',
+                },
+            },
+            ['powerLevel', 'powerState'],
+        );
+        await delay(60);
+
+        expect(structure.written.sort((a, b) => a.id.localeCompare(b.id))).to.deep.equal([
+            { id: 'devices.m1.socket1.powerLevel', value: 100 },
+            { id: 'devices.m1.socket1.powerState', value: 2 },
+        ]);
+        expect(structure.classicReads).to.have.lengthOf(0);
+    });
+
     // Nicht nur das Fake: die ECHTE DSSStructure muss den Sync anlegen und ihre
     // Szenen-/Initial-Pfade wirklich hindurch routen
     it('is wired into the real structure', async () => {
@@ -380,6 +575,39 @@ describe('Smart Home output sync', function () {
             { id: positionId, value: 32 },
         ]);
         struct.clearTimeouts();
+    });
+
+    // Der Minimalfix gegen das Hin- und Herspringen von info.outputApi: vom Sync
+    // uebergebene Einzel-Reads (report: false) melden nicht, direkte klassische
+    // Reads melden weiterhin
+    it('keeps info.outputApi untouched for a classic read without report', async () => {
+        const DSSStructure = require('../lib/dssStructure');
+        const infoStates = [];
+        const struct = /** @type {any} */ (
+            new DSSStructure({
+                dss: {},
+                dssQueue: {
+                    queueUpdateOutputValue: (dev, index, length, prio, callback) =>
+                        setImmediate(() => callback && callback(null, 128)),
+                },
+                adapter: {
+                    log: { silly: () => {}, debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
+                    config: {},
+                    setState: (id, value, ack) => infoStates.push({ id, value, ack }),
+                    isStopping: () => false,
+                },
+            })
+        );
+        struct.setStateSafe = () => {};
+        const dev = { dSUID: 'd1', outputChannelList: { shadePositionOutside: 'devices.m1.d1.shadePositionOutside' } };
+
+        struct.queueClassicOutputRead(dev, 'shadePositionOutside', 'medium', { report: false });
+        await delay(20);
+        expect(infoStates, 'no report without the flag').to.have.lengthOf(0);
+
+        struct.queueClassicOutputRead(dev, 'shadePositionOutside', 'medium');
+        await delay(20);
+        expect(infoStates).to.deep.equal([{ id: 'info.outputApi', value: 'classic', ack: true }]);
     });
 
     it('does nothing after stop()', async () => {
@@ -513,5 +741,53 @@ describe('Scene names and zone temperature through the Smart Home API', function
         nowValue = 1500;
         expect(struct.reconcileOutputValues(), 'after the interval it reconciles again').to.equal(true);
         expect(requests).to.deep.equal(['a', 'a']);
+    });
+});
+
+describe('Activity counters', () => {
+    const ActivityCounter = require('../lib/activityCounter');
+
+    it('sums per metric over the rolling window and forgets the rest', () => {
+        let nowValue = 0;
+        const counter = new ActivityCounter({ windowMs: 10 * 60 * 1000, bucketMs: 60 * 1000, now: () => nowValue });
+        counter.count('classic.events');
+        counter.count('classic.events');
+        counter.count('smarthome.requests');
+        nowValue = 5 * 60 * 1000;
+        counter.count('classic.events');
+        expect(counter.snapshot()).to.deep.equal({ 'classic.events': 3, 'smarthome.requests': 1 });
+
+        // Nach elf Minuten sind die ersten Eimer aus dem Fenster gefallen
+        nowValue = 11 * 60 * 1000;
+        expect(counter.snapshot()).to.deep.equal({ 'classic.events': 1, 'smarthome.requests': 0 });
+        nowValue = 16 * 60 * 1000;
+        expect(counter.snapshot()).to.deep.equal({ 'classic.events': 0, 'smarthome.requests': 0 });
+    });
+
+    it('is announced by both clients for every request', async () => {
+        const DSSSmartHome = require('../lib/dssSmartHome');
+        const seen = [];
+        const client = new DSSSmartHome({
+            host: 'http://127.0.0.1:1',
+            apiKey: 'x',
+            onActivity: (kind, path) => seen.push([kind, path]),
+        });
+        // Der Request scheitert (nichts lauscht auf Port 1) - gezaehlt wird VOR dem Senden
+        await client.getMeteringValues().catch(() => {});
+        client.stop();
+        expect(seen).to.deep.equal([['request', '/api/v1/apartment/meterings/values']]);
+
+        // Und der klassische Client, aus dessen Hook der Status-Tab die Ereignis- und
+        // Befehls-Zaehler speist - derselbe Trick, gezaehlt wird ebenfalls VOR dem Senden
+        const DSS = require('../lib/dss');
+        const seenClassic = [];
+        const classic = new DSS({
+            host: 'http://127.0.0.1:1',
+            appToken: 'x',
+            onActivity: (kind, path) => seenClassic.push([kind, path]),
+        });
+        await classic.httpRequest('/json/apartment/getName').catch(() => {});
+        classic.stop();
+        expect(seenClassic).to.deep.equal([['request', '/json/apartment/getName']]);
     });
 });

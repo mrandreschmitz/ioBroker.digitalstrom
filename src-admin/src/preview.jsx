@@ -63,7 +63,16 @@ function Preview() {
         deleteUnknownObjects: false,
     });
     // Sample of a running hybrid instance for the status tab
-    const status = { connected: true, meteringApi: 'smarthome', outputApi: 'smarthome' };
+    const status = {
+        connected: true,
+        meteringApi: 'smarthome',
+        outputApi: 'smarthome',
+        activity: {
+            windowMinutes: 10,
+            classic: { requests: 14, events: 23, commands: 7, meterReads: 0, outputReads: 0 },
+            smarthome: { requests: 9, meterReads: 6, statusReads: 3, notifications: 41 },
+        },
+    };
 
     return (
         <ThemeProvider theme={buildTheme()}>

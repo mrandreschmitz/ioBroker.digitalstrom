@@ -61,5 +61,10 @@
     "key_created": "API-Schlüssel erstellt und übernommen – mit „Speichern\" wird er dauerhaft gesichert.",
     "section_why": "Warum zwei Schnittstellen?",
     "info_why": "Dein digitalSTROM-Server bietet zwei Schnittstellen mit unterschiedlichen Stärken – und dieser Adapter nutzt bewusst beide. Der App-Token liefert **Ereignisse in Echtzeit** (Tasterdrücke, Sensorwerte, Binäreingänge) und führt **alle Schaltbefehle** aus. Die Smart Home API bündelt **alle Zähler- und Ausgangswerte in je einem einzigen Request**. Zusammen heißt das: Der Adapter startet in Sekunden statt Minuten, die Werte sind nach Szenenaufrufen schneller aktuell, und dein dSS wird deutlich entlastet – bei voller Zuverlässigkeit, denn antwortet die Smart Home API einmal nicht, übernimmt automatisch der bewährte Weg. Welcher Weg gerade arbeitet, zeigt der Tab „Status\".",
-    "status_connection_help": "Klassische Schnittstelle ist erreichbar und angemeldet"
+    "status_connection_help": "Klassische Schnittstelle ist erreichbar und angemeldet",
+    "status_notifications": "Abgleichnetz (Websocket)",
+    "status_notifications_help": "Meldungen des dSS über Änderungen – abgeglichen wird höchstens alle fünf Minuten",
+    "activity_reads": "{n} Lesungen (letzte 10 min)",
+    "activity_messages": "{n} Meldungen empfangen (letzte 10 min)",
+    "activity_events_commands": "{e} Ereignisse empfangen · {c} Befehle gesendet (letzte 10 min)"
 }

@@ -140,6 +140,33 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ## Changelog
 
+### 2.4.19 (2026-08-31)
+
+* **`info.outputApi` no longer ping-pongs between the two APIs.** On hybrid installations single
+  channels the status structurally never delivers (measured live: the outputs of audio devices are
+  missing from the status entirely) made the state flip to "classic" about a minute after every
+  reconciliation and back with the next one - roughly every five minutes, around the clock. Classic
+  reads the sync hands over for such single channels no longer report; "classic" now shows while
+  the status request itself fails, while the Smart Home path pauses in its backoff, with the option
+  off - or once at adapter start when a generic single-channel device (neither light, shade nor
+  joker hardware) delivers its initial value via the deliberately classic read
+* **Channels the status never answers are learned** after two exhausted follow-up budgets and go to
+  the classic read immediately - their values arrive ~60 s earlier and the pointless follow-up
+  status requests (four per trigger, ~59 KB each) stop. A later status answer that carries such a
+  channel again heals the learning automatically
+* **Two id mismatches of the status are resolved by aliases**, so the affected channels are served
+  by the Smart Home API after all: a switched socket (SW-KL200) reports its declared `powerLevel`
+  as the `level` field of a `powerState` output, and blinds (GR-KL300) report the single class-64
+  shade bank only under the `...Outside` ids although they declare the `...Indoor` channels as
+  well - the classic read would have delivered the identical value to both. The `powerLevel` state
+  of such sockets gets a value for the first time ever
+* The helper states of the dSS window-states addon (`<dsuid>_open-tilded`) log at debug instead of
+  info level - the window state itself arrives via the binary input and the device state anyway
+* **The status tab shows live what each interface actually did** in the last 10 minutes
+  (`info.apiActivity`, published every 30 s): received events and sent commands of the classic API,
+  meter and status reads of the Smart Home API and its notifications - the proof that a path really
+  works, not just that it is configured
+
 ### 2.4.18 (2026-08-31)
 
 * **Device output values can be read through the Smart Home API.** With the option enabled, the

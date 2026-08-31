@@ -449,6 +449,9 @@ describe('Adapter logic', () => {
                 expect(ctx.dss, 'the client must still be created').to.not.equal(null);
                 ctx.dss.stop();
                 clearTimeout(ctx.startupTimeout);
+                // main() armed the activity publisher - on the bare ctx it would fire
+                // into nothing and crash the mocha process 30 s after the suite
+                clearInterval(ctx.apiActivityTimer);
             });
 
             it('accepts a real looking app token without complaining', () => {
@@ -468,6 +471,7 @@ describe('Adapter logic', () => {
                 expect(ctx.log.errors).to.deep.equal([]);
                 ctx.dss.stop();
                 clearTimeout(ctx.startupTimeout);
+                clearInterval(ctx.apiActivityTimer);
             });
         });
 

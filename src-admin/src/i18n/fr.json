@@ -61,5 +61,10 @@
     "key_created": "API key created and taken over - press Save to store it permanently.",
     "section_why": "Why two interfaces?",
     "info_why": "Your digitalSTROM server offers two interfaces with different strengths - and this adapter deliberately uses both. The app token delivers **events in real time** (button presses, sensor values, binary inputs) and executes **every switching command**. The Smart Home API bundles **all meter and output values into one single request each**. Together this means: the adapter starts in seconds instead of minutes, values are fresh again quickly after scene calls, and your dSS carries noticeably less load - at full reliability, because should the Smart Home API ever not answer, the proven path takes over automatically. The Status tab shows which path is doing the work right now.",
-    "status_connection_help": "Classic interface is reachable and logged in"
+    "status_connection_help": "Classic interface is reachable and logged in",
+    "status_notifications": "Reconciliation net (websocket)",
+    "status_notifications_help": "dSS change notifications - reconciled at most every five minutes",
+    "activity_reads": "{n} reads (last 10 min)",
+    "activity_messages": "{n} notifications received (last 10 min)",
+    "activity_events_commands": "{e} events received · {c} commands sent (last 10 min)"
 }

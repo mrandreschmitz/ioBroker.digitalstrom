@@ -219,6 +219,82 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
 
+### 2.4.19 (2026-08-31)
+
+* **`info.outputApi` springt nicht mehr zwischen den beiden APIs hin und her.** Auf hybriden Anlagen
+  ließen einzelne Kanäle, die der Status strukturell nie liefert (live gemessen: die Ausgänge von
+  Audio-Geräten fehlen im Status komplett), den State rund eine Minute nach jedem Abgleich auf
+  „classic" kippen und mit dem nächsten wieder zurück - etwa alle fünf Minuten, rund um die Uhr.
+  Klassische Reads, die der Sync für solche Einzelkanäle übergibt, melden nicht mehr; „classic"
+  erscheint, wenn die Statusabfrage selbst scheitert, der Smart-Home-Pfad in seiner Pause ist, die
+  Option aus ist - oder einmal pro Adapterstart, wenn ein generisches Ein-Kanal-Gerät (weder
+  Licht-, Beschattungs- noch Joker-Hardware) seinen Initialwert über den bewusst klassischen
+  Lesepfad liefert
+* **Kanäle, die der Status nie beantwortet, werden gelernt** (nach zwei verbrauchten
+  Follow-up-Budgets) und gehen sofort an den klassischen Read - ihre Werte kommen ~60 s früher und
+  die sinnlosen Follow-up-Statusabfragen (vier je Auslöser, je ~59 KB) entfallen. Liefert eine
+  spätere Statusantwort den Kanal doch, heilt sich das Lernen von selbst
+* **Zwei Id-Verwechslungen des Status werden per Alias aufgelöst**, die betroffenen Kanäle kommen
+  damit doch über die Smart Home API: eine geschaltete Steckdose (SW-KL200) meldet ihr
+  deklariertes `powerLevel` als `level`-Feld eines `powerState`-Outputs, und Rollläden (GR-KL300)
+  melden die eine class-64-Shade-Bank nur unter den `...Outside`-Ids, obwohl sie auch die
+  `...Indoor`-Kanäle deklarieren - der klassische Read hätte beiden denselben Wert geliefert. Der
+  `powerLevel`-State solcher Steckdosen bekommt damit zum ersten Mal überhaupt einen Wert
+* Die Hilfs-States des dSS-Fenster-Addons (`<dsuid>_open-tilded`) loggen auf debug statt info -
+  der Fensterzustand selbst kommt ohnehin über Binäreingang und Geräte-State an
+* **Der Status-Tab zeigt live, was jede Schnittstelle in den letzten 10 Minuten wirklich getan
+  hat** (`info.apiActivity`, alle 30 s veröffentlicht): empfangene Ereignisse und gesendete Befehle
+  der klassischen API, Zähler- und Status-Reads der Smart Home API und ihre Notifications - der
+  Beleg, dass ein Weg wirklich arbeitet, nicht nur, dass er konfiguriert ist
+
+### 2.4.18 (2026-08-31)
+
+* **Die Ausgangswerte der Geräte können über die Smart Home API gelesen werden.** Mit aktivierter
+  Option kommen die initialen Reads beim Start und die Nachlese nach jedem Szenenaufruf aus EINEM
+  Apartment-Status-Request (~59 KB, ~100 ms für alle Geräte auf einmal) statt aus einem gedrosselten
+  klassischen Read je Ausgangskanal - der Teil des Starts, der auf großen Anlagen Minuten dauern
+  konnte. Der Status liefert jeden Ausgang bereits in der Skala der ioBroker-States, offline gegen
+  einen echten Objektexport verifiziert: jeder vergleichbare Wert stimmt, und 132 Kanal-States, die
+  der klassische Pfad nie füllen konnte (hue, colortemp, x, y der Lichter), bekommen endlich Werte
+* Die aus Live-Messungen gelernten Regeln sind eingebaut: ein Ausgang, der gerade **fährt, trägt
+  keinen Wert** im Status und behält seinen letzten Stand (nach 15 s erneut gefragt, höchstens
+  viermal, dann hat der klassische Read das letzte Wort); eine Antwort, die schon unterwegs war,
+  bedient nie einen Auslöser, der nach ihrem Abflug kam; boolesche Kanäle bleiben beim klassischen
+  Read; eine gescheiterte Statusabfrage fällt sofort auf die klassischen Reads zurück und pausiert
+  den Smart-Home-Pfad für fünf Minuten. Mit ausgeschalteter Option verhalten sich die Werte exakt
+  wie bisher - einziger Unterschied: Requests, die nie funktionierten, werden nicht mehr gesendet
+  (der colortemp-Read eines Lichts ging immer kaputt raus und erzeugte nur eine Warnung)
+* **Der Client der neuen API kann nicht mehr hängen bleiben.** Eine Verbindung, die mitten im
+  Antwort-Body starb, ließ den Request bislang ewig offen - kein Fehler, kein Retry. Der klassische
+  Client hatte diesen Handler immer, dem neuen fehlte er. Ein falsches Passwort bei der
+  Key-Erstellung zeigt jetzt die echte Antwort des dSS statt eines generischen Satzes
+* **Der API-Key-Dialog benutzt das App-Token aus dem Formular.** App-Token und API-Key in einem
+  Besuch anzulegen scheiterte bisher an „Bitte zuerst das App-Token erstellen oder eintragen", weil
+  die Instanz nur das GESPEICHERTE Token kannte. Ein gespeicherter API-Key, der nicht nach einem
+  aussieht (typisch: js-controller konnte ihn nach einem Backup-Restore nicht entschlüsseln), wird
+  beim Start benannt statt als anonymer HTTP 401, und ein dSS ohne /api/v1 (HTTP 404) geht sofort
+  in den maximalen Backoff und sagt es einmal, statt stündlich zu warnen
+* Grundlagen-Härtung des Notification-Websockets: tote Verbindungen werden per Ping nach 30 s
+  Stille erkannt und nach 90 s neu verbunden, fragmentierte Nachrichten sind in der Gesamtgröße
+  begrenzt, und die Debounce-Defaults folgen der gemessenen Realität (5 s Koaleszenz, 15 s Maximum)
+* **Der Notification-Websocket wird jetzt genutzt - als bewusst gedrosseltes Sicherheitsnetz.**
+  Jeder Zähler-Tick feuert eine Notification ohne Nutzdaten (gemessen: 17 in 75 Sekunden), während
+  Taster und Szenen von den klassischen Events bereits präzise gemeldet werden. Eine Notification
+  stößt deshalb höchstens alle fünf Minuten einen Abgleich aller Ausgangswerte an: das fängt, was
+  an ioBroker vorbei passiert - eine Fremd-App, die einen Ausgang direkt schreibt - ohne
+  Dauerlast. Der Kanal verbindet sich selbst neu, ein dSS ohne ihn ändert nichts
+* **Jede Statusantwort aktualisiert auch die Raumtemperaturregelung jeder Zone** - Sollwert und
+  Stellgröße, grad- und prozentgenau gegen eine echte Anlage verifiziert; die Betriebsmodi bleiben
+  beim klassischen Pfad. Und die in digitalSTROM vergebenen Szenennamen werden einmalig aus der
+  neuen API geladen, um die Lücken der klassischen Benennung zu füllen
+* **Die Einstellungen erklären den Hybrid-Ansatz und zeigen ihn bei der Arbeit.** Der
+  Verbindungs-Tab führt durch drei nummerierte Schritte - Serveradresse (einmal eingetragen,
+  bedient beide Schnittstellen), das App-Token als Basiszugang in natürlicher Reihenfolge
+  (Anmeldedaten zuerst, das erstellte Token landet darunter) und der Smart-Home-API-Key als
+  Beschleuniger - am PC nebeneinander. Ein neuer Status-Tab zeigt die Arbeitsteilung live: welche
+  Schnittstelle gerade Ereignisse, Zählerwerte und Ausgangswerte liefert, gestützt auf den neuen
+  State `info.outputApi`, das Gegenstück zu `info.meteringApi`
+
 ### 2.4.15 (2026-08-30)
 
 * **Der Dialog scrollt jetzt selbst.** Er benutzte `minHeight: 100%` und verließ sich darauf, dass der

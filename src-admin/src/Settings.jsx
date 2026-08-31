@@ -87,8 +87,8 @@ function Card({ icon, title, step, children }) {
     );
 }
 
-/** One row of the division-of-labour table: what runs, and over which interface. */
-function ApiRow({ label, help, chip }) {
+/** One row of the division-of-labour table: what runs, over which interface, how much. */
+function ApiRow({ label, help, chip, activity }) {
     return (
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }} sx={{ py: 1.25 }}>
             <Box sx={{ flexGrow: 1, minWidth: 0 }}>
@@ -99,7 +99,14 @@ function ApiRow({ label, help, chip }) {
                     </Typography>
                 ) : null}
             </Box>
-            <Box sx={{ flexShrink: 0 }}>{chip}</Box>
+            <Box sx={{ flexShrink: 0, textAlign: { xs: 'left', sm: 'right' } }}>
+                {chip}
+                {activity ? (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                        {activity}
+                    </Typography>
+                ) : null}
+            </Box>
         </Stack>
     );
 }
@@ -127,15 +134,26 @@ export default function Settings({ native, onChange, onSendTo, alive, t, initial
     // Not every field has an explanation. Both this preview and I18n return the key
     // itself when a text is missing, which must not end up on the screen.
     const th = key => (t(key) === key ? '' : t(key));
-    // Which interface delivered the last reading - the chips of the status tab
-    const apiChip = value =>
+    // Which interface delivered the last reading - the chips of the status tab.
+    // A WORKING classic path is just as green as the Smart Home path: the colour
+    // means "alive", not "modern".
+    const apiChip = (value, alive) =>
         value === 'smarthome' ? (
             <Chip size="small" color="success" icon={<BoltIcon />} label={t('api_smarthome')} />
         ) : value === 'classic' ? (
-            <Chip size="small" variant="outlined" icon={<KeyIcon />} label={t('api_classic')} />
+            <Chip
+                size="small"
+                color={alive ? 'success' : 'default'}
+                variant={alive ? 'filled' : 'outlined'}
+                icon={<KeyIcon />}
+                label={t('api_classic')}
+            />
         ) : (
             <Chip size="small" variant="outlined" label={t('api_waiting')} />
         );
+    // "{n} Lesungen (letzte 10 min)" - die Zahlen kommen aus info.apiActivity
+    const fmtActivity = (key, n) => (typeof n === 'number' ? t(key).replace('{n}', String(n)) : '');
+    const activity = status && status.activity;
     const [credentials, setCredentials] = useState({ username: '', password: '' });
     const [showToken, setShowToken] = useState(false);
     const [tokenState, setTokenState] = useState({ running: false, error: '', done: false });
@@ -466,24 +484,60 @@ export default function Settings({ native, onChange, onSendTo, alive, t, initial
                                 <ApiRow
                                     label={t('status_events')}
                                     help={th('status_events_help')}
-                                    chip={
-                                        <Chip
-                                            size="small"
-                                            variant="outlined"
-                                            icon={<KeyIcon />}
-                                            label={t('api_classic')}
-                                        />
+                                    chip={apiChip('classic', status && status.connected)}
+                                    activity={
+                                        activity &&
+                                        t('activity_events_commands')
+                                            .replace('{e}', String(activity.classic.events || 0))
+                                            .replace('{c}', String(activity.classic.commands || 0))
                                     }
                                 />
                                 <ApiRow
                                     label={t('status_meters')}
                                     help={th('status_meters_help')}
-                                    chip={apiChip(status && status.meteringApi)}
+                                    chip={apiChip(status && status.meteringApi, status && status.connected)}
+                                    activity={
+                                        activity &&
+                                        fmtActivity(
+                                            'activity_reads',
+                                            status && status.meteringApi === 'smarthome'
+                                                ? activity.smarthome.meterReads
+                                                : activity.classic.meterReads,
+                                        )
+                                    }
                                 />
                                 <ApiRow
                                     label={t('status_outputs')}
                                     help={th('status_outputs_help')}
-                                    chip={apiChip(status && status.outputApi)}
+                                    chip={apiChip(status && status.outputApi, status && status.connected)}
+                                    activity={
+                                        activity &&
+                                        fmtActivity(
+                                            'activity_reads',
+                                            status && status.outputApi === 'smarthome'
+                                                ? activity.smarthome.statusReads
+                                                : activity.classic.outputReads,
+                                        )
+                                    }
+                                />
+                                <ApiRow
+                                    label={t('status_notifications')}
+                                    help={th('status_notifications_help')}
+                                    chip={
+                                        activity && activity.smarthome.notifications > 0 ? (
+                                            <Chip
+                                                size="small"
+                                                color="success"
+                                                icon={<BoltIcon />}
+                                                label={t('api_smarthome')}
+                                            />
+                                        ) : (
+                                            <Chip size="small" variant="outlined" label={t('api_smarthome')} />
+                                        )
+                                    }
+                                    activity={
+                                        activity && fmtActivity('activity_messages', activity.smarthome.notifications)
+                                    }
                                 />
                             </Stack>
                         </Stack>

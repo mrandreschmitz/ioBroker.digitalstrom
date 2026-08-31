@@ -23,6 +23,7 @@ const DSS = require('./lib/dss');
 const DSSQueue = require('./lib/dssQueue');
 const DSSStructure = require('./lib/dssStructure');
 const DSSSmartHome = require('./lib/dssSmartHome');
+const ActivityCounter = require('./lib/activityCounter');
 const configUtils = require('./lib/configUtils');
 const dssConstants = require('./lib/constants');
 
@@ -364,6 +365,10 @@ class Digitalstrom extends utils.Adapter {
             clearTimeout(this.dataPollTimeout);
             this.dataPollTimeout = null;
         }
+        if (this.apiActivityTimer) {
+            clearInterval(this.apiActivityTimer);
+            this.apiActivityTimer = null;
+        }
         if (this.startupTimeout) {
             clearTimeout(this.startupTimeout);
             this.startupTimeout = null;
@@ -506,12 +511,16 @@ class Digitalstrom extends utils.Adapter {
                     'one with your DSS login, and save. The adapter tries to log in anyway.',
             );
         }
+        // Zaehlt je Weg, was wirklich laeuft - der Status-Tab zeigt daraus
+        // "x empfangen / y gesendet in den letzten 10 Minuten"
+        this.apiActivity = new ActivityCounter();
         let dss;
         try {
             dss = new DSS({
                 host: this.config.host,
                 appToken: this.config.appToken,
                 validateCertificate: this.config.validateCertificate,
+                onActivity: (kind, detail) => this.countClassicActivity(kind, detail),
                 logger: {
                     silly: this.log.silly.bind(this),
                     debug: this.log.debug.bind(this),
@@ -531,6 +540,8 @@ class Digitalstrom extends utils.Adapter {
         }
         this.dss = dss;
         this.smartHome = this.createSmartHomeClient();
+        // 30 s Takt reicht: der Status-Tab zeigt ein 10-Minuten-Fenster
+        this.apiActivityTimer = setInterval(() => this.publishApiActivity(), 30000);
         const dssQueue = new DSSQueue({
             logger: {
                 silly: this.log.silly.bind(this),
@@ -748,6 +759,88 @@ class Digitalstrom extends utils.Adapter {
     }
 
     /**
+     * Sorts classic API activity into the counters of the status tab.
+     *
+     * @param {string} kind 'request' | 'eventPoll' | 'event'
+     * @param {string} detail request path or event name
+     */
+    countClassicActivity(kind, detail) {
+        if (!this.apiActivity) {
+            return;
+        }
+        if (kind === 'event') {
+            return void this.apiActivity.count('classic.events');
+        }
+        if (kind === 'eventPoll') {
+            // Der permanente Long-Poll ist Zuhoeren, kein Arbeitsauftrag - er wuerde
+            // die Request-Zahl nur kuenstlich aufblasen
+            return;
+        }
+        this.apiActivity.count('classic.requests');
+        if (detail.includes('/json/metering/')) {
+            this.apiActivity.count('classic.meterReads');
+        } else if (detail.includes('getOutputValue') || detail.includes('getConfig')) {
+            this.apiActivity.count('classic.outputReads');
+        } else if (
+            /callScene|undoScene|setValue|setOutputValue|\/state\/set|pushSensorValue|setTemperatureControlValues|\/event\/raise/.test(
+                detail,
+            )
+        ) {
+            // Geschriebene Befehle - die zweite Richtung der Ereignisse-und-Steuerung-Zeile
+            this.apiActivity.count('classic.commands');
+        }
+    }
+
+    /**
+     * @param {string} kind currently always 'request'
+     * @param {string} apiPath
+     */
+    countSmartHomeActivity(kind, apiPath) {
+        if (!this.apiActivity || kind !== 'request') {
+            return;
+        }
+        this.apiActivity.count('smarthome.requests');
+        if (apiPath.includes('/meterings/values')) {
+            this.apiActivity.count('smarthome.meterReads');
+        } else if (apiPath.includes('/apartment/status')) {
+            this.apiActivity.count('smarthome.statusReads');
+        }
+    }
+
+    /**
+     * Writes the rolling 10 minute activity into info.apiActivity, at most every
+     * 30 seconds. The status tab of the settings renders it live - that is the
+     * proof that a path really works, not just that it is configured.
+     */
+    publishApiActivity() {
+        if (this.isStopping() || !this.apiActivity) {
+            return;
+        }
+        const counts = this.apiActivity.snapshot();
+        const payload = JSON.stringify({
+            windowMinutes: 10,
+            classic: {
+                requests: counts['classic.requests'] || 0,
+                events: counts['classic.events'] || 0,
+                commands: counts['classic.commands'] || 0,
+                meterReads: counts['classic.meterReads'] || 0,
+                outputReads: counts['classic.outputReads'] || 0,
+            },
+            smarthome: {
+                requests: counts['smarthome.requests'] || 0,
+                meterReads: counts['smarthome.meterReads'] || 0,
+                statusReads: counts['smarthome.statusReads'] || 0,
+                notifications: counts['smarthome.notifications'] || 0,
+            },
+        });
+        if (payload === this.lastApiActivityPayload) {
+            return;
+        }
+        this.lastApiActivityPayload = payload;
+        this.setState('info.apiActivity', payload, true);
+    }
+
+    /**
      * Opens the notification websocket of the Smart Home API as a safety net.
      *
      * The notifications carry no payload - they only say THAT something changed, and
@@ -775,6 +868,7 @@ class Digitalstrom extends utils.Adapter {
             this.log.debug('The dSS reports a structure change');
         });
         this.smartHome.on('notificationConnected', () => this.log.debug('Smart Home notification channel connected'));
+        this.smartHome.on('notification', () => this.apiActivity && this.apiActivity.count('smarthome.notifications'));
         this.smartHome.startNotifications().then(
             () =>
                 this.log.info(
@@ -821,6 +915,7 @@ class Digitalstrom extends utils.Adapter {
                 host: this.config.host,
                 apiKey: this.config.smartHomeApiKey,
                 validateCertificate: this.config.validateCertificate,
+                onActivity: (kind, apiPath) => this.countSmartHomeActivity(kind, apiPath),
                 logger: {
                     silly: this.log.silly.bind(this),
                     debug: this.log.debug.bind(this),
@@ -1000,7 +1095,14 @@ class Digitalstrom extends utils.Adapter {
             }
             const sourceDeviceId = dssStruct.stateMap[data.properties.statename];
             if (!sourceDeviceId) {
-                this.log.info(`Unhandled State Change: ${data.properties.statename}`);
+                if (data.name === 'addonStateChange') {
+                    // Helper states of dSS addons (e.g. "<dsuid>_open-tilded" of the
+                    // window-states addon) have no ioBroker object by design - the
+                    // window state itself arrives via binary input and device state
+                    this.log.debug(`Unhandled State Change: ${data.properties.statename}`);
+                } else {
+                    this.log.info(`Unhandled State Change: ${data.properties.statename}`);
+                }
                 return;
             }
             // The valueTrue/valueFalse mapping of the state is applied by setDssState()
