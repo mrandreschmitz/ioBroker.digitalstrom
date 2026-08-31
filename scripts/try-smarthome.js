@@ -11,8 +11,8 @@
  * Nur lesend, solange --set nicht angegeben wird.
  *
  * Benutzung:
- *   node scripts/try-smarthome.js --host 10.13.10.4 --token <apiKey> --seconds 120
- *   node scripts/try-smarthome.js --host 10.13.10.4 --token-file ds-probe/apikey.txt
+ *   node scripts/try-smarthome.js --host 192.168.1.10 --token <apiKey> --seconds 120
+ *   node scripts/try-smarthome.js --host 192.168.1.10 --token-file ds-probe/apikey.txt
  *
  * Optionen:
  *   --host <ip|name>       dSS Adresse (Pflicht)

@@ -13,8 +13,9 @@ Anbindung von digitalSTROM-Geräten über den DSS (digitalSTROM-Server)
 
 > Dies ist ein gepflegter Fork von [ioBroker/ioBroker.digitalstrom](https://github.com/ioBroker/ioBroker.digitalstrom)
 > von Apollon77, der seit 2021 nicht mehr aktualisiert wurde. Die zugrunde liegende Bibliotheksschicht
-> wurde ersetzt, der Admin-Dialog auf JsonConfig migriert und eine größere Zahl von Laufzeitfehlern
-> behoben. Einzelheiten stehen im Changelog.
+> wurde ersetzt, der Admin-Dialog neu gebaut, neben der klassischen Schnittstelle wird die moderne
+> Smart Home API des dSS genutzt und eine größere Zahl von Laufzeitfehlern behoben.
+> Einzelheiten stehen im Changelog.
 >
 > Dieser Fork sendet **keine** Fehlerberichte: Das Sentry-Plugin des Originaladapters wurde entfernt,
 > weil dessen Berichte in einem Projekt der ioBroker-Organisation gelandet wären, auf das dieser Fork
@@ -28,22 +29,60 @@ Zum Testen neuerer Versionen kann der Adapter auch direkt von GitHub installiert
 in Admin die Option „Beliebig / Custom Install" mit der URL
 https://github.com/mrandreschmitz/ioBroker.digitalstrom.
 
-## Verwendung
+## Zwei Schnittstellen, ein Team
 
-Der Konfigurationsdialog mit den Verbindungsdaten und dem App-Token:
+Ein digitalSTROM-Server bietet zwei Schnittstellen mit unterschiedlichen Stärken — und dieser
+Adapter nutzt bewusst beide als Team:
 
-![Reiter „Verbindung" des Konfigurationsdialogs](docs/admin-connection.png)
+* Die **klassische Schnittstelle** (App-Token) ist der Basiszugang des Adapters: Tasterdrücke,
+  Sensorwerte und Binäreingänge kommen als **Ereignisse in Echtzeit** an, und **jeder
+  Schaltbefehl** läuft über sie.
+* Die **Smart Home API** (`/api/v1`, dSS-Firmware 1.19 oder neuer) ist der Lese-Turbo:
+  **alle Zählerwerte und alle Geräte-Ausgangswerte** (Helligkeit, Rollladenpositionen, Farbwerte)
+  kommen gebündelt in **je einem einzigen Request** statt in einem Request pro Wert. Obendrein
+  liefert sie die Solltemperaturen der Raumregelung jeder Zone, die in digitalSTROM vergebenen
+  Szenennamen und einen Änderungs-Websocket, über den der Adapter Werte abgleicht, die an
+  ioBroker vorbei geändert wurden — etwa von einer Dritt-App.
 
-Abfrageintervall und Verhalten des Adapters liegen im zweiten Reiter:
+Zusammen heißt das: Der Adapter **startet in Sekunden statt Minuten**, auch auf großen Anlagen,
+Werte sind nach Szenenaufrufen schnell wieder frisch, Farbwerte, die der klassische Weg nicht
+lesen konnte, werden endlich befüllt — und der dSS trägt spürbar weniger Last, bequem innerhalb
+der digitalSTROM-Anfragerichtlinien. Und das bei voller Zuverlässigkeit: Jede Aufgabe der Smart
+Home API fällt automatisch auf den klassischen Weg zurück, der Adapter bleibt also auch mit nur
+dem App-Token vollständig funktionsfähig.
 
-![Reiter „Einstellungen" des Konfigurationsdialogs](docs/admin-settings.png)
+Der **Status-Tab** der Instanzeinstellungen zeigt diese Arbeitsteilung live — welche
+Schnittstelle gerade Ereignisse, Zählerwerte und Ausgangswerte liefert und wie viel jede von
+ihnen in den letzten 10 Minuten wirklich getan hat:
 
-Nach der Installation und dem Anlegen einer Instanz erscheint der Admin-Dialog.
-Zuerst trägst du IP-Adresse oder Hostnamen deines DSS ein. Danach kannst du entweder einen bereits im
-DSS-Webinterface erzeugten App-Token eintragen oder Benutzername und Passwort angeben, damit der
-Adapter automatisch einen App-Token erstellt.
+![Status-Tab: die Arbeitsteilung der beiden Schnittstellen, live](docs/admin-status-de.png)
 
-Zusätzlich zu den Anmeldedaten stehen folgende Einstellungen zur Verfügung:
+## Konfiguration
+
+Der Verbindungs-Tab führt in drei nummerierten Schritten durch die Einrichtung: die
+Serveradresse (einmal eingetragen — sie bedient beide Schnittstellen), das App-Token als
+Basiszugang (direkt aus dem Dialog mit deinen dSS-Anmeldedaten erstellt, die nicht gespeichert
+werden) und der Smart-Home-API-Key als empfohlene Beschleunigung — mit einem Klick aus dem
+vorhandenen App-Token erstellt, ohne erneutes Passwort:
+
+![Reiter „Verbindung" des Konfigurationsdialogs](docs/admin-connection-de.png)
+
+Abfrageintervall und Verhalten des Adapters liegen im Einstellungen-Tab:
+
+![Reiter „Einstellungen" des Konfigurationsdialogs](docs/admin-settings-de.png)
+
+Der Hinweise-Tab fasst die „Warum zwei Schnittstellen?"-Geschichte und den Zertifikatshinweis
+direkt im Dialog zusammen:
+
+![Reiter „Hinweise" des Konfigurationsdialogs](docs/admin-notes-de.png)
+
+Zusätzlich zu den Verbindungsdaten stehen folgende Einstellungen zur Verfügung:
+
+* **Zähler- und Ausgangswerte über die Smart Home API lesen**: Der Schalter aus Schritt 3. Ein
+  Request bedient alle Klemmen, ein Status-Request alle Geräteausgänge. Benötigt einen dSS mit
+  Firmware 1.19 oder neuer und den API-Key aus dem Verbindungs-Tab. Gefahrlos aktivierbar: Wann
+  immer die Smart Home API nicht antwortet, übernimmt automatisch der klassische Weg und der
+  Adapter läuft unverändert weiter.
 
 * **Datenabfrageintervall**: Intervall, in dem die Zählerdaten („Energy Meter") von den dSM-Geräten
   abgefragt werden. Standard 100 s, Minimum 60 s. Die digitalSTROM-Regeln 8 und 9 erlauben höchstens
@@ -174,8 +213,10 @@ Die Geräte sind als „Klemme/dSM"."Geräte-ID" strukturiert, darunter jeweils:
 
 ## Bekannte Einschränkungen und Systemeigenheiten
 
-* Das DSS-System arbeitet überwiegend mit Szenen statt mit echten Gerätewerten. Das Auslesen echter
-  Werte ist zudem langsam, weil es über den Bus laufen muss.
+* Das digitalSTROM-System ist von Haus aus szenenzentriert: Die meisten Aktionen sind
+  Szenenaufrufe statt einzelner Wertänderungen, und der Adapter bildet dieses Modell ab. Mit
+  aktivierter Smart Home API kommen die echten Ausgangswerte zusätzlich gebündelt in einem
+  Status-Request an und bleiben so ohne zusätzlichen Busverkehr frisch.
 * Werte können leer bleiben, wenn das System sie nicht meldet.
 * Binäreingänge wurden ursprünglich ohne passende Geräte zum Testen implementiert. Inzwischen ist
   belegt, dass sie funktionieren: Bewegungsmelder und Fenstergriffe melden darüber. Der Zustand behält die

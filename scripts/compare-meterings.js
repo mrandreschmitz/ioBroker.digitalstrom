@@ -13,7 +13,7 @@
  *
  * Benutzung:
  *   DSS_PASSWORD='...' node scripts/compare-meterings.js \
- *       --host 10.13.10.4 --token-file ds-probe/apikey.txt
+ *       --host 192.168.1.10 --token-file ds-probe/apikey.txt
  *
  * Optionen:
  *   --host <ip|name>       dSS Adresse (Pflicht)

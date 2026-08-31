@@ -13,7 +13,8 @@ Support for digitalSTROM devices via DSS
 
 > This is a maintained fork of [ioBroker/ioBroker.digitalstrom](https://github.com/ioBroker/ioBroker.digitalstrom)
 > by Apollon77, which has not been updated since 2021. The original library layer was replaced,
-> the admin dialog was migrated to JsonConfig and a large number of runtime bugs were fixed.
+> the admin dialog was rebuilt from scratch, the modern Smart Home API of the dSS is used
+> alongside the classic interface and a large number of runtime bugs were fixed.
 > See the changelog for details.
 >
 > This fork does **not** send any error reports: the Sentry plugin of the original adapter was
@@ -28,21 +29,58 @@ As soon as the adapter is officially released he will be in the repo and simply 
 
 During test phase, or for testing of newer versions (see relevant forum threads) you can also install the adapter directly from GitHub using https://github.com/mrandreschmitz/ioBroker.digitalstrom as URL. Please use the Admin "Custom Install" option for this.
 
-## Usage
+## Two interfaces, one team
 
-The configuration dialog with the connection settings and the app token:
+A digitalSTROM server offers two interfaces, each with its own strengths - and this adapter
+deliberately uses both as a team:
+
+* The **classic interface** (app token) is the adapter's base access: button presses, sensor
+  values and binary inputs arrive as **events in real time**, and **every switching command**
+  runs through it.
+* The **Smart Home API** (`/api/v1`, dSS firmware 1.19 or newer) is the reading turbo:
+  **all meter values and all device output values** (brightness, blind positions, colour values)
+  arrive bundled in **one single request each** instead of one request per value. On top it
+  delivers the room temperature setpoints of every zone, the scene names given in digitalSTROM,
+  and a change-notification websocket the adapter uses to reconcile values that were changed
+  past ioBroker - for example by a third-party app.
+
+Together this means: the adapter **starts in seconds instead of minutes** even on large
+installations, values are fresh again quickly after scene calls, colour values the classic path
+could not read finally get filled - and the dSS carries noticeably less load, comfortably within
+the digitalSTROM request guidelines. All of it at full reliability: every Smart Home API task
+falls back to the classic path automatically, so the adapter stays completely functional with
+just the app token.
+
+The **status tab** of the instance settings shows this division of labour live - which interface
+currently delivers events, meter values and output values, and how much each of them actually did
+in the last 10 minutes:
+
+![Status tab: the division of labour between the two interfaces, live](docs/admin-status.png)
+
+## Configuration
+
+The connection tab walks through the setup in three numbered steps: the server address (entered
+once - it serves both interfaces), the app token as the base access (created directly from the
+dialog with your dSS credentials, which are not stored), and the Smart Home API key as the
+recommended acceleration - created from the existing app token with one click, no password needed:
 
 ![Connection tab of the configuration dialog](docs/admin-connection.png)
 
-The polling interval and the behaviour of the adapter sit on the second tab:
+The polling interval and the behaviour of the adapter sit on the settings tab:
 
 ![Settings tab of the configuration dialog](docs/admin-settings.png)
 
-After installing the adapter and creating an instance the admin dialog will appear.
-First of all you need to enter your DSS IP/Hostname. Then you can choose if you already have manually created an App Token in the DSS Web-Interface or not.
-If you do not have an App-Token simply enter your Username and Password to retrieve an App Token automatically.
+The notes tab summarizes the "why two interfaces?" story and the certificate note right inside
+the dialog:
 
-Additionally to the Authentication settings (see above) you can edit the following settings to your needs:
+![Notes tab of the configuration dialog](docs/admin-notes.png)
+
+Additionally to the connection settings you can edit the following settings to your needs:
+
+* **Read meter and output values through the Smart Home API**: The switch of step 3. One request
+  serves all circuits, one status request all device outputs. Needs a dSS with firmware 1.19 or
+  newer and the API key from the connection tab. Safe to enable: whenever the Smart Home API does
+  not answer, the classic path takes over automatically and the adapter keeps running unchanged.
 * **Data Polling Interval**: This is the interval the "Energy Meter" data are requested from your DSM devices. Default 100s, minimum 60s. The digitalSTROM rules 8 and 9 allow at most one cyclic read per minute and circuit. One cycle reads two values per circuit (`getConsumption` and `getEnergyMeterValue`) and the timer for the next cycle only starts once they are answered, so a cycle takes about 20s longer than the configured interval - measured against a real DSS: 60s results in ~1.5 requests per minute and circuit, 100s in exactly 1.0. That is why 100s is the default. Lower values stay possible from 60s on, but they exceed the guideline. Set 0 to disable polling of the energy meter data completely. Invalid values fall back to the default.
 * **Use Scene Preset Values**: The Digitalstrom system is not really designed to have the real output values of the devices available all the time and works most with Scenes. For Light and Shader/Blinds some output values are defined for many of the available Scenes. The adapter knows them and when this setting is active the adapter will try to lookup these values when a scene gets triggered and set those values to the states directly. The real values are requested with a delay. This method might deliver wrong values when local priorities are set/used!
 * **Request Device Output values actively**: The adapter initializes all device output values on start and also after scenes that are effective for a device. There are delay but in fact all those messages will go over the Digitalstrom bus. If this is problematic for you you can try to deactivate this feature. This option only controls **reading** output values from the DSS - writing (e.g. setting a blind position or angle, or a dimmer value) always works, independent of this setting.
@@ -112,7 +150,10 @@ The devices are structured with "circuit/dSM"."deviceID" and the subsctructure i
 * **Host field**: IP addresses, DNS names, full URLs and IPv6 addresses (in brackets) are accepted. Without an explicit port 8080 is used. Credentials, paths or query strings in the host field are rejected.
 
 ## Known Issues / System design effects
-* The DSS system mainly works using scenes and not via real device values and also getting the real values is very slow because needs to be fetched via the bus. 
+* The digitalSTROM system is scene-centric by design: most actions are scene calls rather than
+  individual value writes, and the adapter mirrors that model. With the Smart Home API enabled,
+  the real output values additionally arrive bundled in one status request, so they stay fresh
+  without extra bus traffic.
 * Values might be empty when they were not reported by the system
 * Binary inputs were originally implemented without any hardware to test against. They are confirmed to work in the meantime, with motion detectors and window handles reporting through them. The state keeps the number the DSS reports, so history data stays comparable, but the numbers are named: `inactive`/`active` for a normal binary input, and `closed`/`open`/`tilted` for a window handle, which reports three positions instead of two.
 * Meaningful output value reading and writing is only implemented for Ligh (Yellow) and Shade/Blind (Gray) devices.
