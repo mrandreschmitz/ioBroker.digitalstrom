@@ -455,10 +455,9 @@ describe('Smart Home output sync', function () {
     });
 
     // Eine geschaltete Steckdose (SW-KL200) deklariert powerLevel, der Status meldet
-    // den Wert aber als level-Feld eines powerState-Outputs. Die 0..100-Skala des
-    // level-Felds ist ANGENOMMEN (wie alle gemessenen Statuswerte; der einzige
-    // Live-Messwert ist bisher 0 und damit skalenneutral) - zeigt eine eingeschaltete
-    // Steckdose je powerLevel 1 statt 100, gehoert der Alias umgerechnet
+    // den Wert aber als level-Feld eines powerState-Outputs - und zwar 0..1 statt
+    // 0..100 (live gemessen: 0 bei aus, 1 bei versorgtem Geraet; 2.4.19 schrieb
+    // deshalb "1 %"). Der Alias skaliert auf den 0..100-State und klemmt den Wert
     it('maps the power level a socket reports as the level of its powerState output', async () => {
         const structure = createFakeStructure();
         const sync = createSync(structure, {
@@ -473,7 +472,7 @@ describe('Smart Home output sync', function () {
                                     {
                                         id: 'socket1',
                                         outputs: [
-                                            { id: 'powerState', value: 2, status: 'ok', targetValue: 2, level: 100 },
+                                            { id: 'powerState', value: 2, status: 'ok', targetValue: 2, level: 1 },
                                         ],
                                     },
                                 ],

@@ -140,6 +140,13 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ## Changelog
 
+### 2.4.20 (2026-08-31)
+
+* **The power level alias scales correctly.** The live smoke test of 2.4.19 refuted the assumed
+  0..100 scale of the `level` field: a switched socket powering a device reported `level: 1` and the
+  `powerLevel` state showed "1 %". The field is 0..1 (matching the structure, which normalizes the
+  switch threshold to 0..1 as well) and is now scaled and clamped to the 0..100 state
+
 ### 2.4.19 (2026-08-31)
 
 * **`info.outputApi` no longer ping-pongs between the two APIs.** On hybrid installations single

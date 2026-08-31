@@ -219,6 +219,14 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
 
+### 2.4.20 (2026-08-31)
+
+* **Der Power-Level-Alias skaliert jetzt richtig.** Der Live-Smoke-Test von 2.4.19 widerlegte die
+  angenommene 0..100-Skala des `level`-Felds: eine geschaltete Steckdose mit versorgtem Gerät
+  meldete `level: 1`, der `powerLevel`-State zeigte „1 %". Das Feld ist 0..1 (passend zur Struktur,
+  die auch die Schaltschwelle auf 0..1 normalisiert) und wird jetzt auf den 0..100-State skaliert
+  und geklemmt
+
 ### 2.4.19 (2026-08-31)
 
 * **`info.outputApi` springt nicht mehr zwischen den beiden APIs hin und her.** Auf hybriden Anlagen
