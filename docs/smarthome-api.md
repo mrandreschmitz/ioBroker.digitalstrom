@@ -120,9 +120,11 @@ without burning ~60 s of follow-ups per trigger; every later status answer that 
 again heals the learning, and a learned channel is probed through the status once an hour so the
 learning cannot latch when no other status traffic runs. `classic` therefore shows while the status
 request itself fails, while the sync pauses in its backoff, or when the option is off - plus once per
-adapter start on installations with a generic single-channel device (hardware that is neither light,
-shade nor joker): its initial read deliberately stays classic and counts for the state, so the state
-cannot stay empty on installations whose outputs are only such devices.
+adapter start on an installation whose outputs are generic devices (hardware that is neither light,
+shade nor joker). Their initial read counts for the state: a native terminal reads it through the
+channel index it declares itself, vDC hardware through the named channel read. With the Smart Home
+API on, a vDC device hands that read to the bundled status request instead, so such an installation
+reports `smarthome` as soon as the first value arrives.
 
 `info.connection` is deliberately NOT set by a cycle that only used the Smart Home API: such a cycle
 sends no classic request and therefore cannot testify about it. A dSS that is really unreachable still

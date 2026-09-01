@@ -689,6 +689,217 @@ describe('DSSStructure', () => {
         });
     });
 
+    // vDC-Geraete (Hue, Sonos) haben keinen eigenen create*Device-Pfad und lasen ihre
+    // Ausgaenge deshalb NIE - im Sammelzweig gab es bei mehreren Kanaelen nur eine
+    // Debug-Zeile, bei einem Kanal einen Offset-Read, den vDCs nicht beantworten
+    describe('generic devices reach the reads that work for them', () => {
+        function genericContext() {
+            const namedReads = [];
+            const offsetReads = [];
+            const syncRequests = [];
+            const written = [];
+            const struct = createStructure({
+                dss: new EventEmitter(),
+                dssQueue: {
+                    queueReadOutputChannels: (dev, prio, callback) => {
+                        namedReads.push({ dSUID: dev.dSUID, prio });
+                        setImmediate(() => callback(null, { brightness: { value: 50 }, colortemp: { value: 370 } }));
+                    },
+                    queueUpdateOutputValue: (dev, index, length, prio, callback) => {
+                        offsetReads.push({ dSUID: dev.dSUID, index });
+                        setImmediate(() => callback && callback(null, 0));
+                    },
+                    pushQueryQueue: (circuit, entry, prio, callback) =>
+                        setImmediate(() => callback && callback(null, { ok: true })),
+                },
+                adapter: {
+                    log: silentLogger,
+                    config: { initializeOutputValues: true, usePresetValues: false },
+                    setState: () => {},
+                    isStopping: () => false,
+                },
+            });
+            struct.objectsReady = true;
+            struct.setStateSafe = (id, value) => written.push({ id, value });
+            return { struct, namedReads, offsetReads, syncRequests, written };
+        }
+
+        function vdcDevice(channels, hwInfo = 'Extended color light: LCT001') {
+            return {
+                dSUID: 'hue1',
+                meterDSUID: 'vdc1',
+                zoneID: 5,
+                name: 'Kuecheninsel',
+                hwInfo,
+                isValid: true,
+                isPresent: true,
+                isVdcDevice: true,
+                outputMode: 22,
+                outputChannels: channels.map((channelId, index) => ({
+                    channelId,
+                    channelType: channelId,
+                    channelIndex: index,
+                })),
+            };
+        }
+
+        it('reads a multi channel vDC device through the named read', done => {
+            const { struct, namedReads, offsetReads, written } = genericContext();
+            struct.createDevice(vdcDevice(['brightness', 'colortemp']), () => {
+                setTimeout(() => {
+                    expect(namedReads).to.deep.equal([{ dSUID: 'hue1', prio: 'medium' }]);
+                    expect(offsetReads, 'no offset read a vDC cannot answer').to.have.lengthOf(0);
+                    // Eine Antwort, beide Kanaele - in der Kanalskala der States
+                    expect(written.sort((a, b) => a.id.localeCompare(b.id))).to.deep.equal([
+                        { id: 'devices.vdc1.hue1.brightness', value: 50 },
+                        { id: 'devices.vdc1.hue1.colortemp', value: 370 },
+                    ]);
+                    struct.clearTimeouts();
+                    done();
+                }, 30);
+            });
+        });
+
+        // Ein Kanal: hier lief bisher ein Offset-Read, den der dSS fuer vDCs mit
+        // "Could not find item. deviceOutputIndex:255" beantwortet
+        it('reads a single channel vDC device through the named read as well', done => {
+            const { struct, namedReads, offsetReads } = genericContext();
+            struct.createDevice(vdcDevice(['brightness'], 'Dimmable light: LWV001'), () => {
+                setTimeout(() => {
+                    expect(namedReads).to.have.lengthOf(1);
+                    expect(offsetReads).to.have.lengthOf(0);
+                    struct.clearTimeouts();
+                    done();
+                }, 30);
+            });
+        });
+
+        it('prefers the bundled status request when the sync is available', done => {
+            const { struct, namedReads, offsetReads } = genericContext();
+            const syncRequests = [];
+            struct.smartHomeSync = /** @type {any} */ ({
+                requestDeviceSync: dev => {
+                    syncRequests.push(dev.dSUID);
+                    return true;
+                },
+                stop: () => {},
+            });
+            struct.createDevice(vdcDevice(['brightness', 'colortemp']), () => {
+                setTimeout(() => {
+                    expect(syncRequests).to.deep.equal(['hue1']);
+                    expect(namedReads, 'the status already carries every channel').to.have.lengthOf(0);
+                    expect(offsetReads).to.have.lengthOf(0);
+                    struct.clearTimeouts();
+                    done();
+                }, 30);
+            });
+        });
+
+        it('refreshes them after a scene call through the sync', done => {
+            const { struct } = genericContext();
+            const syncRequests = [];
+            struct.smartHomeSync = /** @type {any} */ ({
+                requestDeviceSync: dev => {
+                    syncRequests.push(dev.dSUID);
+                    return true;
+                },
+                stop: () => {},
+            });
+            struct.createDevice(vdcDevice(['brightness', 'colortemp']), () => {
+                syncRequests.length = 0;
+                struct.dss.emit('hue1', { name: 'callScene', source: { isDevice: true }, properties: {} });
+                struct.dss.emit('hue1', { name: 'deviceSensorValue', source: { isDevice: true }, properties: {} });
+                setTimeout(() => {
+                    expect(syncRequests, 'only scene calls trigger a re-read').to.deep.equal(['hue1']);
+                    struct.clearTimeouts();
+                    done();
+                }, 30);
+            });
+        });
+
+        // Regression: eine native Klemme hat keinen benannten Read, und der Fallback
+        // des Syncs (queueClassicOutputRead) findet fuer einen Kanal ohne festen
+        // channelIndex keinen Weg - heatingPower hatte immer nur den Offset-Read
+        // dieses Zweigs, der den vom GERAET deklarierten channelIndex benutzt
+        it('keeps the offset read of a native single channel device even with a sync', done => {
+            const { struct, namedReads, offsetReads } = genericContext();
+            const syncRequests = [];
+            struct.smartHomeSync = /** @type {any} */ ({
+                requestDeviceSync: dev => {
+                    syncRequests.push(dev.dSUID);
+                    return true;
+                },
+                stop: () => {},
+            });
+            const native = {
+                dSUID: 'blkm200',
+                meterDSUID: 'm1',
+                zoneID: 5,
+                name: 'Heizung',
+                hwInfo: 'BL-KM200',
+                isValid: true,
+                isPresent: true,
+                isVdcDevice: false,
+                outputMode: 1,
+                outputChannels: [{ channelId: 'heatingPower', channelType: 'heatingPower', channelIndex: 15 }],
+            };
+            struct.createDevice(native, () => {
+                setTimeout(() => {
+                    expect(syncRequests, 'a native terminal must not hand its read over').to.deep.equal([]);
+                    expect(namedReads).to.have.lengthOf(0);
+                    expect(offsetReads, 'the channelIndex the device declares').to.deep.equal([
+                        { dSUID: 'blkm200', index: 15 },
+                    ]);
+                    struct.clearTimeouts();
+                    done();
+                }, 30);
+            });
+        });
+
+        // Der Weg, den die Sonos auf Andrés Anlage wirklich gehen: der ECHTE Sync lernt
+        // die Kanaele als nicht lieferbar und uebergibt sie klassisch - seit dem
+        // vorgezogenen Named Read landet auch brightness dort statt im Offset-Read
+        it('serves a learned vDC device through one named read, brightness included', async () => {
+            const { struct, namedReads, offsetReads, written } = genericContext();
+            const SmartHomeOutputSync = require('../lib/dssSmartHomeSync');
+            struct.smartHomeSync = new SmartHomeOutputSync({
+                structure: struct,
+                smartHome: { getApartmentStatus: async () => ({ included: { dsDevices: [] } }) },
+                adapter: struct.adapter,
+                debounce: 10,
+                followUpDelay: 10,
+                maxFollowUps: 1,
+                learnAfterMisses: 1,
+            });
+            const dev = vdcDevice(['brightness', 'colortemp']);
+            struct.createDevice(dev, () => {});
+            await new Promise(resolve => setTimeout(resolve, 200));
+
+            expect(namedReads.length, 'the learned channels went to ONE named read').to.be.above(0);
+            expect(offsetReads, 'brightness must not take the offset path on a vDC').to.have.lengthOf(0);
+            expect(written.map(w => w.id).sort()).to.deep.equal([
+                'devices.vdc1.hue1.brightness',
+                'devices.vdc1.hue1.colortemp',
+            ]);
+            struct.clearTimeouts();
+        });
+
+        it('leaves a native multi channel device untouched', done => {
+            const { struct, namedReads, offsetReads } = genericContext();
+            const native = vdcDevice(['brightness', 'colortemp'], 'BL-KM200');
+            native.dSUID = 'native1';
+            native.isVdcDevice = false;
+            struct.createDevice(native, () => {
+                setTimeout(() => {
+                    expect(namedReads, 'no named read for a native terminal').to.have.lengthOf(0);
+                    expect(offsetReads, 'multi channel natives have no read path').to.have.lengthOf(0);
+                    struct.clearTimeouts();
+                    done();
+                }, 30);
+            });
+        });
+    });
+
     // Als invalid markierte Metering-Sensoren liefern ohne Event nie einen Wert -
     // ein Drucker im Standby sendet monatelang keins. Ein einmaliger Bus-Read mit
     // niedriger Prioritaet fuellt den State (live verifiziert: die Steckdose

@@ -183,15 +183,18 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ### 2.4.21 (2026-08-31)
 
-* **vDC outputs get a working classic read.** The offset based read never reached vDC devices
-  (the dSS answers "Could not find item. deviceOutputIndex:255"), so their channels only filled
-  when the Smart Home API status carried them. Channels without an offset now use the named read
-  `device/getOutputChannelValue2` - verified live against a dSS20 1.19.13: the audio volume and
-  power state of Sonos players get values for the first time ever, and colour values work
-  classically as well, so installations without the Smart Home API get them too. One answer
-  carries every channel of the device and concurrent requests are coalesced into one; native
-  terminals are filtered by the structure flag, and a dSS that still rejects the call is
-  remembered per device
+* **vDC devices (Hue, Sonos and friends) read their outputs at all for the first time.** They have
+  no typed device path of their own, so the generic branch left them without any read: one channel
+  got an offset read the dSS cannot answer for them ("Could not find item. deviceOutputIndex:255"),
+  several channels got nothing but a debug line. Their values existed only where the Smart Home API
+  status happened to carry them. Now the named read `device/getOutputChannelValue2` serves them -
+  verified live against a dSS20 1.19.13: the audio volume and power state of Sonos players get
+  values for the first time ever, and the colour values of vDC lights work without the Smart Home
+  API too. One answer carries every channel of a device and concurrent requests coalesce into one.
+  A scene call refreshes the values right away as well: through the bundled status request, or -
+  without the Smart Home API - through one named read for the device the scene addressed directly.
+  Native terminals keep their offset read (filtered by the structure flag), and a dSS that rejects
+  the named call is remembered per device
 * **Metering sensors the dSS marks invalid are read once at startup** (low priority, one bus read
   per sensor): active power, output current and apparent power of measuring terminals. A device
   with constant consumption - a printer in standby - may not send a sensor event for months, so

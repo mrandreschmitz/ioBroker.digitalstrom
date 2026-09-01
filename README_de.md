@@ -262,15 +262,19 @@ Der vollständige Changelog inklusive der Historie von Apollon77 steht in der en
 
 ### 2.4.21 (2026-08-31)
 
-* **vDC-Ausgänge bekommen einen funktionierenden klassischen Read.** Der Offset-Read erreichte
-  vDC-Geräte nie (der dSS antwortet „Could not find item. deviceOutputIndex:255"), ihre Kanäle
-  füllten sich also nur, wenn der Smart-Home-Status sie lieferte. Kanäle ohne Offset nutzen jetzt
-  den benannten Read `device/getOutputChannelValue2` - live gegen einen dSS20 1.19.13 verifiziert:
-  Lautstärke und Power-State von Sonos-Playern bekommen zum ersten Mal überhaupt Werte, und
-  Farbwerte funktionieren auch klassisch - damit bekommen sie auch Anlagen ohne Smart Home API.
-  Eine Antwort trägt alle Kanäle des Geräts, gleichzeitige Anfragen werden zu einer gebündelt;
-  native Klemmen werden über das Struktur-Flag gefiltert, und ein dSS, der den Aufruf dennoch
-  ablehnt, wird je Gerät gemerkt
+* **vDC-Geräte (Hue, Sonos und Co.) lesen ihre Ausgänge überhaupt zum ersten Mal.** Sie haben
+  keinen eigenen Gerätepfad, im Sammelzweig blieben sie deshalb ganz ohne Read: Bei einem Kanal
+  lief ein Offset-Read, den der dSS für sie nicht beantworten kann („Could not find item.
+  deviceOutputIndex:255"), bei mehreren Kanälen gab es nur eine Debug-Zeile. Ihre Werte existierten
+  nur dort, wo der Smart-Home-Status sie zufällig mitlieferte. Jetzt bedient sie der benannte Read
+  `device/getOutputChannelValue2` - live gegen einen dSS20 1.19.13 verifiziert: Lautstärke und
+  Power-State von Sonos-Playern bekommen zum ersten Mal überhaupt Werte, und die Farbwerte von
+  vDC-Lampen funktionieren auch ohne Smart Home API. Eine Antwort trägt alle Kanäle eines Geräts,
+  gleichzeitige Anfragen werden zu einer gebündelt. Ein Szenenaufruf frischt die Werte ebenfalls
+  sofort auf: über den gebündelten Status-Request oder - ohne Smart Home API - über einen benannten
+  Read für das Gerät, das die Szene direkt angesprochen hat. Native Klemmen behalten ihren
+  Offset-Read (über das Struktur-Flag gefiltert), und ein dSS, der den benannten Aufruf ablehnt,
+  wird je Gerät gemerkt
 * **Als invalid markierte Metering-Sensoren werden beim Start einmal gelesen** (niedrige
   Priorität, ein Bus-Read je Sensor): Wirkleistung, Ausgangsstrom und Scheinleistung messender
   Klemmen. Ein Gerät mit konstantem Verbrauch - ein Drucker im Standby - sendet unter Umständen
