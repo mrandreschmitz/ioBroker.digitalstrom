@@ -1826,6 +1826,39 @@ describe('DSSStructure', () => {
             });
         });
 
+        // Regression: the cluster locks were created with an empty native, so the write
+        // handler could only ever take its "no value mapping known" branch - the queue push
+        // behind it was unreachable code.
+        it('gives the cluster locks the value mapping the dSS answers with', done => {
+            const struct = groupStructure([
+                { name: 'cluster.17.user_lock', state: 'inactive' },
+                { name: 'cluster.17.operation_lock', state: 'active' },
+            ]);
+            const group = { id: 17, name: 'Rollladen Nord', isPresent: true, isValid: true, devices: ['d1'] };
+            struct.processGroup('apartment.groups.17', 0, group, () => {
+                const lock = struct.dssObjects['apartment.groups.17.states.user_lock'];
+                expect(lock.native.valueTrue).to.equal('active');
+                expect(lock.native.valueFalse).to.equal('inactive');
+                expect(struct.dssObjects['apartment.groups.17.states.operation_lock'].native.valueTrue).to.equal(
+                    'active',
+                );
+                done();
+            });
+        });
+
+        it('leaves a state the dSS computes itself without a mapping', done => {
+            const struct = groupStructure([{ name: 'zone.2.group.10.status.malfunction', state: 'inactive' }]);
+            const group = { id: 10, name: 'Lueftung', isPresent: true, isValid: true, devices: ['d1'] };
+            struct.processGroup('apartment.0.2.10', 2, group, () => {
+                const malfunction = struct.dssObjects['apartment.0.2.10.states.status.malfunction'];
+                expect(malfunction, 'the state still exists').to.be.an('object');
+                expect(malfunction.native.valueTrue, 'writing a malfunction back would only earn a rejection').to.equal(
+                    undefined,
+                );
+                done();
+            });
+        });
+
         it('does not take cluster states into a room group', done => {
             const struct = groupStructure([{ name: 'cluster.17.user_lock', state: 'inactive' }]);
             const group = { id: 17, name: 'Licht', isPresent: true, isValid: true, devices: ['d1'] };
