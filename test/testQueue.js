@@ -1,4 +1,5 @@
 const { expect } = require('chai');
+
 const DSSQueue = require('../lib/dssQueue');
 
 const silentLogger = { silly: () => {}, debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };

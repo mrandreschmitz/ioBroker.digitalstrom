@@ -17,8 +17,8 @@ const silentLog = { silly: () => {}, debug: () => {}, info: () => {}, warn: () =
  * Minimal adapter double that records which namespace an object write ended up on.
  *
  * @param {string} namespace
- * @param {Array} sink
- * @returns {object} fake adapter
+ * @param {string[]} sink
+ * @returns {Record<string, any>} fake adapter, open for tests that swap single methods
  */
 function fakeAdapter(namespace, sink) {
     return {

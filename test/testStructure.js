@@ -1,6 +1,7 @@
 const EventEmitter = require('node:events');
 const { expect } = require('chai');
 const DSSStructure = require('../lib/dssStructure');
+
 const DSSQueue = require('../lib/dssQueue');
 const dssConstants = require('../lib/constants');
 

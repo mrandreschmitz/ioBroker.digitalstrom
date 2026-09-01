@@ -27,6 +27,19 @@ const ActivityCounter = require('./lib/activityCounter');
 const configUtils = require('./lib/configUtils');
 const dssConstants = require('./lib/constants');
 
+/**
+ * The objectHelper of `@apollon/iobroker-tools`. The package ships no types, so the part
+ * of it this adapter actually uses is written down here.
+ *
+ * @typedef {object} ObjectHelper
+ * @property {(adapter: any) => void} init binds the helper to an adapter instance
+ * @property {(id: string, obj: any, obtainCustomFields: string[], value?: any, stateChangeCallback?: (value: any) => void, createNow?: boolean) => void} setOrUpdateObject queues an object for creation or update
+ * @property {(callback?: () => void) => void} processObjectQueue writes the queued objects and their values
+ * @property {(callback?: () => void) => void} loadExistingObjects fills existingStates with the objects that already exist for this instance
+ * @property {(id: string, state: ioBroker.State) => void} handleStateChange routes an unacknowledged state change to the onChange handler of that object
+ * @property {Record<string, any>} existingStates objects of this instance, the ones left over after registerObjects() are the unknown ones
+ */
+
 // DSS rules 8/9 (see above) allow at most one cyclic read per minute and circuit.
 // One cycle issues TWO reads per circuit (getConsumption + getEnergyMeterValue), and the
 // timer for the next cycle only starts once they are answered - measured against a real
@@ -51,8 +64,8 @@ class Digitalstrom extends utils.Adapter {
      * Loading a private copy of the module per instance keeps them isolated without
      * reimplementing the helper.
      *
-     * @param {object} [logger] adapter logger, used only if the private copy is not possible
-     * @returns {object} objectHelper instance
+     * @param {Partial<ioBroker.Logger>} [logger] adapter logger, used only if the private copy is not possible
+     * @returns {ObjectHelper} objectHelper instance
      */
     static createObjectHelper(logger) {
         try {
@@ -412,6 +425,7 @@ class Digitalstrom extends utils.Adapter {
         this.dssQueue && this.dssQueue.stop();
 
         // Central cleanup, runs exactly once no matter which path finished first
+        /** @type {NodeJS.Timeout|null} */
         let unsubscribeGuard = null;
         const finish = time => {
             if (this.stopped) {
@@ -1065,6 +1079,7 @@ class Digitalstrom extends utils.Adapter {
         // Handlers first, subscriptions second - see registerEventHandlers()
         this.registerEventHandlers(eventNames);
         this.dss.subscribeEvents(eventNames, errs => {
+            /** @type {Error|null} */
             let subscriptionError = null;
             if (errs && Array.isArray(errs) && errs.length) {
                 this.log.warn(`Error to subscribe to ${errs.length} events. See the following log lines.`);
@@ -1212,7 +1227,7 @@ class Digitalstrom extends utils.Adapter {
          *
          * @param {string} zoneId zone of the scene event
          * @param {string} groupId group of the scene event, "0" means the whole room
-         * @param {object} data the scene event itself
+         * @param {import('./lib/dss').DssEvent} data the scene event itself
          */
         const emitSceneToDevices = (zoneId, groupId, data) => {
             const groups = dssStruct.zoneDevices[zoneId];
@@ -1596,13 +1611,18 @@ class Digitalstrom extends utils.Adapter {
 }
 
 if (require.main !== module) {
-    // Export the constructor in compact mode
+    // Export the constructor in compact mode. The class rides along on the factory BEFORE
+    // it becomes module.exports: assigning to module.exports twice is what a module with
+    // an export assignment may not do, and the object js-controller receives is the same
+    // either way.
     /**
      * @param {Partial<import('@iobroker/adapter-core').AdapterOptions>} [options]
      */
-    module.exports = options => new Digitalstrom(options);
+    const factory = options => new Digitalstrom(options);
     // Additionally exposed for unit tests - js-controller only uses the function itself
-    module.exports.Digitalstrom = Digitalstrom;
+    factory.Digitalstrom = Digitalstrom;
+
+    module.exports = factory;
 } else {
     // otherwise start the instance directly
     new Digitalstrom();

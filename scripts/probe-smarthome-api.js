@@ -42,6 +42,34 @@ const path = require('node:path');
 const RECORD_SEPARATOR = String.fromCharCode(0x1e);
 
 /**
+ * The command line as parseArgs() leaves it. Everything the caller may omit is optional
+ * here, so a missing --host or --token shows up as a type error instead of as a request
+ * against "undefined".
+ *
+ * @typedef {object} ProbeArgs
+ * @property {number} port HTTPS port of the REST API
+ * @property {number} wsPort port of the notification websocket
+ * @property {number} seconds duration of the websocket recording, 0 skips it
+ * @property {string} out directory the raw answers are written to
+ * @property {string} user login user for --create-token
+ * @property {boolean} createToken create an application token before probing
+ * @property {boolean} oldApi additionally query the old JSON API for comparison
+ * @property {string} [host] dSS address, without it only the help is printed
+ * @property {string} [token] API key sent as bearer, may be created on the fly
+ * @property {boolean} [discover] run the second, searching sweep instead of the first
+ * @property {string} [probeWrite] id of the user defined state the write test uses
+ * @property {boolean} [help] print the header comment and exit
+ *
+ * One answer of request(). The raw text is always there, json only when the dSS answered
+ * with JSON - which endpoints do and which do not is exactly what this script measures.
+ * @typedef {object} HttpAnswer
+ * @property {number|undefined} status HTTP status code
+ * @property {import('node:http').IncomingHttpHeaders} headers response headers
+ * @property {string} text body as text, empty when there was none
+ * @property {any} json parsed body, null when the answer was not JSON
+ */
+
+/**
  * @param {unknown} err
  * @returns {string} lesbare Fehlermeldung
  */
@@ -51,7 +79,12 @@ function errorText(err) {
 
 /* ------------------------------------------------------------------ args */
 
+/**
+ * @param {string[]} argv process.argv
+ * @returns {ProbeArgs} the parsed command line
+ */
 function parseArgs(argv) {
+    /** @type {ProbeArgs} */
     const args = {
         port: 8080,
         wsPort: 8090,
@@ -112,6 +145,11 @@ function parseArgs(argv) {
 
 /* ------------------------------------------------------------------ http */
 
+/**
+ * @param {import('node:https').RequestOptions & {protocol?: string}} options request options, protocol picks http or https
+ * @param {string|Buffer} [body] request body, omitted for GET
+ * @returns {Promise<HttpAnswer>} status, headers and body of the answer
+ */
 function request(options, body) {
     return new Promise((resolve, reject) => {
         const transport = options.protocol === 'http:' ? http : https;
@@ -141,6 +179,12 @@ function request(options, body) {
     });
 }
 
+/**
+ * @param {ProbeArgs} args parsed command line
+ * @param {string} apiPath path below the host, e.g. /api/v1/apartment
+ * @param {Record<string, string>} [params] query parameters
+ * @returns {URL} the assembled URL
+ */
 function apiUrl(args, apiPath, params) {
     const url = new URL(`https://${args.host}:${args.port}${apiPath}`);
     for (const [key, value] of Object.entries(params || {})) {
@@ -149,6 +193,12 @@ function apiUrl(args, apiPath, params) {
     return url;
 }
 
+/**
+ * @param {ProbeArgs} args parsed command line
+ * @param {string} apiPath path below the host
+ * @param {Record<string, string>} [params] query parameters
+ * @returns {Promise<HttpAnswer>} the answer of request()
+ */
 async function get(args, apiPath, params) {
     const url = apiUrl(args, apiPath, params);
     return request({
@@ -406,12 +456,12 @@ async function probeWebsocket(args, outDir) {
 /**
  * Sends any method to a path of the new API.
  *
- * @param {object} args
- * @param {string} method
- * @param {string} apiPath
- * @param {object} [params] query parameters
- * @param {object} [body] json body
- * @returns {Promise<object>} the answer of request()
+ * @param {ProbeArgs} args parsed command line
+ * @param {string} method HTTP method, e.g. OPTIONS or PATCH
+ * @param {string} apiPath path below the host
+ * @param {Record<string, string>} [params] query parameters
+ * @param {any} [body] json body, serialised as it comes - the shape is what is being probed
+ * @returns {Promise<HttpAnswer>} the answer of request()
  */
 function verb(args, method, apiPath, params, body) {
     const url = apiUrl(args, apiPath, params);
@@ -443,8 +493,8 @@ function verb(args, method, apiPath, params, body) {
  * more per single resource than in the collection, and the official documentation is
  * offline, so the only way to find out is to ask the device.
  *
- * @param {object} args
- * @param {string} outDir
+ * @param {ProbeArgs} args parsed command line
+ * @param {string} outDir directory the raw answers are written to
  */
 async function discover(args, outDir) {
     console.log('\n--- Suche nach weiteren Werten und Endpunkten ---');

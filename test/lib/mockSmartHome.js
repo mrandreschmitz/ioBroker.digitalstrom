@@ -1,6 +1,9 @@
 const http = require('node:http');
 const crypto = require('node:crypto');
 
+// websocket.js exports the client class itself and hangs the constants off it. That
+// second export is invisible to the checker behind the export assignment, so it is named
+// here explicitly.
 const { WEBSOCKET_GUID } = require('../../lib/websocket');
 
 /**
@@ -61,6 +64,9 @@ function createMockSmartHome() {
         req.on('data', chunk => chunks.push(chunk));
         req.on('end', () => {
             const raw = Buffer.concat(chunks).toString('utf8');
+            // Whatever the adapter sent: parsed json of an arbitrary shape, or the raw
+            // text when it is not json at all
+            /** @type {any} */
             let body = null;
             if (raw) {
                 try {

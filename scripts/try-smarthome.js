@@ -242,6 +242,7 @@ async function main() {
     await client.startNotifications();
 
     // Zaehler kommen nicht ueber Notifications, die muessen abgefragt werden
+    /** @type {NodeJS.Timeout|null} */
     let meterTimer = null;
     let meterReads = 0;
     let meterSnapshot = meterMap(meters);

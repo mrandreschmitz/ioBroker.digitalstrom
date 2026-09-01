@@ -5,6 +5,37 @@ const APP_TOKEN = 'test-app-token';
 const SESSION_TOKEN = 'test-session-token';
 
 /**
+ * One request the mock server received.
+ *
+ * @typedef {object} MockDssRequest
+ * @property {string} path json function without the /json/ prefix, e.g. "apartment/getName"
+ * @property {Record<string, string>} query query parameters as they arrived on the wire
+ */
+
+/**
+ * Handle of a running mock DSS.
+ *
+ * Everything a test needs to drive the mock and to assert what the adapter sent. The
+ * recorded writes carry whatever the endpoint delivers - device/setValue only knows a
+ * value, setOutputValue an offset and setConfig an index - so they stay records.
+ *
+ * @typedef {object} MockDssHandle
+ * @property {import('node:http').Server} server the http server answering the adapter
+ * @property {MockDssRequest[]} requests every request the adapter sent, in order
+ * @property {Record<string, any>[]} writtenOutputValues device output writes that arrived
+ * @property {Record<string, any>[]} writtenStates user state writes that arrived
+ * @property {Record<string, any>[]} calledScenes scene calls that arrived
+ * @property {string} appToken the app token this mock accepts
+ * @property {() => Promise<string>} start starts listening, resolves with the base url
+ * @property {() => string} host base url of the listening server
+ * @property {(eventName: string, event: Record<string, any>) => void} emitEvent delivers an event to the adapter
+ * @property {() => string[]} subscribedEvents all event names the adapter subscribed to
+ * @property {() => string[]} subscriptionIds the subscription ids the adapter uses
+ * @property {(path: string) => MockDssRequest[]} pathsCalled every request for that json function
+ * @property {() => Promise<void>} stop drops open long-polls and closes the server
+ */
+
+/**
  * Minimal but realistic digitalSTROM server for the integration tests.
  *
  * It answers the whole startup sequence of the adapter, keeps a real event subscription
@@ -13,12 +44,12 @@ const SESSION_TOKEN = 'test-session-token';
  *
  * @param {object} [options]
  * @param {boolean} [options.requireAuth] reject requests without a valid session token
- * @returns {object} mock server handle
+ * @returns {MockDssHandle} mock server handle
  */
 function createMockDss(options = {}) {
     const requireAuth = options.requireAuth !== false;
 
-    /** every request the adapter sent, as { path, query } */
+    /** @type {MockDssRequest[]} every request the adapter sent */
     const requests = [];
     /** events waiting for the next event/get, per subscription id */
     const pendingEvents = new Map();
@@ -242,7 +273,7 @@ function createMockDss(options = {}) {
          * next event/get of that subscription.
          *
          * @param {string} eventName
-         * @param {object} event
+         * @param {Record<string, any>} event the raw event as the DSS would deliver it
          */
         emitEvent(eventName, event) {
             const entry = [...subscriptions.entries()].find(([, names]) => names.has(eventName));

@@ -28,8 +28,9 @@ const silentLog = { silly: () => {}, debug: () => {}, info: () => {}, warn: () =
  * the real queue and the real structure - only js-controller is replaced.
  *
  * @param {string} host mock DSS host
- * @param {object} [config] adapter configuration overrides
- * @returns {object} adapter-like context
+ * @param {Record<string, any>} [config] adapter configuration overrides
+ * @returns {Record<string, any>} adapter-like context, carrying the adapter prototype
+ * methods next to the state a test wants to inspect
  */
 function createAdapterContext(host, config = {}) {
     const ctx = {

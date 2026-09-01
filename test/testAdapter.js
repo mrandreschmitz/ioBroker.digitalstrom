@@ -27,8 +27,13 @@ const VALID_APP_TOKEN = 'a1b2c3d4'.repeat(8);
  * Builds a minimal adapter-like context so the adapter methods can be tested
  * without a running js-controller.
  *
- * @param {object} [overrides]
- * @returns {object} fake adapter context
+ * Typed as a bag on purpose. Every test hangs its own fields on the context through
+ * overrides, so a closed type would be wrong the moment somebody adds one - and a bare
+ * `object` has no index signature, which makes every single property access an error
+ * under a stricter TypeScript.
+ *
+ * @param {Record<string, any>} [overrides]
+ * @returns {Record<string, any>} fake adapter context
  */
 function createContext(overrides = {}) {
     const ctx = {
@@ -37,7 +42,7 @@ function createContext(overrides = {}) {
         connected: null,
         states: {},
         stateMapEntries: {},
-        restarts: [],
+        /** @type {any[]} */ restarts: [],
         lastScenes: {},
         stopping: false,
         stopped: false,
@@ -874,6 +879,12 @@ describe('Adapter logic', () => {
             let emitted = false;
             const slowSubscribes = [];
             dss.pollChannel = () => {};
+            /**
+             * @param {string} dssClass
+             * @param {string} dssFunction
+             * @param {Record<string, any>} params every call of the adapter carries them
+             * @returns {Promise<import('../lib/configUtils').DssResponse>} DSS answer
+             */
             dss.requestAsync = async (dssClass, dssFunction, params) => {
                 if (dssFunction !== 'subscribe') {
                     return { ok: true };

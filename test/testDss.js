@@ -493,6 +493,12 @@ describe('DSS', () => {
             const dss = createDss();
             const subscribed = [];
             let polls = 0;
+            /**
+             * @param {string} dssClass
+             * @param {string} dssFunction
+             * @param {Record<string, any>} params every call of the client carries them
+             * @returns {Promise<import('../lib/configUtils').DssResponse>} DSS answer
+             */
             dss.requestAsync = async (dssClass, dssFunction, params) => {
                 if (dssFunction === 'subscribe') {
                     subscribed.push({ id: params.subscriptionID, name: params.name });
@@ -616,6 +622,12 @@ describe('DSS', () => {
                 const dss = createDss();
                 const resubscribed = [];
                 let subscribeCalls = 0;
+                /**
+                 * @param {string} dssClass
+                 * @param {string} dssFunction
+                 * @param {Record<string, any>} params every call of the client carries them
+                 * @returns {Promise<import('../lib/configUtils').DssResponse>} DSS answer
+                 */
                 dss.requestAsync = async (dssClass, dssFunction, params) => {
                     if (dssFunction === 'subscribe') {
                         subscribeCalls++;
@@ -707,8 +719,8 @@ describe('DSS', () => {
     describe('event normalization', () => {
         it('accepts events without source or properties', () => {
             const event = DSS.normalizeEvent({ name: 'callScene' });
-            expect(event.source).to.deep.equal({});
-            expect(event.properties).to.deep.equal({});
+            expect(event?.source).to.deep.equal({});
+            expect(event?.properties).to.deep.equal({});
         });
 
         it('maps the legacy dsid and the misspelled sceneId', () => {
@@ -717,8 +729,8 @@ describe('DSS', () => {
                 source: { dsid: 'abc' },
                 properties: { sceneId: 5 },
             });
-            expect(event.source.dSUID).to.equal('abc');
-            expect(event.properties.sceneID).to.equal(5);
+            expect(event?.source.dSUID).to.equal('abc');
+            expect(event?.properties.sceneID).to.equal(5);
         });
 
         it('rejects unusable entries', () => {
@@ -843,7 +855,7 @@ describe('DSS', () => {
             expect(errors.length, 'eventError exactly once').to.equal(1);
             expect(errors[0].name).to.equal('testEvent');
             expect(attempts.subscribe, 're-subscribe must have been attempted').to.be.above(0);
-            expect(dss.getChannel(42).retryTimer, 'no retry timer left').to.equal(null);
+            expect(dss.getChannel(42)?.retryTimer, 'no retry timer left').to.equal(null);
             dss.stop();
         });
 
@@ -856,11 +868,11 @@ describe('DSS', () => {
             dss.ensureChannel(42, 100);
             dss.pollChannel(42);
             await clock.tickAsync(1);
-            const firstTimer = dss.getChannel(42).retryTimer;
+            const firstTimer = dss.getChannel(42)?.retryTimer;
             expect(firstTimer, 'a retry must be scheduled').to.not.equal(null);
             // A second failure must replace, not add, a timer
             dss.handleEventFailure(42, new Error('again'), 'polling');
-            expect(dss.getChannel(42).retryTimer).to.not.equal(firstTimer);
+            expect(dss.getChannel(42)?.retryTimer).to.not.equal(firstTimer);
             dss.stop();
         });
 
@@ -913,7 +925,7 @@ describe('DSS', () => {
             expect(errors[0].name).to.equal('testEvent');
             expect(attempts.subscribe, 're-subscribing must not loop forever').to.be.below(10);
             expect(attempts.get, 'polling must stop after the limit').to.be.below(10);
-            expect(dss.getChannel(42).retryTimer, 'no retry timer left').to.equal(null);
+            expect(dss.getChannel(42)?.retryTimer, 'no retry timer left').to.equal(null);
             dss.stop();
         });
 
@@ -931,7 +943,7 @@ describe('DSS', () => {
             dss.pollChannel = () => {};
 
             await new Promise(resolve => dss.subscribeEvent('testEvent', 42, 100, resolve));
-            expect(dss.getChannel(42).errorCount, 'a subscribe alone proves nothing').to.equal(3);
+            expect(dss.getChannel(42)?.errorCount, 'a subscribe alone proves nothing').to.equal(3);
             dss.stop();
         });
 
@@ -943,7 +955,7 @@ describe('DSS', () => {
 
             dss.pollChannel(42);
             await clock.tickAsync(1);
-            expect(dss.getChannel(42).errorCount, 'a real poll resets the counter').to.equal(0);
+            expect(dss.getChannel(42)?.errorCount, 'a real poll resets the counter').to.equal(0);
             dss.stop();
         });
 

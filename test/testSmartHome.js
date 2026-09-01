@@ -437,6 +437,9 @@ describe('Websocket watchdog', function () {
 
     const net = require('node:net');
     const crypto = require('node:crypto');
+    // websocket.js exports the client class itself and hangs the handshake constants off
+    // it. Behind that export assignment they are invisible to the checker, so the shape
+    // of the module is named here.
     const MiniWebsocket = require('../lib/websocket');
 
     /**
