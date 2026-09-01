@@ -30,12 +30,12 @@
     "unit_seconds": "seconds",
     "card_credentials": "Credentials",
     "token_clear": "Remove token",
-    "section_smartHome": "Acceleration: Smart Home API (recommended)",
-    "info_smartHome": "Newer digitalSTROM servers offer a second, modern interface in addition - and that is what the second key here is for. The adapter uses it as a turbo for reading: **all meter values and all output values** (brightness, blind positions, colour values) arrive in one single request each instead of many individual ones. The startup finishes in seconds instead of minutes, values are fresh again quickly after scene calls, and your dSS is noticeably relieved. The key is created from the existing app token with one click - no password needed again - and works hand in hand with it. Should the Smart Home API ever not answer, the proven path takes over automatically.",
+    "section_smartHome": "Aceleración: Smart Home API (recomendado)",
+    "info_smartHome": "Los servidores digitalSTROM más nuevos ofrecen además una segunda interfaz moderna. El adaptador la usa como turbo de lectura: **todos los valores de los contadores y todos los valores de salida** (brillo, posiciones de persianas, valores de color) llegan en una única petición cada uno en lugar de muchas individuales. El arranque termina en segundos en vez de minutos, los valores vuelven a estar actualizados rápidamente tras las llamadas de escena y tu dSS se alivia notablemente. **Para esto no hace falta una clave propia** - basta con el inicio de sesión del paso 2. Si la Smart Home API alguna vez no responde, la vía probada toma el relevo automáticamente.",
     "label_useSmartHomeApi": "Read meter and output values through the Smart Home API",
-    "help_useSmartHomeApi": "Reads meter and output values bundled through the Smart Home API. Needs a dSS with firmware 1.19 or newer and the key below.",
+    "help_useSmartHomeApi": "Lee valores de contadores y de salida agrupados a través de la Smart Home API. Requiere un dSS con firmware 1.19 o más reciente. Usa el inicio de sesión del paso 2 - una clave propia es opcional.",
     "label_smartHomeApiKey": "API key",
-    "help_smartHomeApiKey": "Created from the existing app token, no password needed. Visible in the dSS under System > Access Authorization.",
+    "help_smartHomeApiKey": "Opcional. Se crea a partir del token de aplicación existente, no hace falta contraseña. Visible en el dSS en Sistema > Autorización de acceso.",
     "button_createSmartHomeKey": "Create API key",
     "key_missing": "No API key stored yet",
     "info_token_role": "The app token is the adapter's base access: **button presses, sensor values and all events arrive through it in real time**, and **every switching command** runs over it. Nothing works without it - create it once with your dSS credentials.",
@@ -66,5 +66,9 @@
     "status_notifications_help": "dSS change notifications - reconciled at most every five minutes",
     "activity_reads": "{n} reads (last 10 min)",
     "activity_messages": "{n} notifications received (last 10 min)",
-    "activity_events_commands": "{e} events received · {c} commands sent (last 10 min)"
+    "activity_events_commands": "{e} events received · {c} commands sent (last 10 min)",
+    "button_showKeyOptions": "Usar una clave de API propia (opcional)",
+    "info_apiKeyOptional": "Normalmente no hay nada que introducir aquí. El adaptador también inicia sesión en la Smart Home API con el token de aplicación del paso 2. Una clave propia sigue siendo posible: es **válida de forma permanente** y en el dSS, en Sistema > Autorización de acceso, es **visible y revocable por separado**. Importante: **guarda** el diálogo después de crearla - de lo contrario la instancia en marcha no conoce la nueva clave.",
+    "section_credentials": "¿Un acceso o dos?",
+    "info_credentials": "El token de aplicación del paso 2 es la identificación del adaptador, y abre **ambas** interfaces. Por eso la Smart Home API no necesita una segunda clave; el adaptador simplemente usa el inicio de sesión que ya tiene. **Esto no cambia nada en el reparto de tareas**: los eventos y los comandos de conmutación siguen yendo por la interfaz clásica, y los valores agrupados de contadores y salidas por la Smart Home API. La pestaña de estado lo muestra igual que antes. Una clave de API propia sigue siendo posible y entonces es la vía preferida: es válida de forma permanente y se puede revocar por separado en el dSS. Si el dSS la rechaza (revocada o sustituida por otra más nueva con el mismo nombre), el adaptador lo indica una vez en el registro y continúa con el inicio de sesión."
 }

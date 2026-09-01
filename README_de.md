@@ -59,11 +59,11 @@ ihnen in den letzten 10 Minuten wirklich getan hat:
 
 ## Konfiguration
 
-Der Verbindungs-Tab führt in drei nummerierten Schritten durch die Einrichtung: die
-Serveradresse (einmal eingetragen — sie bedient beide Schnittstellen), das App-Token als
-Basiszugang (direkt aus dem Dialog mit deinen dSS-Anmeldedaten erstellt, die nicht gespeichert
-werden) und der Smart-Home-API-Key als empfohlene Beschleunigung — mit einem Klick aus dem
-vorhandenen App-Token erstellt, ohne erneutes Passwort:
+Der Verbindungs-Tab führt durch die Einrichtung: die Serveradresse (einmal eingetragen — sie
+bedient beide Schnittstellen), das App-Token als Basiszugang (direkt aus dem Dialog mit deinen
+dSS-Anmeldedaten erstellt, die nicht gespeichert werden) und ein Schalter für die empfohlene
+Beschleunigung. **Das App-Token öffnet beide Schnittstellen**, die Smart Home API braucht also
+keinen zweiten Zugang — ein eigener API-Schlüssel bleibt hinter einem Link als Option verfügbar:
 
 ![Reiter „Verbindung" des Konfigurationsdialogs](docs/admin-connection-de.png)
 

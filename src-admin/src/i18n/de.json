@@ -31,11 +31,11 @@
     "card_credentials": "Anmeldedaten",
     "token_clear": "Token entfernen",
     "section_smartHome": "Beschleunigung: Smart Home API (empfohlen)",
-    "info_smartHome": "Neuere digitalSTROM-Server bieten zusätzlich eine zweite, moderne Schnittstelle – und dafür gibt es hier einen zweiten Schlüssel. Der Adapter nutzt sie als Turbo für Lesezugriffe: **Alle Zählerwerte und alle Ausgangswerte** (Helligkeit, Rollladenpositionen, Farbwerte) kommen in je einem einzigen Request statt in vielen einzelnen. Der Start ist dadurch in Sekunden statt Minuten fertig, nach Szenenaufrufen sind die Werte schneller aktuell, und dein dSS wird spürbar entlastet. Der Schlüssel wird mit einem Klick aus dem vorhandenen App-Token erzeugt – ohne erneute Passworteingabe – und arbeitet Hand in Hand mit ihm. Antwortet die Smart Home API einmal nicht, übernimmt automatisch wieder der bewährte Weg.",
+    "info_smartHome": "Neuere digitalSTROM-Server bieten zusätzlich eine zweite, moderne Schnittstelle. Der Adapter nutzt sie als Turbo für Lesezugriffe: **Alle Zählerwerte und alle Ausgangswerte** (Helligkeit, Rollladenpositionen, Farbwerte) kommen in je einem einzigen Request statt in vielen einzelnen. Der Start ist dadurch in Sekunden statt Minuten fertig, Werte sind nach Szenenaufrufen schnell wieder frisch, und dein dSS wird spürbar entlastet. **Ein eigener Schlüssel ist dafür nicht nötig** – die Anmeldung aus Schritt 2 genügt. Sollte die Smart Home API einmal nicht antworten, übernimmt automatisch der bewährte Weg.",
     "label_useSmartHomeApi": "Zähler- und Ausgangswerte über die Smart Home API lesen",
-    "help_useSmartHomeApi": "Liest Zähler- und Ausgangswerte gebündelt über die Smart Home API. Benötigt einen dSS mit Firmware 1.19 oder neuer und den Schlüssel unten.",
+    "help_useSmartHomeApi": "Liest Zähler- und Ausgangswerte gebündelt über die Smart Home API. Benötigt einen dSS mit Firmware 1.19 oder neuer. Nutzt die Anmeldung aus Schritt 2 – ein eigener Schlüssel ist optional.",
     "label_smartHomeApiKey": "API-Key",
-    "help_smartHomeApiKey": "Wird aus dem vorhandenen App-Token erzeugt, ein Passwort ist dafür nicht nötig. Im dSS sichtbar unter System > Zugriffsberechtigung.",
+    "help_smartHomeApiKey": "Optional. Wird aus dem vorhandenen App-Token erzeugt, ein Passwort ist dafür nicht nötig. Im dSS sichtbar unter System > Zugriffsberechtigung.",
     "button_createSmartHomeKey": "API-Key erstellen",
     "key_missing": "Noch kein API-Key hinterlegt",
     "info_token_role": "Der App-Token ist der Grundzugang des Adapters: Über ihn kommen **Tasterdrücke, Sensorwerte und alle Ereignisse in Echtzeit** an, und **sämtliche Schaltbefehle** laufen darüber. Ohne ihn geht nichts – erstelle ihn einmalig mit deinen dSS-Anmeldedaten.",
@@ -66,5 +66,9 @@
     "status_notifications_help": "Meldungen des dSS über Änderungen – abgeglichen wird höchstens alle fünf Minuten",
     "activity_reads": "{n} Lesungen (letzte 10 min)",
     "activity_messages": "{n} Meldungen empfangen (letzte 10 min)",
-    "activity_events_commands": "{e} Ereignisse empfangen · {c} Befehle gesendet (letzte 10 min)"
+    "activity_events_commands": "{e} Ereignisse empfangen · {c} Befehle gesendet (letzte 10 min)",
+    "button_showKeyOptions": "Eigenen API-Schlüssel verwenden (optional)",
+    "info_apiKeyOptional": "Normalerweise brauchst du hier nichts einzutragen. Der Adapter meldet sich mit dem App-Token aus Schritt 2 auch an der Smart Home API an. Ein eigener Schlüssel ist trotzdem möglich: Er ist **dauerhaft gültig** und im dSS unter System > Zugriffsberechtigung **einzeln sichtbar und widerrufbar**. Wichtig: Nach dem Erstellen den Dialog **speichern** – sonst kennt die laufende Instanz den neuen Schlüssel nicht.",
+    "section_credentials": "Ein Zugang oder zwei?",
+    "info_credentials": "Der App-Token aus Schritt 2 ist der Ausweis des Adapters – und er öffnet **beide** Schnittstellen. Für die Smart Home API ist deshalb kein zweiter Schlüssel nötig; der Adapter nutzt einfach die Anmeldung, die er ohnehin hat. **An der Arbeitsteilung ändert das nichts**: Ereignisse und Schaltbefehle laufen weiter über die klassische Schnittstelle, gebündelte Zähler- und Ausgangswerte über die Smart Home API. Der Status-Tab zeigt das unverändert an. Ein eigener API-Schlüssel bleibt möglich und ist dann der bevorzugte Weg – er ist dauerhaft gültig und lässt sich im dSS einzeln widerrufen. Lehnt der dSS ihn einmal ab (widerrufen oder durch einen neueren gleichen Namens ersetzt), sagt der Adapter das einmal im Log und arbeitet mit der Anmeldung weiter."
 }

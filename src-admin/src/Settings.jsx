@@ -156,6 +156,10 @@ export default function Settings({ native, onChange, onSendTo, alive, t, initial
     const activity = status && status.activity;
     const [credentials, setCredentials] = useState({ username: '', password: '' });
     const [showToken, setShowToken] = useState(false);
+    // Der API-Key ist eine Zusatzoption - eingeklappt, solange keiner eingetragen ist
+    const [showKeyOptions, setShowKeyOptions] = useState(false);
+    // Ein bereits eingetragener Key wird immer gezeigt - sonst waere er unsichtbar
+    const keySectionOpen = showKeyOptions || !!native.smartHomeApiKey;
     const [tokenState, setTokenState] = useState({ running: false, error: '', done: false });
 
     const createToken = async () => {
@@ -394,6 +398,25 @@ export default function Settings({ native, onChange, onSendTo, alive, t, initial
                                     help={th('help_useSmartHomeApi')}
                                 />
 
+                                {!keySectionOpen ? (
+                                    <Box>
+                                        <Button
+                                            size="small"
+                                            onClick={() => setShowKeyOptions(true)}
+                                            sx={{ color: 'text.secondary', pl: 0 }}
+                                            startIcon={<KeyIcon fontSize="small" />}
+                                        >
+                                            {t('button_showKeyOptions')}
+                                        </Button>
+                                    </Box>
+                                ) : null}
+
+                                {keySectionOpen ? (
+                                    <>
+                                <Alert severity="info" icon={<InfoOutlinedIcon fontSize="inherit" />}>
+                                    {richText(t('info_apiKeyOptional'))}
+                                </Alert>
+
                                 <Box>
                                     <TextField
                                         label={t('label_smartHomeApiKey')}
@@ -450,6 +473,8 @@ export default function Settings({ native, onChange, onSendTo, alive, t, initial
 
                                 {keyState.error ? <Alert severity="error">{keyState.error}</Alert> : null}
                                 {keyState.done ? <Alert severity="success">{t('key_created')}</Alert> : null}
+                                    </>
+                                ) : null}
                             </Stack>
                         </Card>
                         </Box>
@@ -588,6 +613,11 @@ export default function Settings({ native, onChange, onSendTo, alive, t, initial
                         <Card icon={<SwapHorizIcon />} title={t('section_why')}>
                             <Typography variant="body2" sx={{ lineHeight: 1.7 }}>
                                 {richText(t('info_why'))}
+                            </Typography>
+                        </Card>
+                        <Card icon={<KeyIcon />} title={t('section_credentials')}>
+                            <Typography variant="body2" sx={{ lineHeight: 1.7 }}>
+                                {richText(t('info_credentials'))}
                             </Typography>
                         </Card>
                         <Card icon={<InfoOutlinedIcon />} title={t('section_notes')}>

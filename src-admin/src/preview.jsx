@@ -56,7 +56,8 @@ function Preview() {
         validateCertificate: false,
         appToken: '0123456789abcdef0123456789abcdef',
         useSmartHomeApi: true,
-        smartHomeApiKey: 'fedcba9876543210fedcba9876543210',
+        // Der Normalfall seit 2.4.21: kein eigener Schluessel, der App-Token genuegt
+        smartHomeApiKey: '',
         dataPollInterval: 100,
         usePresetValues: true,
         initializeOutputValues: true,

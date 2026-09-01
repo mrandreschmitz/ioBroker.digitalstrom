@@ -59,10 +59,11 @@ in the last 10 minutes:
 
 ## Configuration
 
-The connection tab walks through the setup in three numbered steps: the server address (entered
-once - it serves both interfaces), the app token as the base access (created directly from the
-dialog with your dSS credentials, which are not stored), and the Smart Home API key as the
-recommended acceleration - created from the existing app token with one click, no password needed:
+The connection tab walks through the setup: the server address (entered once - it serves both
+interfaces), the app token as the base access (created directly from the dialog with your dSS
+credentials, which are not stored), and a switch for the recommended acceleration. **The app token
+opens both interfaces**, so the Smart Home API needs no second credential - a separate API key
+stays available as an option behind a link:
 
 ![Connection tab of the configuration dialog](docs/admin-connection.png)
 

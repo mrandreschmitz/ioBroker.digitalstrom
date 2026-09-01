@@ -30,12 +30,12 @@
     "unit_seconds": "seconds",
     "card_credentials": "Credentials",
     "token_clear": "Remove token",
-    "section_smartHome": "Acceleration: Smart Home API (recommended)",
-    "info_smartHome": "Newer digitalSTROM servers offer a second, modern interface in addition - and that is what the second key here is for. The adapter uses it as a turbo for reading: **all meter values and all output values** (brightness, blind positions, colour values) arrive in one single request each instead of many individual ones. The startup finishes in seconds instead of minutes, values are fresh again quickly after scene calls, and your dSS is noticeably relieved. The key is created from the existing app token with one click - no password needed again - and works hand in hand with it. Should the Smart Home API ever not answer, the proven path takes over automatically.",
+    "section_smartHome": "加速：Smart Home API（推荐）",
+    "info_smartHome": "较新的 digitalSTROM 服务器还额外提供第二个现代接口。适配器把它当作读取的涡轮：**所有电表数值和所有输出数值**（亮度、百叶帘位置、颜色值）各用一个请求就能取回，而不是许多个单独请求。启动因此在几秒内完成而不是几分钟，场景调用后数值很快恢复最新，你的 dSS 明显减负。**为此不需要单独的密钥**——第 2 步的登录就够了。万一 Smart Home API 没有响应，成熟的通道会自动接手。",
     "label_useSmartHomeApi": "Read meter and output values through the Smart Home API",
-    "help_useSmartHomeApi": "Reads meter and output values bundled through the Smart Home API. Needs a dSS with firmware 1.19 or newer and the key below.",
+    "help_useSmartHomeApi": "通过 Smart Home API 打包读取电表和输出数值。需要固件 1.19 或更新的 dSS。使用第 2 步的登录——单独的密钥是可选的。",
     "label_smartHomeApiKey": "API key",
-    "help_smartHomeApiKey": "Created from the existing app token, no password needed. Visible in the dSS under System > Access Authorization.",
+    "help_smartHomeApiKey": "可选。由现有的应用令牌创建，无需密码。可在 dSS 的「系统 > 访问授权」中查看。",
     "button_createSmartHomeKey": "Create API key",
     "key_missing": "No API key stored yet",
     "info_token_role": "The app token is the adapter's base access: **button presses, sensor values and all events arrive through it in real time**, and **every switching command** runs over it. Nothing works without it - create it once with your dSS credentials.",
@@ -66,5 +66,9 @@
     "status_notifications_help": "dSS change notifications - reconciled at most every five minutes",
     "activity_reads": "{n} reads (last 10 min)",
     "activity_messages": "{n} notifications received (last 10 min)",
-    "activity_events_commands": "{e} events received · {c} commands sent (last 10 min)"
+    "activity_events_commands": "{e} events received · {c} commands sent (last 10 min)",
+    "button_showKeyOptions": "使用单独的 API 密钥（可选）",
+    "info_apiKeyOptional": "通常这里无需填写。适配器也会用第 2 步的应用令牌登录 Smart Home API。仍然可以使用单独的密钥：它**长期有效**，并在 dSS 的「系统 > 访问授权」中**可单独查看和吊销**。重要：创建后请**保存**对话框——否则运行中的实例不知道新密钥。",
+    "section_credentials": "一个凭据还是两个？",
+    "info_credentials": "第 2 步的应用令牌是适配器的身份凭证——它能打开**两个**接口。因此 Smart Home API 不需要第二个密钥；适配器直接使用它本来就有的登录。**这不会改变分工**：事件和开关命令仍走经典接口，打包的电表和输出数值走 Smart Home API。状态页显示保持不变。单独的 API 密钥仍然可用，并且是首选通道——它长期有效，可在 dSS 中单独吊销。若 dSS 拒绝了它（已吊销，或被同名的更新密钥取代），适配器会在日志中提示一次，并继续用登录方式工作。"
 }

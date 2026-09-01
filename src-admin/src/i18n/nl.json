@@ -30,12 +30,12 @@
     "unit_seconds": "seconds",
     "card_credentials": "Credentials",
     "token_clear": "Remove token",
-    "section_smartHome": "Acceleration: Smart Home API (recommended)",
-    "info_smartHome": "Newer digitalSTROM servers offer a second, modern interface in addition - and that is what the second key here is for. The adapter uses it as a turbo for reading: **all meter values and all output values** (brightness, blind positions, colour values) arrive in one single request each instead of many individual ones. The startup finishes in seconds instead of minutes, values are fresh again quickly after scene calls, and your dSS is noticeably relieved. The key is created from the existing app token with one click - no password needed again - and works hand in hand with it. Should the Smart Home API ever not answer, the proven path takes over automatically.",
+    "section_smartHome": "Versnelling: Smart Home API (aanbevolen)",
+    "info_smartHome": "Nieuwere digitalSTROM-servers bieden daarnaast een tweede, moderne interface. De adapter gebruikt die als turbo voor lezen: **alle meterwaarden en alle uitgangswaarden** (helderheid, rolluikposities, kleurwaarden) komen in telkens één enkele request in plaats van vele afzonderlijke. De start is daardoor in seconden klaar in plaats van minuten, waarden zijn na scèneoproepen snel weer vers en je dSS wordt merkbaar ontlast. **Een eigen sleutel is daarvoor niet nodig** - de aanmelding uit stap 2 volstaat. Mocht de Smart Home API een keer niet antwoorden, dan neemt de beproefde weg automatisch over.",
     "label_useSmartHomeApi": "Read meter and output values through the Smart Home API",
-    "help_useSmartHomeApi": "Reads meter and output values bundled through the Smart Home API. Needs a dSS with firmware 1.19 or newer and the key below.",
+    "help_useSmartHomeApi": "Leest meter- en uitgangswaarden gebundeld via de Smart Home API. Vereist een dSS met firmware 1.19 of nieuwer. Gebruikt de aanmelding uit stap 2 - een eigen sleutel is optioneel.",
     "label_smartHomeApiKey": "API key",
-    "help_smartHomeApiKey": "Created from the existing app token, no password needed. Visible in the dSS under System > Access Authorization.",
+    "help_smartHomeApiKey": "Optioneel. Wordt aangemaakt uit het bestaande app-token, een wachtwoord is daarvoor niet nodig. Zichtbaar in de dSS onder Systeem > Toegangsautorisatie.",
     "button_createSmartHomeKey": "Create API key",
     "key_missing": "No API key stored yet",
     "info_token_role": "The app token is the adapter's base access: **button presses, sensor values and all events arrive through it in real time**, and **every switching command** runs over it. Nothing works without it - create it once with your dSS credentials.",
@@ -66,5 +66,9 @@
     "status_notifications_help": "dSS change notifications - reconciled at most every five minutes",
     "activity_reads": "{n} reads (last 10 min)",
     "activity_messages": "{n} notifications received (last 10 min)",
-    "activity_events_commands": "{e} events received · {c} commands sent (last 10 min)"
+    "activity_events_commands": "{e} events received · {c} commands sent (last 10 min)",
+    "button_showKeyOptions": "Een eigen API-sleutel gebruiken (optioneel)",
+    "info_apiKeyOptional": "Normaal hoef je hier niets in te vullen. De adapter meldt zich met het app-token uit stap 2 ook aan bij de Smart Home API. Een eigen sleutel blijft mogelijk: hij is **permanent geldig** en in de dSS onder Systeem > Toegangsautorisatie **afzonderlijk zichtbaar en intrekbaar**. Belangrijk: na het aanmaken de dialoog **opslaan** - anders kent de draaiende instantie de nieuwe sleutel niet.",
+    "section_credentials": "Eén toegang of twee?",
+    "info_credentials": "Het app-token uit stap 2 is het legitimatiebewijs van de adapter - en het opent **beide** interfaces. Voor de Smart Home API is daarom geen tweede sleutel nodig; de adapter gebruikt gewoon de aanmelding die hij toch al heeft. **Aan de taakverdeling verandert dat niets**: gebeurtenissen en schakelcommando's lopen verder via de klassieke interface, gebundelde meter- en uitgangswaarden via de Smart Home API. Het statustabblad toont dat ongewijzigd. Een eigen API-sleutel blijft mogelijk en is dan de voorkeursweg - hij is permanent geldig en kan in de dSS afzonderlijk worden ingetrokken. Wijst de dSS hem af (ingetrokken of vervangen door een nieuwere met dezelfde naam), dan meldt de adapter dat één keer in het log en werkt verder met de aanmelding."
 }

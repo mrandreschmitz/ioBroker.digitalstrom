@@ -30,12 +30,12 @@
     "unit_seconds": "seconds",
     "card_credentials": "Credentials",
     "token_clear": "Remove token",
-    "section_smartHome": "Acceleration: Smart Home API (recommended)",
-    "info_smartHome": "Newer digitalSTROM servers offer a second, modern interface in addition - and that is what the second key here is for. The adapter uses it as a turbo for reading: **all meter values and all output values** (brightness, blind positions, colour values) arrive in one single request each instead of many individual ones. The startup finishes in seconds instead of minutes, values are fresh again quickly after scene calls, and your dSS is noticeably relieved. The key is created from the existing app token with one click - no password needed again - and works hand in hand with it. Should the Smart Home API ever not answer, the proven path takes over automatically.",
+    "section_smartHome": "Ускорение: Smart Home API (рекомендуется)",
+    "info_smartHome": "Новые серверы digitalSTROM дополнительно предлагают второй, современный интерфейс. Адаптер использует его как турбо для чтения: **все значения счётчиков и все выходные значения** (яркость, положения жалюзи, цвета) приходят одним запросом вместо множества отдельных. Запуск завершается за секунды вместо минут, значения быстро снова актуальны после вызова сцен, а нагрузка на dSS заметно снижается. **Отдельный ключ для этого не нужен** — достаточно входа из шага 2. Если Smart Home API однажды не ответит, автоматически возьмёт верх проверенный путь.",
     "label_useSmartHomeApi": "Read meter and output values through the Smart Home API",
-    "help_useSmartHomeApi": "Reads meter and output values bundled through the Smart Home API. Needs a dSS with firmware 1.19 or newer and the key below.",
+    "help_useSmartHomeApi": "Читает значения счётчиков и выходов пакетно через Smart Home API. Требуется dSS с прошивкой 1.19 или новее. Использует вход из шага 2 — отдельный ключ необязателен.",
     "label_smartHomeApiKey": "API key",
-    "help_smartHomeApiKey": "Created from the existing app token, no password needed. Visible in the dSS under System > Access Authorization.",
+    "help_smartHomeApiKey": "Необязательно. Создаётся из имеющегося токена приложения, пароль не нужен. Виден в dSS в разделе «Система > Права доступа».",
     "button_createSmartHomeKey": "Create API key",
     "key_missing": "No API key stored yet",
     "info_token_role": "The app token is the adapter's base access: **button presses, sensor values and all events arrive through it in real time**, and **every switching command** runs over it. Nothing works without it - create it once with your dSS credentials.",
@@ -66,5 +66,9 @@
     "status_notifications_help": "dSS change notifications - reconciled at most every five minutes",
     "activity_reads": "{n} reads (last 10 min)",
     "activity_messages": "{n} notifications received (last 10 min)",
-    "activity_events_commands": "{e} events received · {c} commands sent (last 10 min)"
+    "activity_events_commands": "{e} events received · {c} commands sent (last 10 min)",
+    "button_showKeyOptions": "Использовать отдельный ключ API (необязательно)",
+    "info_apiKeyOptional": "Обычно здесь ничего вводить не нужно. Адаптер входит в Smart Home API и с помощью токена приложения из шага 2. Отдельный ключ всё же возможен: он **действует постоянно** и **виден и отзывается отдельно** в dSS в разделе «Система > Права доступа». Важно: после создания **сохраните** диалог — иначе запущенный экземпляр не узнает новый ключ.",
+    "section_credentials": "Один доступ или два?",
+    "info_credentials": "Токен приложения из шага 2 — это удостоверение адаптера, и он открывает **оба** интерфейса. Поэтому Smart Home API не нужен второй ключ; адаптер просто использует уже имеющийся вход. **На разделение труда это никак не влияет**: события и команды переключения по-прежнему идут через классический интерфейс, пакетные значения счётчиков и выходов — через Smart Home API. Вкладка состояния показывает это без изменений. Отдельный ключ API остаётся возможным и тогда является предпочтительным путём: он действует постоянно и отзывается в dSS отдельно. Если dSS его отклонит (отозван или заменён более новым с тем же именем), адаптер один раз сообщит об этом в журнале и продолжит работать со входом."
 }
