@@ -189,6 +189,17 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ### 2.4.22 (2026-09-01)
 
+* **A blind no longer gets the guessed scene value written first.** The preset was the stand-in
+  for a position nobody could know while the blind travelled - with the Smart Home API the real
+  one arrives about two seconds later and follows the movement, so the guess only added a jump.
+  It also carries the value of the GROUP scene, which is not always where the individual device
+  travels: measured on a real installation, a blind was written 50 while it went to 60, and that
+  wrong value stood for 21 seconds. Without the Smart Home API the preset stays exactly as it was
+* **A user state is only written to the dSS when its value really changes.** Scripts that
+  re-assert their states every few minutes had every single write forwarded, even when the dSS
+  already held that value - measured: 31 pointless requests in 40 minutes, by then the largest
+  remaining load on the classic interface. The value the dSS reports is tracked from both
+  directions, so a state someone changed in the dSS is never mistaken for unchanged
 * **A travelling output no longer reports its target before it arrives.** The interpolation used
   to clamp at the target, so once the announced end had passed while the dSS still said "moving",
   the state claimed the blind was there - seen on a real travel 2.1 seconds early. Nothing is

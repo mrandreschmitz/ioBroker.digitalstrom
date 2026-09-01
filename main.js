@@ -1457,6 +1457,11 @@ class Digitalstrom extends utils.Adapter {
             // DSSStructure.setStateSafe()
             return;
         }
+        // Everything the dSS reports comes through here - that is what keeps the known
+        // value of a user state current, see DSSStructure.noteUserStateValue()
+        if (this.dssStruct && typeof this.dssStruct.noteUserStateValue === 'function') {
+            this.dssStruct.noteUserStateValue(id, converted);
+        }
         this.setState(id, converted, true);
     }
 

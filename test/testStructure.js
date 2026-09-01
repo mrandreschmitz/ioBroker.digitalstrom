@@ -900,6 +900,131 @@ describe('DSSStructure', () => {
         });
     });
 
+    // Der Preset-Wert war der Platzhalter fuer eine Position, die waehrend der Fahrt
+    // nicht zu wissen war. Mit dem Sync ist sie es - und der Preset traegt den
+    // GRUPPEN-Szenenwert, der fuer das einzelne Geraet falsch sein kann
+    describe('the scene preset of a shade', () => {
+        function shadeContext(withSync) {
+            const written = [];
+            const struct = createStructure({
+                dss: new EventEmitter(),
+                dssQueue: {
+                    queueUpdateOutputValue: (dev, index, length, prio, callback) =>
+                        setImmediate(() => callback && callback(null, 0)),
+                    queueSetOutputValue: () => {},
+                    pushQueryQueue: (circuit, entry, prio, callback) =>
+                        setImmediate(() => callback && callback(null, { ok: true })),
+                },
+                adapter: {
+                    log: silentLogger,
+                    config: { initializeOutputValues: false, usePresetValues: true },
+                    setState: () => {},
+                    isStopping: () => false,
+                },
+            });
+            struct.objectsReady = true;
+            struct.setStateSafe = (id, value) => written.push({ id, value });
+            if (withSync) {
+                struct.smartHomeSync = /** @type {any} */ ({ requestDeviceSync: () => true, stop: () => {} });
+            }
+            const positionId = 'devices.m1.shade1.shadePositionOutside';
+            struct.dssObjects[positionId] = { type: 'state', common: {}, native: {} };
+            const dev = {
+                dSUID: 'shade1',
+                meterDSUID: 'm1',
+                name: 'Rolladen',
+                outputChannelList: { shadePositionOutside: positionId },
+            };
+            return { struct, dev, written, positionId };
+        }
+
+        it('is written when the values can only come from the classic path', done => {
+            const { struct, dev, written, positionId } = shadeContext(false);
+            struct.createShaderDevice(dev, 'devices.m1.shade1', () => {
+                written.length = 0;
+                struct.dss.emit('shade1', {
+                    name: 'callScene',
+                    source: { isDevice: true },
+                    properties: { sceneID: '5' },
+                });
+                setTimeout(() => {
+                    expect(written).to.deep.equal([{ id: positionId, value: 100 }]);
+                    struct.clearTimeouts();
+                    done();
+                }, 20);
+            });
+        });
+
+        it('is left out when the real position follows two seconds later', done => {
+            const { struct, dev, written } = shadeContext(true);
+            struct.createShaderDevice(dev, 'devices.m1.shade1', () => {
+                written.length = 0;
+                struct.dss.emit('shade1', {
+                    name: 'callScene',
+                    source: { isDevice: true },
+                    properties: { sceneID: '5' },
+                });
+                setTimeout(() => {
+                    expect(written, 'kein geratener Wert vor dem echten').to.deep.equal([]);
+                    struct.clearTimeouts();
+                    done();
+                }, 20);
+            });
+        });
+    });
+
+    // Skripte schreiben ihre User-States alle paar Minuten mit dem bereits gesetzten
+    // Wert neu - live gemessen 31 sinnlose Requests an den dSS in 40 Minuten
+    describe('writes to an apartment user state', () => {
+        function userStateContext() {
+            const sent = [];
+            const written = [];
+            const struct = createStructure({
+                dssQueue: {
+                    pushQueryQueue: (circuit, entry, prio, callback) => {
+                        sent.push(entry.params.value);
+                        setImmediate(() => callback && callback(null, { ok: true }));
+                    },
+                },
+                adapter: { log: silentLogger, config: {}, setState: () => {}, isStopping: () => false },
+            });
+            struct.objectsReady = true;
+            struct.setStateSafe = (id, value) => written.push({ id, value });
+            struct.propertyUserStates = [{ name: '1614106429', displayName: 'Regensensor', state: 'inactive' }];
+            struct.createApartmentUserStates();
+            return { struct, sent, written };
+        }
+
+        it('goes to the dSS when the value really changes, and only then', () => {
+            const { struct, sent, written } = userStateContext();
+            const stateId = 'apartment.userStates.1614106429';
+            const onChange = struct.dssObjects[stateId].onChange;
+
+            onChange('inactive');
+            expect(sent, 'derselbe Wert wie im dSS - nichts gesendet').to.deep.equal([]);
+            expect(written, 'trotzdem quittiert').to.deep.equal([{ id: stateId, value: 'inactive' }]);
+
+            onChange('active');
+            expect(sent, 'die echte Aenderung geht raus').to.deep.equal(['active']);
+
+            onChange('active');
+            expect(sent, 'die Wiederholung nicht').to.deep.equal(['active']);
+        });
+
+        it('sends again after the dSS reported something else', () => {
+            const { struct, sent } = userStateContext();
+            const stateId = 'apartment.userStates.1614106429';
+            const onChange = struct.dssObjects[stateId].onChange;
+
+            onChange('active');
+            expect(sent).to.deep.equal(['active']);
+            // Jemand hat den State im dSS umgestellt - das Ereignis kommt hier an
+            struct.noteUserStateValue(stateId, 'inactive');
+            onChange('active');
+            expect(sent, 'jetzt ist der Wert wieder eine Aenderung').to.deep.equal(['active', 'active']);
+        });
+    });
+
     // Ein Joker mit Ausgang (geschaltete Steckdose) hatte fuer diesen Ausgang gar keinen
     // Lesepfad: der Wert kam erst mit dem naechsten Abgleich, live gemessen 57 s nach
     // dem Einschalten

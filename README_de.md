@@ -266,6 +266,19 @@ Der vollständige Changelog inklusive der Historie von Apollon77 steht in der en
 
 ### 2.4.22 (2026-09-01)
 
+* **Einem Rollladen wird nicht mehr zuerst der geratene Szenenwert geschrieben.** Der Preset war
+  der Platzhalter für eine Position, die während der Fahrt niemand kennen konnte — mit der Smart
+  Home API kommt die echte rund zwei Sekunden später und folgt der Bewegung, der geratene Wert
+  erzeugte also nur einen Sprung. Er trägt zudem den Wert der GRUPPEN-Szene, und die ist nicht
+  immer das Ziel des einzelnen Geräts: An einer echten Anlage gemessen bekam ein Rollladen 50
+  geschrieben, während er auf 60 fuhr — der falsche Wert stand 21 Sekunden. Ohne Smart Home API
+  bleibt der Preset unverändert erhalten
+* **Ein User-State wird nur noch dann an den dSS geschrieben, wenn sich sein Wert wirklich
+  ändert.** Skripte, die ihre States alle paar Minuten neu setzen, ließen bisher jede einzelne
+  Schreibung weiterreichen, auch wenn der dSS den Wert längst hatte — gemessen: 31 sinnlose
+  Requests in 40 Minuten, damit der größte verbliebene Anteil der klassischen Last. Der im dSS
+  bekannte Wert wird aus beiden Richtungen nachgeführt, ein im dSS geänderter State gilt also nie
+  fälschlich als unverändert
 * **Ein fahrender Ausgang meldet sein Ziel nicht mehr, bevor er dort ist.** Die Interpolation
   klemmte am Zielwert — war das angekündigte Fahrtende überschritten, während der dSS noch
   „moving" meldete, behauptete der State die Ankunft. An einer echten Fahrt gemessen: 2,1 Sekunden
