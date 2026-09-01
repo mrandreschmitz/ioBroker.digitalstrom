@@ -27,6 +27,13 @@ const ActivityCounter = require('./lib/activityCounter');
 const configUtils = require('./lib/configUtils');
 const dssConstants = require('./lib/constants');
 
+// A momentary scene is released again after this pause. Not on the next turn: a wall
+// switch repeats its Stop, measured three times within 481 ms on one blind while the
+// position never moved. Releasing immediately would turn that ONE press into three
+// rising edges for every rule listening on it. Re-armed on each repeat, so a burst
+// stays a single true -> false, exactly as many edges as the user caused.
+const MOMENTARY_SCENE_RELEASE = 500;
+
 /**
  * The objectHelper of `@apollon/iobroker-tools`. The package ships no types, so the part
  * of it this adapter actually uses is written down here.
@@ -126,6 +133,11 @@ class Digitalstrom extends utils.Adapter {
         // sent. Each one is reported once per run, see coerceScalarValue().
         /** @type {Set<string>} */
         this.unmappedBooleanStates = new Set();
+        // Scene states waiting to be released again, by state id - see handleScene()
+        /** @type {Map<string, NodeJS.Timeout>} */
+        this.momentaryReleases = new Map();
+        // Overridable in tests so a release does not cost half a second there
+        this.momentaryReleaseDelay = MOMENTARY_SCENE_RELEASE;
 
         this.dataPollInterval = 60000;
         this.dataPollTimeout = null;
@@ -403,6 +415,10 @@ class Digitalstrom extends utils.Adapter {
             clearTimeout(this.restartTimeout);
             this.restartTimeout = null;
         }
+        // A scene state that was about to be released stays true - the adapter is going
+        // down, and writing after the stop barrier is what isStopping() exists to prevent
+        this.momentaryReleases?.forEach(timer => clearTimeout(timer));
+        this.momentaryReleases?.clear();
 
         // Close a still running App-Token dialog: its client lives outside the normal
         // lifecycle and would otherwise keep sockets open after the unload
@@ -792,6 +808,47 @@ class Digitalstrom extends utils.Adapter {
      */
     static looksLikeAppToken(token) {
         return typeof token === 'string' && /^[0-9a-f]{32,}$/i.test(token.trim());
+    }
+
+    /**
+     * True for a scene that commands a change instead of selecting a preset.
+     *
+     * The group is checked FIRST and not afterwards: group 48 reads scene 10 as "Cooling
+     * Night" and 11 as "Cooling Holiday", the ventilation groups read their own numbers
+     * too. Those are lasting modes, and releasing one would clear the operation mode of a
+     * room half a second after it was set.
+     *
+     * @param {string|number|undefined} sceneId scene number of the event
+     * @param {string|number|undefined} groupId group of the event, undefined for a device
+     * @returns {boolean} true if the scene leaves no state behind
+     */
+    static isMomentaryScene(sceneId, groupId) {
+        if (groupId !== undefined && dssConstants.ownSceneNumberGroups.includes(Number(groupId))) {
+            return false;
+        }
+        return !!dssConstants.momentaryScenes[Number(sceneId)];
+    }
+
+    /**
+     * Lets a momentary scene state fall back to false after MOMENTARY_SCENE_RELEASE.
+     *
+     * @param {string} stateId scene state that was just set to true
+     */
+    releaseMomentaryScene(stateId) {
+        const pending = this.momentaryReleases.get(stateId);
+        // A repeat re-arms instead of adding a second release, so a wall switch that sends
+        // its Stop three times still produces one true and one false
+        pending && clearTimeout(pending);
+        this.momentaryReleases.set(
+            stateId,
+            setTimeout(() => {
+                this.momentaryReleases.delete(stateId);
+                if (this.isStopping()) {
+                    return;
+                }
+                this.setDssState(stateId, false);
+            }, this.momentaryReleaseDelay),
+        );
     }
 
     /**
@@ -1338,6 +1395,17 @@ class Digitalstrom extends utils.Adapter {
                     this.setDssState(sceneIdState, data.properties.sceneID);
                 } else {
                     this.setDssState(sceneIdState, null);
+                }
+                // A Stop, an Increment or an Impulse is a command, not a preset, and the
+                // dSS never sends the undoScene that would release it again - the state
+                // would stay true from the first press to the end of the run. sceneId is
+                // deliberately NOT released: it keeps answering "the last scene called
+                // here was Stop", with its own timestamp.
+                // The scene and group are read HERE, synchronously: the zone-wide and
+                // apartment-wide expansion further down mutates data.properties, so a
+                // callback reading them later would see the last group of that loop.
+                if (value && Digitalstrom.isMomentaryScene(data.properties.sceneID, data.properties.groupID)) {
+                    this.releaseMomentaryScene(sourceDeviceId);
                 }
                 // The room temperature control is switched through the scenes of group 48.
                 // Keep the readable operation mode of that room in sync with them.

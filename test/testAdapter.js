@@ -49,6 +49,7 @@ function createContext(overrides = {}) {
         stopCallbacks: [],
         tokenConnections: new Set(),
         unmappedBooleanStates: new Set(),
+        momentaryReleases: new Map(),
         eventHandlersRegistered: false,
         setState(id, value) {
             this.states[id] = value;
@@ -65,6 +66,7 @@ function createContext(overrides = {}) {
             this.restarts.push(timeout);
         },
         eventLog: Digitalstrom.prototype.eventLog,
+        releaseMomentaryScene: Digitalstrom.prototype.releaseMomentaryScene,
         subscribeStates: () => {},
         startDataPolling: () => {},
         clearAdditionalObjects: () => {},
@@ -984,6 +986,134 @@ describe('Adapter logic', () => {
             dss.on('dev2', data => deviceEvents.push(['dev2', data.properties.sceneID]));
             return { ctx, dss, deviceEvents };
         }
+
+        /**
+         * Context for a single device that carries a momentary and a lasting scene.
+         *
+         * @param {Record<string, any>} [overrides]
+         */
+        function momentaryContext(overrides = {}) {
+            const writes = [];
+            const dss = new DSS({ host: 'http://127.0.0.1:1', appToken: 'x' });
+            const ctx = createContext({
+                dss,
+                dssQueue: { pushQueryQueue: () => {} },
+                momentaryReleaseDelay: 5,
+                setState(id, value) {
+                    this.states[id] = value;
+                    writes.push([id, value]);
+                },
+                dssStruct: {
+                    stateMap: {
+                        'dev1.scenes.15': 'devices.m1.dev1.scenes.Stop',
+                        'dev1.scenes.14': 'devices.m1.dev1.scenes.Maximum',
+                        '5.48.scenes.10': 'apartment.0.5.48.scenes.CoolingNight',
+                    },
+                    dssObjects: {},
+                    zoneDevices: {},
+                    apartmentStructure: { zones: [] },
+                },
+                ...overrides,
+            });
+            Digitalstrom.prototype.registerEventHandlers.call(ctx, ['callScene']);
+            return { ctx, dss, writes };
+        }
+
+        /**
+         * @param {any} dss
+         * @param {string} sceneID
+         * @param {Record<string, any>} [source]
+         * @param {Record<string, any>} [props]
+         */
+        function deviceScene(dss, sceneID, source = {}, props = {}) {
+            dss.emit('callScene', {
+                name: 'callScene',
+                source: { isDevice: true, isGroup: false, isApartment: false, dSUID: 'dev1', ...source },
+                properties: { sceneID, callOrigin: '-1', ...props },
+            });
+        }
+
+        // Regression: the dSS sends a callScene for Stop and never the matching undoScene -
+        // measured over three hours: six of them, not one undoScene - so the state stayed
+        // true from the first press to the end of the run and a rule on it fired once.
+        it('lets a Stop fall back to false again', done => {
+            const { dss, writes } = momentaryContext();
+            deviceScene(dss, '15');
+            expect(writes, 'true first, the release must not overtake it').to.deep.include([
+                'devices.m1.dev1.scenes.Stop',
+                true,
+            ]);
+            setTimeout(() => {
+                expect(writes.filter(w => w[0] === 'devices.m1.dev1.scenes.Stop')).to.deep.equal([
+                    ['devices.m1.dev1.scenes.Stop', true],
+                    ['devices.m1.dev1.scenes.Stop', false],
+                ]);
+                dss.stop();
+                done();
+            }, 40);
+        });
+
+        // A wall switch repeats its Stop - measured three times within 481 ms while the
+        // blind never moved. That is ONE press, and a rule on it has to fire once.
+        it('makes a repeated Stop one edge, not three', done => {
+            const { dss, writes } = momentaryContext();
+            deviceScene(dss, '15');
+            deviceScene(dss, '15');
+            deviceScene(dss, '15');
+            setTimeout(() => {
+                const releases = writes.filter(w => w[0] === 'devices.m1.dev1.scenes.Stop' && w[1] === false);
+                expect(releases, 'the release is re-armed, not queued three times').to.have.lengthOf(1);
+                expect(writes[writes.length - 1][1], 'and it is the last thing that happens').to.equal(false);
+                dss.stop();
+                done();
+            }, 40);
+        });
+
+        // A blind driven to Maximum really IS at Maximum - that latch is correct and the
+        // fix must be keyed on the scene number, not on "the state never went false"
+        it('leaves a scene that really is a position alone', done => {
+            const { dss, writes } = momentaryContext();
+            deviceScene(dss, '14');
+            setTimeout(() => {
+                expect(writes.filter(w => w[0] === 'devices.m1.dev1.scenes.Maximum')).to.deep.equal([
+                    ['devices.m1.dev1.scenes.Maximum', true],
+                ]);
+                dss.stop();
+                done();
+            }, 40);
+        });
+
+        // Group 48 reads scene 10 as "Cooling Night", a lasting operation mode. Releasing
+        // it would clear the heating mode of the room half a second after it was set.
+        it('does not touch scene 10 of the temperature control group', done => {
+            const { dss, writes } = momentaryContext();
+            dss.emit('callScene', {
+                name: 'callScene',
+                source: { isDevice: false, isGroup: true, isApartment: false },
+                properties: { zoneID: '5', groupID: '48', sceneID: '10', callOrigin: '-1' },
+            });
+            setTimeout(() => {
+                const scene = writes.filter(w => w[0] === 'apartment.0.5.48.scenes.CoolingNight');
+                expect(scene, 'a cooling mode is not a momentary command').to.deep.equal([
+                    ['apartment.0.5.48.scenes.CoolingNight', true],
+                ]);
+                dss.stop();
+                done();
+            }, 40);
+        });
+
+        it('keeps sceneId answering which scene was called last', done => {
+            const { dss, writes } = momentaryContext();
+            deviceScene(dss, '15');
+            setTimeout(() => {
+                const sceneId = writes.filter(w => w[0] === 'devices.m1.dev1.scenes.sceneId');
+                expect(sceneId, 'only the boolean pulses, the number stays').to.deep.equal([
+                    ['devices.m1.dev1.scenes.sceneId', '15'],
+                ]);
+                dss.stop();
+                done();
+            }, 40);
+        });
 
         function callScene(dss, zoneID, groupID) {
             dss.emit('callScene', {
