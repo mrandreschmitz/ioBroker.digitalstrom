@@ -200,6 +200,14 @@ It is published under the same MIT license; the original copyright notice is kep
   with constant consumption - a printer in standby - may not send a sensor event for months, so
   these states stayed empty since their objects were created. Energy meter and high range current
   natives have unverified resolutions and deliberately stay with the events
+* **A blind now follows its travel live instead of jumping at the end.** The status leaves the
+  value out while an output moves - but it carries the whole journey: where the travel started,
+  where it goes, and the window it takes. Every movement brings its own window from the dSS, so
+  a slow awning and a fast roller shutter are equally right and nothing is assumed. The position
+  is computed from it and written during the travel, the channel stays open for the real final
+  value, the next read is due right after the travel ends instead of on the fixed 15 s grid, and
+  a running travel no longer burns the follow-up budget (measured live on a dSS20 1.19.13: a full
+  travel from 100 to 0 in 24.8 s)
 * **The CIE x/y colour coordinates arrive correctly scaled.** The channel scale delivers them as
   0..1 while the states hold 0..10000 - since 2.4.18 rounding collapsed every coordinate to 0
   or 1 on the Smart Home API path; the new named read applies the same corrected factor

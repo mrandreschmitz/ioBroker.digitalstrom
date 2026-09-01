@@ -281,6 +281,14 @@ Der vollständige Changelog inklusive der Historie von Apollon77 steht in der en
   monatelang kein Sensor-Event, diese States blieben seit dem Anlegen ihrer Objekte leer.
   Energiezähler und High-Range-Strom haben unverifizierte native Auflösungen und bleiben bewusst
   bei den Events
+* **Ein Rollladen folgt seiner Fahrt jetzt live, statt am Ende zu springen.** Der Status lässt den
+  Wert weg, solange ein Ausgang fährt - er trägt aber die ganze Fahrt mit: wo sie startete, wohin
+  sie geht und welches Zeitfenster sie braucht. Jede Bewegung bringt ihr eigenes Fenster vom dSS
+  mit, eine langsame Markise und ein schneller Rollladen sind also gleichermaßen richtig, nichts
+  ist angenommen. Daraus wird die Position berechnet und während der Fahrt geschrieben, der Kanal
+  bleibt für den echten Endwert offen, die nächste Abfrage steht direkt nach dem Fahrtende an
+  statt im starren 15-s-Takt, und eine laufende Fahrt verbraucht das Follow-up-Budget nicht mehr
+  (live gemessen an einem dSS20 1.19.13: volle Fahrt von 100 auf 0 in 24,8 s)
 * **Die CIE-x/y-Farbkoordinaten kommen richtig skaliert an.** Die Kanalskala liefert sie als
   0..1, die States halten 0..10000 - seit 2.4.18 rundete der Smart-Home-Pfad jede Koordinate auf
   0 oder 1 zusammen; der neue benannte Read wendet denselben korrigierten Faktor an

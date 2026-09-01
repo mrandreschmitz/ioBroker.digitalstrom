@@ -406,6 +406,117 @@ describe('Smart Home output sync', function () {
         expect(structure.classicReads, 'no second classic read').to.have.lengthOf(1);
     });
 
+    // Live gemessen (dSS20 1.19.13, 01.09.2026): ein fahrender Rollladen laesst value
+    // weg, traegt aber status "moving", initialValue 100, targetValue 0 und ein
+    // startedAt/terminatesAt-Fenster - hier 24,8 s. Die Dauer kommt IMMER vom dSS,
+    // jede Fahrt jedes Geraets bringt ihre eigene mit.
+    describe('a travelling output', () => {
+        const START = Date.parse('2026-09-01T06:26:46.012Z');
+        const END = Date.parse('2026-09-01T06:27:10.812Z');
+
+        /**
+         * @returns {any} eine Statusantwort mit fahrendem Rollladen, Form wie gemessen
+         */
+        function travellingStatus() {
+            return {
+                included: {
+                    dsDevices: [
+                        {
+                            id: 'shade1',
+                            type: 'dsDeviceStatus',
+                            attributes: {
+                                functionBlocks: [
+                                    {
+                                        id: 'shade1',
+                                        outputs: [
+                                            {
+                                                id: 'shadePositionOutside',
+                                                status: 'moving',
+                                                initialValue: 100,
+                                                targetValue: 0,
+                                                startedAt: '2026-09-01T06:26:46.012Z',
+                                                terminatesAt: '2026-09-01T06:27:10.812Z',
+                                            },
+                                        ],
+                                    },
+                                ],
+                            },
+                        },
+                    ],
+                },
+            };
+        }
+
+        it('is interpolated from the journey the status carries', () => {
+            // Auf halber Strecke: 100 -> 0 in 24,8 s, nach 12,4 s also 50
+            const half = SmartHomeOutputSync.travelPosition(
+                travellingStatus().included.dsDevices[0].attributes.functionBlocks[0].outputs[0],
+                START + (END - START) / 2,
+            );
+            expect(Math.round(/** @type {number} */ (half))).to.equal(50);
+        });
+
+        it('clamps a clock that runs before or after the travel', () => {
+            const output = travellingStatus().included.dsDevices[0].attributes.functionBlocks[0].outputs[0];
+            expect(SmartHomeOutputSync.travelPosition(output, START - 60000), 'before the start').to.equal(100);
+            expect(SmartHomeOutputSync.travelPosition(output, END + 60000), 'after the end').to.equal(0);
+        });
+
+        it('ignores an output that is not travelling', () => {
+            expect(SmartHomeOutputSync.travelPosition({ id: 'x', value: 5, status: 'ok' }, START)).to.equal(undefined);
+            expect(
+                SmartHomeOutputSync.travelPosition({ id: 'x', status: 'moving', initialValue: 100 }, START),
+                'without a target and a window there is nothing to compute',
+            ).to.equal(undefined);
+        });
+
+        // Der ganze Zweck: der State folgt der Fahrt, bleibt aber offen, bis der
+        // echte Endwert da ist
+        it('writes the position during the travel and keeps the channel pending', async () => {
+            const structure = createFakeStructure();
+            let nowValue = START + 12400;
+            let statusCalls = 0;
+            const sync = createSync(structure, {
+                getApartmentStatus: async () => {
+                    statusCalls++;
+                    return travellingStatus();
+                },
+            });
+            sync.now = () => nowValue;
+
+            sync.requestDeviceSync(SHADE(), ['shadePositionOutside']);
+            await delay(60);
+
+            expect(statusCalls).to.equal(1);
+            expect(structure.written, 'die halbe Strecke steht im State').to.deep.equal([
+                { id: 'devices.m1.shade1.shadePositionOutside', value: 50 },
+            ]);
+            expect(sync.pending.has('shade1'), 'der Kanal bleibt offen bis zum Endwert').to.equal(true);
+            expect(structure.classicReads, 'kein Fallback waehrend der Fahrt').to.have.lengthOf(0);
+            sync.stop();
+        });
+
+        // Ohne diese Ausnahme wuerde eine lange Fahrt das Follow-up-Budget aufbrauchen
+        // und am Ende beim klassischen Read landen
+        it('does not burn the follow up budget while the travel runs', async () => {
+            const structure = createFakeStructure();
+            let nowValue = START + 1000;
+            const sync = createSync(structure, {
+                getApartmentStatus: async () => travellingStatus(),
+            });
+            sync.now = () => nowValue;
+
+            sync.requestDeviceSync(SHADE(), ['shadePositionOutside']);
+            await delay(300);
+
+            const entry = /** @type {any} */ (sync.pending.get('shade1'));
+            expect(entry, 'noch offen').to.not.equal(undefined);
+            expect(entry.attempts, 'kein verbrauchter Versuch').to.equal(0);
+            expect(structure.classicReads).to.have.lengthOf(0);
+            sync.stop();
+        });
+    });
+
     // CIE x/y kommen im Status als 0..1 (live: 0.2235/0.3921) - die States halten
     // 0..10000. Ohne die Skalierung machte Math.round seit 2.4.18 aus jeder
     // Koordinate 0 oder 1
