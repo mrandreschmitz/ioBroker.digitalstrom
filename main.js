@@ -370,7 +370,8 @@ class Digitalstrom extends utils.Adapter {
         }
         this.stopping = true;
         this.stopCallbacks = callback ? [callback] : [];
-        this.log && this.log.info(`stopping ... ${Date.now()}`);
+        const stopStartedAt = Date.now();
+        this.log && this.log.info(`stopping ... ${stopStartedAt}`);
         this.setConnected(false);
 
         if (this.dataPollTimeout) {
@@ -424,7 +425,16 @@ class Digitalstrom extends utils.Adapter {
             // Closes the agents and aborts still running requests/long-polls
             this.dss && this.dss.stop();
             this.smartHome && this.smartHome.stop();
-            this.log && this.log.info(`cleaned everything up... ${time}`);
+            // This used to print the value unsubscribeAllEvents hands over, which is the
+            // deadline of the longest running long-poll - a moment in the FUTURE. Next to
+            // the timestamp of the "stopping" line it read like a duration and suggested
+            // 15 s where the unload had taken 116 ms. The elapsed time is what anybody
+            // reading these two lines wants, and the poll deadline stays available for
+            // whoever needs it.
+            this.log &&
+                this.log.info(
+                    `cleaned everything up... after ${Date.now() - stopStartedAt}ms (longest event poll ran until ${time})`,
+                );
             const callbacks = this.stopCallbacks;
             this.stopCallbacks = [];
             callbacks.forEach(cb => {

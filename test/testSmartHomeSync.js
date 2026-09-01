@@ -975,6 +975,24 @@ describe('Activity counters', function () {
         expect(counter.snapshot()).to.deep.equal({ 'classic.events': 0, 'smarthome.requests': 0 });
     });
 
+    it('covers exactly the window it announces, not a bucket less', () => {
+        let nowValue = 0;
+        const counter = new ActivityCounter({ windowMs: 10 * 60 * 1000, bucketMs: 60 * 1000, now: () => nowValue });
+        // Sechzig Ereignisse in der ersten Minute, danach nichts mehr
+        for (let i = 0; i < 60; i++) {
+            counter.count('classic.requests');
+        }
+
+        // Eine halbe Minute nach Ablauf der zehn Minuten liegt die Haelfte der ersten
+        // Minute noch im Fenster - frueher fiel der ganze Eimer schlagartig heraus
+        nowValue = 10 * 60 * 1000 + 30 * 1000;
+        expect(counter.snapshot()['classic.requests'], 'der Randeimer zaehlt anteilig').to.equal(30);
+
+        // Und exakt nach elf Minuten ist er vollstaendig draussen
+        nowValue = 11 * 60 * 1000;
+        expect(counter.snapshot()['classic.requests']).to.equal(0);
+    });
+
     it('is announced by both clients for every request', async () => {
         const DSSSmartHome = require('../lib/dssSmartHome');
         const seen = [];
