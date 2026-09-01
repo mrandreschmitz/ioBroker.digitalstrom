@@ -187,6 +187,16 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ## Changelog
 
+### 2.4.22 (2026-09-01)
+
+* **A joker with an output follows its scenes.** A switched socket has an output value, but no
+  read path of its own: it only ever arrived with the next reconciliation - measured on a real
+  installation, the value of a socket switched on at 10:20:04 appeared at 10:21:02, 57 seconds
+  later. It is now read at startup and right after a scene call, through the same bundled status
+  request every other device type uses, so a whole room still costs ONE read. Without the Smart
+  Home API nothing changes: a joker output has no other way to be read, and the reconciliation
+  stays responsible
+
 ### 2.4.21 (2026-08-31)
 
 * **vDC devices (Hue, Sonos and friends) read their outputs at all for the first time.** They have

@@ -264,6 +264,16 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
 
+### 2.4.22 (2026-09-01)
+
+* **Ein Joker mit Ausgang folgt jetzt seinen Szenen.** Eine geschaltete Steckdose hat einen
+  Ausgangswert, aber keinen eigenen Lesepfad: Er kam immer erst mit dem nächsten Abgleich — an
+  einer echten Anlage gemessen erschien der Wert einer um 10:20:04 eingeschalteten Steckdose um
+  10:21:02, also 57 Sekunden später. Jetzt wird er beim Start und direkt nach einem Szenenaufruf
+  gelesen, über dieselbe gebündelte Statusabfrage wie bei allen anderen Gerätetypen — ein ganzer
+  Raum kostet also weiterhin EINE Abfrage. Ohne Smart Home API ändert sich nichts: Ein
+  Joker-Ausgang hat keinen anderen Lesepfad, dafür bleibt der Abgleich zuständig
+
 ### 2.4.21 (2026-08-31)
 
 * **vDC-Geräte (Hue, Sonos und Co.) lesen ihre Ausgänge überhaupt zum ersten Mal.** Sie haben

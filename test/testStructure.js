@@ -900,6 +900,101 @@ describe('DSSStructure', () => {
         });
     });
 
+    // Ein Joker mit Ausgang (geschaltete Steckdose) hatte fuer diesen Ausgang gar keinen
+    // Lesepfad: der Wert kam erst mit dem naechsten Abgleich, live gemessen 57 s nach
+    // dem Einschalten
+    describe('a joker with an output follows its scenes', () => {
+        function jokerContext(withSync) {
+            const syncRequests = [];
+            const struct = createStructure({
+                dss: new EventEmitter(),
+                dssQueue: {
+                    queueUpdateOutputValue: (dev, index, length, prio, callback) =>
+                        setImmediate(() => callback && callback(null, 0)),
+                    pushQueryQueue: (circuit, entry, prio, callback) =>
+                        setImmediate(() => callback && callback(null, { ok: true })),
+                },
+                adapter: {
+                    log: silentLogger,
+                    config: { initializeOutputValues: true, usePresetValues: false },
+                    setState: () => {},
+                    isStopping: () => false,
+                },
+            });
+            struct.objectsReady = true;
+            struct.setStateSafe = () => {};
+            if (withSync) {
+                struct.smartHomeSync = /** @type {any} */ ({
+                    requestDeviceSync: dev => {
+                        syncRequests.push(dev.dSUID);
+                        return true;
+                    },
+                    stop: () => {},
+                });
+            }
+            const dev = {
+                dSUID: 'socket1',
+                meterDSUID: 'm1',
+                zoneID: 5,
+                name: 'Steckdose Drucker',
+                hwInfo: 'SW-KL200',
+                isValid: true,
+                isPresent: true,
+                isVdcDevice: false,
+                outputMode: 1,
+                buttonInputCount: 1,
+                outputChannels: [{ channelId: 'powerLevel', channelType: 'powerLevel', channelIndex: 0 }],
+            };
+            return { struct, dev, syncRequests };
+        }
+
+        it('reads its output at startup and again after a scene', done => {
+            const { struct, dev, syncRequests } = jokerContext(true);
+            struct.createDevice(dev, () => {
+                expect(syncRequests, 'einmal beim Anlegen').to.deep.equal(['socket1']);
+                struct.dss.emit('socket1', {
+                    name: 'callScene',
+                    source: { isDevice: true },
+                    properties: { sceneID: '14' },
+                });
+                struct.dss.emit('socket1', { name: 'buttonClick', source: { isDevice: true }, properties: {} });
+                setTimeout(() => {
+                    expect(syncRequests, 'nur der Szenenaufruf liest nach').to.deep.equal(['socket1', 'socket1']);
+                    struct.clearTimeouts();
+                    done();
+                }, 20);
+            });
+        });
+
+        it('stays quiet without the sync', done => {
+            const { struct, dev } = jokerContext(false);
+            struct.createDevice(dev, () => {
+                struct.dss.emit('socket1', { name: 'callScene', source: { isDevice: true }, properties: {} });
+                setTimeout(() => {
+                    expect(struct.sceneRefreshDevices.size, 'nichts registriert').to.equal(0);
+                    struct.clearTimeouts();
+                    done();
+                }, 20);
+            });
+        });
+
+        // createJokerDevice ist aus zwei Pfaden erreichbar - der Handler darf nur einmal haengen
+        it('registers the refresh only once per device', done => {
+            const { struct, dev, syncRequests } = jokerContext(true);
+            struct.createDevice(dev, () => {
+                struct.registerSceneOutputRefresh(dev);
+                struct.registerSceneOutputRefresh(dev);
+                syncRequests.length = 0;
+                struct.dss.emit('socket1', { name: 'callScene', source: { isDevice: true }, properties: {} });
+                setTimeout(() => {
+                    expect(syncRequests, 'ein Handler, eine Anfrage').to.deep.equal(['socket1']);
+                    struct.clearTimeouts();
+                    done();
+                }, 20);
+            });
+        });
+    });
+
     // Als invalid markierte Metering-Sensoren liefern ohne Event nie einen Wert -
     // ein Drucker im Standby sendet monatelang keins. Ein einmaliger Bus-Read mit
     // niedriger Prioritaet fuellt den State (live verifiziert: die Steckdose
