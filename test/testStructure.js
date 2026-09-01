@@ -1900,6 +1900,41 @@ describe('DSSStructure', () => {
             expect(entries[0]).to.not.contain('"presence"');
         });
 
+        it('does not ask for an issue about zones and groups it skipped itself', () => {
+            const entries = [];
+            const struct = reportingStructure(entries);
+            struct.propertyStates = [
+                // a group no zone can reach, and a zone the dSS reports as not present -
+                // this adapter builds no objects for either, by its own decision
+                { name: 'zone.2274.group.10.status.malfunction' },
+                { name: 'zone.2274.group.10.status.service' },
+                { name: 'zone.65534.light' },
+                { name: 'zone.0.group.64.status.service' },
+                // this one really belongs to nobody and has to survive the filter
+                { name: 'dev.302ed89f43f000000000458002a35af100.0' },
+            ];
+            struct.skippedStatePrefixes.add('zone.2274.group.10.');
+            struct.skippedStatePrefixes.add('zone.65534.');
+            struct.skippedStatePrefixes.add('zone.0.group.64.');
+
+            struct.reportUnmappedStates();
+
+            expect(entries, 'exactly one summary line').to.have.lengthOf(1);
+            expect(entries[0], 'the orphan is still named').to.contain('a35af100');
+            expect(entries[0], 'a skipped group must not be listed').to.not.contain('group.10');
+            expect(entries[0], 'a skipped zone must not be listed').to.not.contain('65534');
+            expect(entries[0]).to.not.contain('group.64');
+        });
+
+        it('stays quiet when only skipped zones and groups are left over', () => {
+            const entries = [];
+            const struct = reportingStructure(entries);
+            struct.propertyStates = [{ name: 'zone.65534.heating' }];
+            struct.skippedStatePrefixes.add('zone.65534.');
+            struct.reportUnmappedStates();
+            expect(entries, 'nothing to report, nothing to ask for').to.deep.equal([]);
+        });
+
         it('stays quiet when every state was assigned', () => {
             const entries = [];
             const struct = reportingStructure(entries);
