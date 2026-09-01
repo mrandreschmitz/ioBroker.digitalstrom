@@ -170,7 +170,9 @@ In den Strukturen kommen mehrere Datentypen vor:
 * **Szenen** sind als Schalter umgesetzt. Der Wert `true` sendet einen `callScene`-Befehl für diese
   Szene, der Wert `false` einen `undoScene`-Befehl — ob „undo" ein gültiger Befehl ist, entscheidet
   der DSS. Löst der DSS selbst ein `callScene` oder `undoScene` als Event aus, wird die betroffene
-  Szene mit `ack=true` auf `true` bzw. `false` gesetzt.
+  Szene mit `ack=true` auf `true` bzw. `false` gesetzt. Szenen, die eine Bewegung befehlen statt
+  eine Position zu wählen (Stopp, Increment, Decrement, Area Stepping Continue, Impuls), fallen
+  von selbst wieder auf `false` zurück, siehe die Hinweise zum Verhalten.
 * **States** aus dem System und benutzerdefinierte States über das Addon werden angezeigt und sind
   schreibgeschützt.
 * **Sensorwerte** werden über Events aktualisiert und können teilweise auch geschrieben werden.
@@ -225,6 +227,22 @@ Die Geräte sind als „Klemme/dSM"."Geräte-ID" strukturiert, darunter jeweils:
   Skript, das denselben Wert alle paar Minuten neu setzt, erzeugt damit gar keine Anfragen. Der vom
   DSS gemeldete Wert wird aus beiden Richtungen mitgeführt, damit ein im DSS geänderter State nie
   fälschlich als unverändert gilt.
+* **Momentane Szenen**: Stopp, Increment, Decrement, Area Stepping Continue und Impuls sind
+  Befehle, keine Positionen — der dSS schickt dafür einen callScene und nie den undoScene, der
+  ihn wieder lösen würde. Ihr `scenes.<Name>` geht deshalb auf true und fällt eine halbe Sekunde
+  später auf false zurück, damit eine Regel bei jedem Druck feuert statt nur beim allerersten.
+  Eine Wiederholung innerhalb dieser halben Sekunde spannt die Freigabe neu, statt eine zweite
+  Flanke zu erzeugen — ein Wandtaster wiederholt seinen Stopp. `scenes.sceneId` wird nicht
+  freigegeben und beantwortet weiterhin, welche Szene zuletzt gerufen wurde. Für „es wurde
+  gedrückt" den Szenen-State nehmen, nicht `<Gerät>.0.button` — der ist ein Pegel, den der dSS
+  setzt und nicht zurücknimmt.
+* **Die ersten zwei Minuten nach einem Start**: Der Adapter abonniert die dSS-Ereignisse, bevor
+  er seine Objekte angelegt hat, damit auf einer großen Anlage während des Aufbaus fast nichts
+  verlorengeht. Sensorwerte, States und Binäreingänge aus diesem Fenster werden angewendet,
+  sobald die Objekte existieren — auf die Startaufnahme obendrauf. Szenenaufrufe und
+  Tastendrücke aus diesem Fenster werden bewusst NICHT nachgeholt, auf einen minutenalten Druck
+  zu reagieren wäre schlimmer als ihn zu verpassen. Die zuletzt gerufene Szene jeder Zonengruppe
+  wird am Ende des Starts ohnehin neu gelesen, die Szenen-States stimmen also trotzdem.
 
 ## Bekannte Einschränkungen und Systemeigenheiten
 
@@ -282,6 +300,71 @@ Der vollständige Changelog inklusive der Historie von Apollon77 steht in der en
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
 
 ### 2.4.22 (2026-09-01)
+
+* **Der Adapter hört schon zu, während er noch aufbaut.** 149,7 Sekunden lang kam nach dem
+  Start nichts in ioBroker an — jeder Tastendruck, jeder Fensterkontakt und jeder Sensorwert
+  zwischen „starting" und dem aktiven Abonnement war endgültig weg. Fast nichts davon war
+  Warten auf den dSS: Der klassische Strukturlesevorgang war 2,6 Sekunden nach dem Start
+  beantwortet, die restlichen 147 s sind Auswerten und das Anlegen von 5231 Objekten. Das
+  Abonnement steht jetzt ganz vorn, und die Pegelwerte, die während des Objektaufbaus
+  eintreffen, werden danach angewendet — auf die Startaufnahme obendrauf und nie davor, denn
+  die Aufnahme ist das ältere Bild. Tastendrücke und Szenenaufrufe werden bewusst NICHT
+  nachgeholt: Auf einen zwei Minuten alten Druck zu reagieren ist schlimmer, als ihn zu
+  verlieren, und die Szenen werden am Ende des Starts ohnehin neu gelesen. Die fünf Zonen-Reads
+  des Aufbaus saßen außerdem im 10-s-Raster fest — allein das waren 50,6 s Warten auf
+  eine leere Warteschlange
+* **Eine Abfrage behauptet keinen Wert mehr, der sich nicht bewegt hat.** 7661 von 11015
+  State-Schreibungen eines Drei-Stunden-Logs trugen den Wert, der schon dastand — 69,6 %,
+  und 197 der 316 State-IDs hatten über den ganzen Lauf genau EINEN Wert. Der
+  Fünf-Minuten-Abgleich schrieb jedes Mal ~151 Ausgangswerte neu und änderte in drei Stunden
+  einen davon; die Zonen-Temperatur-States wurden nach jedem Abgleich neu geschrieben, 875
+  von 885 identisch. Verglichen wird nur auf den Abfrage- und Abgleichpfaden: Ein Ereignis
+  wird weiter veröffentlicht, auch wenn die Zahl gleich bleibt — „der dSS meldet das jetzt"
+  ist eine eigene Nachricht — und die Quittung eines Befehls erst recht, die muss ankommen.
+  Was in einem State steht, wird aus beiden Richtungen mitgeführt, damit ein von einem
+  anderen Adapter geschriebener Wert weiterhin korrigiert wird
+* **Ein Stopp lässt wieder los.** `scenes.Stop` ging beim ersten Druck auf true und blieb
+  true: Der dSS schickt den callScene und nie den undoScene, der ihn lösen würde — sechs
+  davon in drei Stunden, kein einziges Gegenstück — eine Regel darauf feuerte also genau
+  einmal. Stopp, Increment, Decrement, Area Stepping Continue und Impuls werden nach einer
+  halben Sekunde freigegeben, und eine Wiederholung spannt das neu, statt eine zweite Flanke
+  zu erzeugen: Ein Wandtaster wiederholt seinen Stopp (gemessen dreimal in 481 ms, ohne dass
+  sich der Rollladen bewegte). Ein Rollladen auf Maximum behält seinen Zustand — er IST
+  dort — und die Szenen der Temperaturregelgruppe, wo dieselben Nummern dauerhafte
+  Betriebsarten bedeuten, bleiben unangetastet. `scenes.sceneId` beantwortet weiterhin,
+  welche Szene zuletzt gerufen wurde
+* **Ein vDC-Read zählt als Read und darf wiederholt werden.** Der Status-Tab zeigte „classic"
+  neben 0 Ausgangs-Reads, während 136 davon für vier Sonos-Player liefen: Der benannte
+  Kanal-Lesebefehl heißt `getOutputChannelValue2` und passte auf keinen Zähler. Derselbe Read
+  fehlte in den wiederholbaren Anfragen, obwohl er für einen Sonos-Player der EINZIGE Weg zu
+  Lautstärke und Ein-Zustand ist
+* **Sechs Geräte heißen nicht mehr „(undefined)".** `outputMode 64` ist eine
+  Heizungsventil-Klemme und fehlte in der Karte. Ein unbekannter Modus erreicht den
+  Objektnamen jetzt gar nicht mehr, er wird stattdessen protokolliert. Bestandsinstallationen
+  behalten ihren Namen
+* **Vier Wohnungs-States sagen, was der dSS wirklich schickt.** Sie deklarierten
+  „true"/„false", während der dSS „active"/„inactive" antwortet. Die Werte stimmten über den
+  Ersatzweg trotzdem, aber eine Schreibung hätte das falsche Wort gesendet — und die einzige
+  Zeile, die das sagte, stand auf debug und feuerte fünfmal ungesehen. Sie warnt jetzt einmal
+  je State
+* **Der Startbericht bittet nicht mehr um Issues für eigene Entscheidungen.** Von den 45
+  States, die er als nicht zuordenbar auflistete, gehörten 42 zu Zonen und Gruppen, für die
+  dieser Adapter selbst keine Objekte angelegt hat. Sie werden abgezogen, übrig bleiben die
+  Namen, die wirklich niemandem gehören
+* **Die Cluster-Sperren bekommen die Wörter, mit denen der dSS antwortet.** `user_lock` und
+  `operation_lock` entstanden ohne Wertzuordnung, ihr Schreib-Handler konnte deshalb nur
+  warnen — der Weg dahinter war nie gelaufen
+* **Die stündliche Probe eines gelernten Kanals kostet nicht mehr vier Antworten.** Ein Kanal,
+  den der Status nie beantwortet, wird einmal pro Stunde geprobt, damit das Gelernte nicht
+  ewig festhängt — und diese Probe verbrauchte das volle Folgebudget: zwölf der
+  vierundachtzig Statusabfragen eines Drei-Stunden-Laufs, geheilt hat sie nichts. Sie reitet
+  jetzt auf einer einzigen Statusabfrage mit
+* **Drei Zahlen bedeuteten etwas anderes, als sie aussahen.** `info.apiActivity` wies ein
+  Zehn-Minuten-Fenster aus und maß neun bis zehn, 4,9 % zu wenig und immer in dieselbe
+  Richtung. Der Shutdown druckte einen Long-Poll-Termin an die Stelle, an der er wie eine
+  Dauer aussah, und behauptete damit 15 s für ein Beenden, das 116 ms dauerte. Und „Plan next
+  queue entry" nannte den gerade fertigen Eintrag, während die Priorität in derselben Zeile
+  zu dem gehörte, der eingeplant wurde
 
 * **Einem Rollladen wird nicht mehr zuerst der geratene Szenenwert geschrieben.** Der Preset war
   der Platzhalter für eine Position, die während der Fahrt niemand kennen konnte — mit der Smart

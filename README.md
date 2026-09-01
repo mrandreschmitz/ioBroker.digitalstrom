@@ -123,7 +123,7 @@ The adapter status light will get green and you will see "Subscribed to states .
 The adapter provides two data structures. The Apartment structure with Floors, Zones (Rooms) and Groups and additionally the structure of Circuits/dSMs and the connected devices with their detail data.
 
 In the structures several "types" of data are included:
-* Scenes: Scenes are implemented as switches. Setting the value tro "true" will send a "callScene" command for this scene. A value of "false" will send an "undoScene" command for this scene - it is up the the DSS server to decide if "undo" is a valid command! When a callScene or undoScene is triggered as event from the DSS server the relevant scene is set to "true" or "false" with ack=true
+* Scenes: Scenes are implemented as switches. Setting the value tro "true" will send a "callScene" command for this scene. A value of "false" will send an "undoScene" command for this scene - it is up the the DSS server to decide if "undo" is a valid command! When a callScene or undoScene is triggered as event from the DSS server the relevant scene is set to "true" or "false" with ack=true. Scenes that command a movement instead of selecting a position (Stop, Increment, Decrement, Area Stepping Continue, Impulse) fall back to "false" on their own, see the behaviour notes
 * States: States from the system and user defined states via the addon are shown and are read only
 * Sensor values are updated when triggered by an event and can partially also bet changed - changes are send a "pushSensorValue" to the server and it is up to the server if the value is accepted! This is mainly relevant for Temperature or Humidity values
 
@@ -155,6 +155,8 @@ The devices are structured with "circuit/dSM"."deviceID" and the subsctructure i
 * **Host field**: IP addresses, DNS names, full URLs and IPv6 addresses (in brackets) are accepted. Without an explicit port 8080 is used. Credentials, paths or query strings in the host field are rejected.
 * **A travelling output**: while a blind moves, the dSS reports no value, but it announces the journey - where it started, where it goes and the window it takes. The position is computed from that during the travel and follows the movement. In the moment the announced end passes nothing is written, so the state never claims the target before the blind is there; the real value follows within about two seconds.
 * **User states**: a user state is only forwarded to the dSS when its value really changes, so a script that re-asserts the same value every few minutes causes no requests at all. The value the dSS reports is tracked from both directions, so a state someone changed in the dSS is never mistaken for unchanged.
+* **Momentary scenes**: Stop, Increment, Decrement, Area Stepping Continue and Impulse are commands, not positions - the dSS sends a callScene for them and never the undoScene that would release it again. Their `scenes.<name>` therefore goes true and falls back to false half a second later, so a rule on it fires on every press instead of only on the first one ever. A repeat within that half second re-arms the release rather than adding a second edge, because a wall switch repeats its Stop. `scenes.sceneId` is not released and keeps answering which scene was called last. For "a button was pressed" use the scene state, not `<device>.0.button` - that one is a level the dSS sets and does not take back.
+* **The first two minutes after a start**: the adapter subscribes to the dSS events before it has created its objects, so almost nothing is lost while a large installation is being built. Sensor values, states and binary inputs that arrive in that window are applied once the objects exist, on top of the initial snapshot. Scene calls and button presses in that window are deliberately NOT caught up - acting on a press minutes after it happened would be worse than missing it - but the last called scene of every zone group is re-read at the end of the start, so the scene states are correct anyway.
 
 ## Known Issues / System design effects
 * The digitalSTROM system is scene-centric by design: most actions are scene calls rather than
@@ -197,6 +199,65 @@ It is published under the same MIT license; the original copyright notice is kep
 ## Changelog
 
 ### 2.4.22 (2026-09-01)
+
+* **The adapter listens while it is still building.** For 149.7 seconds after the start
+  nothing reached ioBroker - every button press, every window contact and every sensor
+  reading between "starting" and the active subscription was gone for good. Almost none of
+  that was waiting for the dSS: the classic structure read was answered 2.6 seconds after
+  the start, the remaining 147 s are parsing it and creating 5231 objects. The subscription
+  moves to the front now, and the level values that arrive while the objects are built are
+  applied afterwards - on top of the initial snapshot and never before it, because the
+  snapshot is the older picture. Button presses and scene calls are deliberately NOT caught
+  up: acting on a press two minutes late is worse than losing it, and the scenes are
+  re-read at the end of the start anyway. The five zone reads of the build-up also stopped
+  sitting on a 10 s grid, which alone was 50.6 s of waiting on an empty queue
+* **A poll no longer re-asserts a value that has not moved.** 7661 of 11015 state writes in
+  a three hour log carried the value that was already there - 69.6 %, and 197 of the 316
+  state ids held exactly ONE value for the whole run. The five minute reconcile rewrote
+  ~151 output values every time and changed one of them in three hours; the zone
+  temperature states were rewritten after every sync, 875 of 885 identical. Only the
+  polling and reconciling paths compare now: an event keeps being published even when the
+  number repeats, because "the dSS reported this now" is a message of its own, and so does
+  the confirmation of a command, which has to reach its acknowledgement. What is in a state
+  is tracked from both directions, so a value another adapter wrote is still corrected
+* **A Stop lets go again.** `scenes.Stop` went true on the first press and stayed true: the
+  dSS sends the callScene and never the undoScene that would release it - six of them in
+  three hours, not one counterpart - so a rule on it fired once and never again. Stop,
+  Increment, Decrement, Area Stepping Continue and Impulse are released after half a
+  second, and a repeat re-arms that instead of adding a second edge, because a wall switch
+  repeats its Stop (measured three times within 481 ms while the blind never moved). A
+  blind driven to Maximum keeps its latch - it really IS at Maximum - and the scenes of the
+  temperature control group, where the same numbers mean lasting modes, are untouched.
+  `scenes.sceneId` still answers which scene was called last
+* **A vDC read counts as a read, and may be repeated.** The status tab showed the chip
+  "classic" next to 0 output reads while 136 of them were running for four Sonos players:
+  the named channel read is called `getOutputChannelValue2` and matched no counter. The
+  same read was also missing from the retryable requests, although for a Sonos player it is
+  the ONLY path to volume and power state
+* **Six devices stop being called "(undefined)".** `outputMode 64` is a heating valve
+  terminal and was not in the map. An unknown mode no longer reaches the object name at
+  all; it is logged instead. Existing installations keep the name they have
+* **Four apartment states say what the dSS really sends.** They declared "true"/"false"
+  while the dSS answers "active"/"inactive". The values were right anyway through the
+  fallback, but a write would have sent the wrong word - and the only line that said so sat
+  on debug and fired five times unseen. It warns once per state now
+* **The startup report stops asking for issues about our own decisions.** Of the 45 states
+  it listed as unassignable, 42 belonged to zones and groups this adapter had itself
+  decided not to build objects for. They are subtracted now, so what is left are the names
+  that really belong to nobody
+* **The cluster locks get the words the dSS answers with.** `user_lock` and
+  `operation_lock` were created without a value mapping, so their write handler could only
+  ever warn - the path behind it had never run
+* **The hourly probe of a learned channel stops costing four answers.** A channel the
+  status never answers is probed once an hour so the learning cannot latch forever, and
+  that probe spent the full follow-up budget: twelve of the eighty-four status requests of
+  a three hour run, healing nothing. It rides along with one status request now
+* **Three numbers meant something else than they looked like.** `info.apiActivity`
+  announced a ten minute window and measured between nine and ten, 4.9 % low and always in
+  the same direction. The shutdown printed a long-poll deadline where it read like a
+  duration, suggesting 15 s for an unload that took 116 ms. And "Plan next queue entry"
+  named the entry that had just finished while the priority in the same line belonged to
+  the one being planned
 
 * **A blind no longer gets the guessed scene value written first.** The preset was the stand-in
   for a position nobody could know while the blind travelled - with the Smart Home API the real
