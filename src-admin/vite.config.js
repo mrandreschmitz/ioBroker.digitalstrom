@@ -23,10 +23,11 @@ export default defineConfig({
     root: fileURLToPath(new URL('.', import.meta.url)),
     base: './',
     plugins: [react(), serveAdapterIcon()],
-    // MUI 6 ships modern syntax; the default esbuild target would try to down-compile it
+    // MUI 6 ships modern syntax; a lower transform target would try to down-compile it
     // and fails on destructuring. Admin runs in a current browser, so es2022 is fine.
-    esbuild: { target: 'es2022' },
-    optimizeDeps: { esbuildOptions: { target: 'es2022' } },
+    // Vite 8 transforms with oxc and pre-bundles with rolldown, so the target is set there.
+    oxc: { target: 'es2022' },
+    optimizeDeps: { rolldownOptions: { transform: { target: 'es2022' } } },
     resolve: {
         dedupe: ['react', 'react-dom', '@mui/material', '@emotion/react', '@emotion/styled'],
     },
@@ -36,7 +37,7 @@ export default defineConfig({
         emptyOutDir: false,
         sourcemap: false,
         chunkSizeWarningLimit: 1400,
-        rollupOptions: {
+        rolldownOptions: {
             output: {
                 entryFileNames: 'assets/index.js',
                 chunkFileNames: 'assets/[name]-[hash].js',
