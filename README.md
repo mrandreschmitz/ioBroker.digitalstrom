@@ -126,7 +126,6 @@ In the structures several "types" of data are included:
 * Scenes: Scenes are implemented as switches. Setting the value tro "true" will send a "callScene" command for this scene. A value of "false" will send an "undoScene" command for this scene - it is up the the DSS server to decide if "undo" is a valid command! When a callScene or undoScene is triggered as event from the DSS server the relevant scene is set to "true" or "false" with ack=true
 * States: States from the system and user defined states via the addon are shown and are read only
 * Sensor values are updated when triggered by an event and can partially also bet changed - changes are send a "pushSensorValue" to the server and it is up to the server if the value is accepted! This is mainly relevant for Temperature or Humidity values
-* 
 
 ### Apartment object and states
 ![Apartment Objects](img/dss-apartment.png)
@@ -147,13 +146,15 @@ On Apartment level also Sensors (also outdoor values), States and user states ar
 The devices are structured with "circuit/dSM"."deviceID" and the subsctructure inside includes:
 * Device Scenes, will be triggered for this device only
 * Device Sensors, when reported from the system. So values might be empty
-* Output values (e.g. state/brightness for Lights and position/angle for Shades/Blinds) are located directly below the device. Only Lights and Shades/Blinds will have a defined functionality for now.
+* Output values (e.g. state/brightness for Lights and position/angle for Shades/Blinds) are located directly below the device. Lights and Shades/Blinds carry the full named functionality; a Joker (Black) with an output - a switched socket, for instance - has its output value read as well, and vDC devices (Hue, Sonos) reach their channels through the named channel read.
 * Buttons and Binary Inputs will also be represented by states and are read only
 
 ## Behaviour notes
 
 * **Fast consecutive writes**: If a new value is written to the same output while an older value is still waiting in the request queue, the older one is replaced (last write wins) to respect the DSS request rate limits. The replaced request is reported as "superseded" and its value is never acknowledged as written. A write that is already sent to the DSS is never replaced - the newer value is sent afterwards.
 * **Host field**: IP addresses, DNS names, full URLs and IPv6 addresses (in brackets) are accepted. Without an explicit port 8080 is used. Credentials, paths or query strings in the host field are rejected.
+* **A travelling output**: while a blind moves, the dSS reports no value, but it announces the journey - where it started, where it goes and the window it takes. The position is computed from that during the travel and follows the movement. In the moment the announced end passes nothing is written, so the state never claims the target before the blind is there; the real value follows within about two seconds.
+* **User states**: a user state is only forwarded to the dSS when its value really changes, so a script that re-asserts the same value every few minutes causes no requests at all. The value the dSS reports is tracked from both directions, so a state someone changed in the dSS is never mistaken for unchanged.
 
 ## Known Issues / System design effects
 * The digitalSTROM system is scene-centric by design: most actions are scene calls rather than
@@ -162,8 +163,16 @@ The devices are structured with "circuit/dSM"."deviceID" and the subsctructure i
   without extra bus traffic.
 * Values might be empty when they were not reported by the system
 * Binary inputs were originally implemented without any hardware to test against. They are confirmed to work in the meantime, with motion detectors and window handles reporting through them. The state keeps the number the DSS reports, so history data stays comparable, but the numbers are named: `inactive`/`active` for a normal binary input, and `closed`/`open`/`tilted` for a window handle, which reports three positions instead of two.
-* Meaningful output value reading and writing is only implemented for Ligh (Yellow) and Shade/Blind (Gray) devices.
-* I had no chance so far checking how the system behaves with vDCs. So I need logs and details here to add it
+* The full named output functionality - brightness, position, angle and the colour channels - is
+  implemented for Light (Yellow) and Shade/Blind (Gray) devices. A Joker (Black) with an output is
+  read as well and follows its scenes, but its value stays the plain output value without a named
+  meaning.
+* vDC devices (Hue lamps, Sonos players) read their output channels through the named read
+  `device/getOutputChannelValue2` - verified against a dSS20 1.19.13. The audio volume and power
+  state of Sonos players and the colour values of vDC lights arrive with and without the Smart Home
+  API, and a dSS that rejects the call for a device is remembered per device. Beyond their output
+  channels there is no vDC-specific handling, so logs and reports about other vDC hardware are still
+  welcome.
 * Room temperature control is implemented for the rooms the DSS really regulates: the controller mode and the controller state are read, the operation mode follows the scenes of group 48 and can be set, and the set point of every operation mode is read and writable. Rooms without an active controller deliberately get no such objects.
 * Ventilation is covered by the group scenes, the apartment ventilation status and the two boolean output channels (swing mode, auto intensity). Ventilation devices have no dedicated functionality beyond that, because no such hardware was available to test against. Logs and reports are welcome.
 

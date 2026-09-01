@@ -200,8 +200,10 @@ Die Geräte sind als „Klemme/dSM"."Geräte-ID" strukturiert, darunter jeweils:
 * Geräteszenen, die ausschließlich dieses Gerät ansprechen
 * Gerätesensoren, sofern vom System gemeldet — Werte können also leer bleiben
 * Ausgangswerte (z. B. Helligkeit bei Licht, Position und Winkel bei Rollladen/Jalousie) direkt
-  unterhalb des Geräts. Eine definierte Funktionalität gibt es bisher nur für Licht und
-  Rollladen/Jalousie.
+  unterhalb des Geräts. Die vollständige benannte Funktionalität gibt es für Licht und
+  Rollladen/Jalousie; ein Joker (Schwarz) mit Ausgang — etwa eine geschaltete Steckdose — wird
+  ebenfalls gelesen, und vDC-Geräte (Hue, Sonos) erreichen ihre Kanäle über den benannten
+  Kanal-Lesebefehl.
 * Taster und Binäreingänge, ebenfalls als States und schreibgeschützt
 
 ## Hinweise zum Verhalten
@@ -214,6 +216,15 @@ Die Geräte sind als „Klemme/dSM"."Geräte-ID" strukturiert, darunter jeweils:
 * **Hostfeld**: Akzeptiert werden IP-Adressen, DNS-Namen, vollständige URLs und IPv6-Adressen (in
   eckigen Klammern). Ohne expliziten Port wird 8080 verwendet. Anmeldedaten, Pfade oder Query-Strings
   im Hostfeld werden abgelehnt.
+* **Fahrender Ausgang**: Während ein Rollladen fährt, meldet der DSS keinen Wert, kündigt aber die
+  Fahrt an — Startwert, Zielwert und das Zeitfenster dafür. Daraus wird die Position während der
+  Fahrt berechnet und folgt der Bewegung. In dem Moment, in dem das angekündigte Ende verstreicht,
+  wird nichts geschrieben: Der State behauptet das Ziel also nie, bevor der Rollladen dort ist. Der
+  echte Wert folgt rund zwei Sekunden später.
+* **User-States**: Ein User-State geht nur dann an den DSS, wenn sich sein Wert wirklich ändert. Ein
+  Skript, das denselben Wert alle paar Minuten neu setzt, erzeugt damit gar keine Anfragen. Der vom
+  DSS gemeldete Wert wird aus beiden Richtungen mitgeführt, damit ein im DSS geänderter State nie
+  fälschlich als unverändert gilt.
 
 ## Bekannte Einschränkungen und Systemeigenheiten
 
@@ -227,10 +238,16 @@ Die Geräte sind als „Klemme/dSM"."Geräte-ID" strukturiert, darunter jeweils:
   Zahl, die der DSS meldet, damit Verlaufsdaten vergleichbar bleiben, die Zahlen sind aber benannt:
   `inactive`/`active` bei einem normalen Binäreingang und `closed`/`open`/`tilted` bei einem
   Fenstergriff, der drei statt zwei Stellungen meldet.
-* Sinnvolles Lesen und Schreiben von Ausgangswerten ist bisher nur für Licht (Gelb) und
-  Rollladen/Jalousie (Grau) umgesetzt.
-* Das Verhalten mit vDCs konnte bisher nicht geprüft werden. Auch dafür werden Logs und Details
-  benötigt.
+* Die vollständige benannte Ausgangsfunktionalität — Helligkeit, Position, Winkel und die
+  Farbkanäle — ist für Licht (Gelb) und Rollladen/Jalousie (Grau) umgesetzt. Ein Joker (Schwarz)
+  mit Ausgang wird ebenfalls gelesen und folgt seinen Szenen, sein Wert bleibt aber der reine
+  Ausgangswert ohne benannte Bedeutung.
+* vDC-Geräte (Hue-Lampen, Sonos-Player) lesen ihre Ausgangskanäle über den benannten Lesebefehl
+  `device/getOutputChannelValue2` — gemessen an einem dSS20 1.19.13. Lautstärke und Ein-Zustand von
+  Sonos-Playern sowie die Farbwerte von vDC-Lampen kommen mit und ohne Smart Home API an, und ein
+  dSS, der den Aufruf für ein Gerät ablehnt, wird pro Gerät gemerkt. Über die Ausgangskanäle hinaus
+  gibt es keine vDC-spezifische Behandlung — Logs und Rückmeldungen zu anderer vDC-Hardware sind
+  weiterhin willkommen.
 * Die Raumtemperaturregelung ist für die Räume umgesetzt, die der DSS tatsächlich regelt: Reglermodus
   und Reglerzustand werden gelesen, der Betriebsmodus folgt den Szenen der Gruppe 48 und ist
   schreibbar, und der Sollwert jedes Betriebsmodus wird gelesen und kann geändert werden. Räume ohne
