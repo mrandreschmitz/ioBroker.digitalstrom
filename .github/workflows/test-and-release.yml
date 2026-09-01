@@ -64,6 +64,9 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     strategy:
+      # One wobbly leg used to cancel the others, so a flaky windows run hid whether the
+      # remaining combinations were fine. Every combination now reports its own result.
+      fail-fast: false
       matrix:
         node-version: [22.x, 24.x]
         os: [ubuntu-latest, windows-latest, macos-latest]
