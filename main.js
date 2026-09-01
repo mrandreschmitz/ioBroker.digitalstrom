@@ -991,11 +991,12 @@ class Digitalstrom extends utils.Adapter {
     }
 
     /**
-     * Lets a momentary scene state fall back to false after MOMENTARY_SCENE_RELEASE.
+     * Lets a state that stands for a moment fall back to false after
+     * MOMENTARY_SCENE_RELEASE - a momentary scene, or a button the dSS reports as pressed.
      *
-     * @param {string} stateId scene state that was just set to true
+     * @param {string} stateId state that was just set to true
      */
-    releaseMomentaryScene(stateId) {
+    releaseMomentaryState(stateId) {
         const pending = this.momentaryReleases.get(stateId);
         // A repeat re-arms instead of adding a second release, so a wall switch that sends
         // its Stop three times still produces one true and one false
@@ -1008,7 +1009,9 @@ class Digitalstrom extends utils.Adapter {
                     return;
                 }
                 this.setDssState(stateId, false);
-            }, this.momentaryReleaseDelay),
+                // Never setTimeout(fn, undefined): that fires on the next tick and would
+                // turn the pulse into no pulse at all
+            }, this.momentaryReleaseDelay || MOMENTARY_SCENE_RELEASE),
         );
     }
 
@@ -1470,6 +1473,7 @@ class Digitalstrom extends utils.Adapter {
                     return;
                 }
                 this.setState(dssStruct.stateMap[`${data.source.dSUID}.${buttonIndex}.button`], true, true);
+                this.releaseMomentaryState(dssStruct.stateMap[`${data.source.dSUID}.${buttonIndex}.button`]);
                 // setDssState, not setState: the DSS delivers the click type and the hold count as
                 // strings while both objects are declared as numbers. The ids can be missing on
                 // devices that only have the plain button state.
@@ -1638,7 +1642,7 @@ class Digitalstrom extends utils.Adapter {
                 // apartment-wide expansion further down mutates data.properties, so a
                 // callback reading them later would see the last group of that loop.
                 if (value && Digitalstrom.isMomentaryScene(data.properties.sceneID, data.properties.groupID)) {
-                    this.releaseMomentaryScene(sourceDeviceId);
+                    this.releaseMomentaryState(sourceDeviceId);
                 }
                 // The room temperature control is switched through the scenes of group 48.
                 // Keep the readable operation mode of that room in sync with them.
@@ -1672,15 +1676,20 @@ class Digitalstrom extends utils.Adapter {
             }
 
             //console.log('Check Button: ' + dssStruct.stateMap[data.properties.originDSUID + '.0.button']);
+            // A press is a moment, not a level: the dSS reports it and never takes it back,
+            // so the state used to stay true from the first press to the end of the run -
+            // the same defect the momentary scenes had, on the state right next to them.
             if (!forwarded && data.properties.callOrigin === '9') {
                 if (data.properties.originDSUID && dssStruct.stateMap[`${data.properties.originDSUID}.0.button`]) {
                     this.setState(dssStruct.stateMap[`${data.properties.originDSUID}.0.button`], true, true);
+                    this.releaseMomentaryState(dssStruct.stateMap[`${data.properties.originDSUID}.0.button`]);
                     dssStruct.stateMap[`${data.properties.originDSUID}.0.buttonClickType`] &&
                         this.setState(dssStruct.stateMap[`${data.properties.originDSUID}.0.buttonClickType`], 0, true);
                     dssStruct.stateMap[`${data.properties.originDSUID}.0.buttonHoldCount`] &&
                         this.setState(dssStruct.stateMap[`${data.properties.originDSUID}.0.buttonHoldCount`], 0, true);
                 } else if (data.source.dSUID && dssStruct.stateMap[`${data.source.dSUID}.0.button`]) {
                     this.setState(dssStruct.stateMap[`${data.source.dSUID}.0.button`], true, true);
+                    this.releaseMomentaryState(dssStruct.stateMap[`${data.source.dSUID}.0.button`]);
                     dssStruct.stateMap[`${data.source.dSUID}.0.buttonClickType`] &&
                         this.setState(dssStruct.stateMap[`${data.source.dSUID}.0.buttonClickType`], 0, true);
                     dssStruct.stateMap[`${data.source.dSUID}.0.buttonHoldCount`] &&

@@ -268,6 +268,33 @@ describe('DSSStructure', () => {
         });
     });
 
+    describe('initialStateValue', () => {
+        // Regression: five apartment states carried no value at all from the first start
+        // onwards, because the property dump describes them with a raw value and no word.
+        it('takes the word when the dSS sends one', () => {
+            expect(DSSStructure.initialStateValue({ name: 'presence', state: 'present', value: 'present' })).to.equal(
+                'present',
+            );
+        });
+
+        it('falls back to the raw value when there is no word', () => {
+            expect(
+                DSSStructure.initialStateValue({ name: 'daylight', value: true, script_id: 'solar_computer' }),
+                'measured against a dSS20 1.19.13',
+            ).to.equal(true);
+            expect(DSSStructure.initialStateValue({ name: 'holiday', value: 'off' })).to.equal('off');
+        });
+
+        it('stays undefined when the entry carries neither', () => {
+            expect(DSSStructure.initialStateValue({ name: 'nothing' })).to.equal(undefined);
+            expect(DSSStructure.initialStateValue(null)).to.equal(undefined);
+        });
+
+        it('keeps a word that means false', () => {
+            expect(DSSStructure.initialStateValue({ state: 'inactive', value: 2 })).to.equal('inactive');
+        });
+    });
+
     describe('toBoolean', () => {
         it('maps the common DSS off words to false', () => {
             ['', '0', 'false', 'off', 'inactive', 'no', 'INACTIVE', ' Off '].forEach(v =>

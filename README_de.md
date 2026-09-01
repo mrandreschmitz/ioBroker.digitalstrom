@@ -227,15 +227,17 @@ Die Geräte sind als „Klemme/dSM"."Geräte-ID" strukturiert, darunter jeweils:
   Skript, das denselben Wert alle paar Minuten neu setzt, erzeugt damit gar keine Anfragen. Der vom
   DSS gemeldete Wert wird aus beiden Richtungen mitgeführt, damit ein im DSS geänderter State nie
   fälschlich als unverändert gilt.
-* **Momentane Szenen**: Stopp, Increment, Decrement, Area Stepping Continue und Impuls sind
+* **Momentane Szenen und Tastendrücke**: Stopp, Increment, Decrement, Area Stepping Continue und Impuls sind
   Befehle, keine Positionen — der dSS schickt dafür einen callScene und nie den undoScene, der
   ihn wieder lösen würde. Ihr `scenes.<Name>` geht deshalb auf true und fällt eine halbe Sekunde
   später auf false zurück, damit eine Regel bei jedem Druck feuert statt nur beim allerersten.
   Eine Wiederholung innerhalb dieser halben Sekunde spannt die Freigabe neu, statt eine zweite
   Flanke zu erzeugen — ein Wandtaster wiederholt seinen Stopp. `scenes.sceneId` wird nicht
-  freigegeben und beantwortet weiterhin, welche Szene zuletzt gerufen wurde. Für „es wurde
-  gedrückt" den Szenen-State nehmen, nicht `<Gerät>.0.button` — der ist ein Pegel, den der dSS
-  setzt und nicht zurücknimmt.
+  freigegeben und beantwortet weiterhin, welche Szene zuletzt gerufen wurde. `<Gerät>.<n>.button`
+  folgt derselben Regel aus demselben Grund: Der dSS meldet einen Druck und nimmt ihn nie
+  zurück, der State geht deshalb auf true und fällt eine halbe Sekunde später zurück.
+  `buttonClickType` und `buttonHoldCount` werden nicht freigegeben — sie beschreiben den Druck,
+  der stattgefunden hat, nicht den Moment.
 * **Die ersten zwei Minuten nach einem Start**: Der Adapter abonniert die dSS-Ereignisse, bevor
   er seine Objekte angelegt hat, damit auf einer großen Anlage während des Aufbaus fast nichts
   verlorengeht. Sensorwerte, States und Binäreingänge aus diesem Fenster werden angewendet,
@@ -333,6 +335,19 @@ Der vollständige Changelog inklusive der Historie von Apollon77 steht in der en
   dort — und die Szenen der Temperaturregelgruppe, wo dieselben Nummern dauerhafte
   Betriebsarten bedeuten, bleiben unangetastet. `scenes.sceneId` beantwortet weiterhin,
   welche Szene zuletzt gerufen wurde
+* **Ein gedrückter Taster lässt wieder los.** `<Gerät>.<n>.button` hatte genau das Problem
+  der momentanen Szenen, am State direkt daneben: Der dSS meldet einen Druck und nimmt ihn nie
+  zurück, der State blieb also vom ersten Druck bis zum Laufende auf true und eine Regel darauf
+  feuerte genau einmal. Er wird jetzt nach einer halben Sekunde freigegeben, aus beiden Pfaden,
+  die ihn setzen — dem Tasten-Ereignis und dem Szenenaufruf, den ein Wandtaster erzeugt.
+  `buttonClickType` und `buttonHoldCount` behalten ihre Werte, sie beschreiben den Druck, nicht
+  den Moment
+* **Fünf Wohnungs-States tragen endlich einen Wert.** `daylight`, `daynight`,
+  `daynight_indoors`, `twilight` und `holiday` entstanden leer und blieben leer, weil der Adapter
+  nur das Wort las, mit dem ein State sich selbst beschreibt. Diese fünf schickt der dSS mit
+  rohem Wert und ganz ohne Wort — gemessen: `{"name":"daylight","value":true,
+  "script_id":"solar_computer"}` — es gab also nichts zu lesen. Beide Formen werden jetzt
+  genommen, und die Umwandlung kommt mit einem Boolean ebenso zurecht wie mit „off"
 * **Ein vDC-Read zählt als Read und darf wiederholt werden.** Der Status-Tab zeigte „classic"
   neben 0 Ausgangs-Reads, während 136 davon für vier Sonos-Player liefen: Der benannte
   Kanal-Lesebefehl heißt `getOutputChannelValue2` und passte auf keinen Zähler. Derselbe Read

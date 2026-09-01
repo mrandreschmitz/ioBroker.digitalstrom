@@ -50,6 +50,7 @@ function createContext(overrides = {}) {
         tokenConnections: new Set(),
         unmappedBooleanStates: new Set(),
         momentaryReleases: new Map(),
+        momentaryReleaseDelay: 500,
         eventHandlersRegistered: false,
         setState(id, value) {
             this.states[id] = value;
@@ -66,7 +67,7 @@ function createContext(overrides = {}) {
             this.restarts.push(timeout);
         },
         eventLog: Digitalstrom.prototype.eventLog,
-        releaseMomentaryScene: Digitalstrom.prototype.releaseMomentaryScene,
+        releaseMomentaryState: Digitalstrom.prototype.releaseMomentaryState,
         parkable: Digitalstrom.prototype.parkable,
         liveOnly: Digitalstrom.prototype.liveOnly,
         replayStartupEvents: Digitalstrom.prototype.replayStartupEvents,
@@ -1412,6 +1413,27 @@ describe('Adapter logic', () => {
                 dss.stop();
                 done();
             }, 10);
+        });
+
+        // Regression: the dSS reports a press and never takes it back, so the state stayed
+        // true from the first press to the end of the run - the same defect the momentary
+        // scenes had, on the state right next to them.
+        it('lets a pressed button go again', done => {
+            const { ctx, dss } = buttonContext();
+            ctx.momentaryReleaseDelay = 5;
+            Digitalstrom.prototype.registerEventHandlers.call(ctx, ['buttonClick']);
+            dss.emit('buttonClick', {
+                name: 'buttonClick',
+                source: { isDevice: true, dSUID: 'dev1' },
+                properties: { clickType: '7', holdCount: '3' },
+            });
+            expect(ctx.states['devices.m1.dev1.button'], 'true first').to.equal(true);
+            setTimeout(() => {
+                expect(ctx.states['devices.m1.dev1.button'], 'and false again afterwards').to.equal(false);
+                expect(ctx.states['devices.m1.dev1.buttonClickType'], 'the click type is not a moment').to.equal(7);
+                dss.stop();
+                done();
+            }, 40);
         });
 
         it('keeps the click type 0 and the defaults working', done => {

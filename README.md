@@ -155,7 +155,7 @@ The devices are structured with "circuit/dSM"."deviceID" and the subsctructure i
 * **Host field**: IP addresses, DNS names, full URLs and IPv6 addresses (in brackets) are accepted. Without an explicit port 8080 is used. Credentials, paths or query strings in the host field are rejected.
 * **A travelling output**: while a blind moves, the dSS reports no value, but it announces the journey - where it started, where it goes and the window it takes. The position is computed from that during the travel and follows the movement. In the moment the announced end passes nothing is written, so the state never claims the target before the blind is there; the real value follows within about two seconds.
 * **User states**: a user state is only forwarded to the dSS when its value really changes, so a script that re-asserts the same value every few minutes causes no requests at all. The value the dSS reports is tracked from both directions, so a state someone changed in the dSS is never mistaken for unchanged.
-* **Momentary scenes**: Stop, Increment, Decrement, Area Stepping Continue and Impulse are commands, not positions - the dSS sends a callScene for them and never the undoScene that would release it again. Their `scenes.<name>` therefore goes true and falls back to false half a second later, so a rule on it fires on every press instead of only on the first one ever. A repeat within that half second re-arms the release rather than adding a second edge, because a wall switch repeats its Stop. `scenes.sceneId` is not released and keeps answering which scene was called last. For "a button was pressed" use the scene state, not `<device>.0.button` - that one is a level the dSS sets and does not take back.
+* **Momentary scenes and button presses**: Stop, Increment, Decrement, Area Stepping Continue and Impulse are commands, not positions - the dSS sends a callScene for them and never the undoScene that would release it again. Their `scenes.<name>` therefore goes true and falls back to false half a second later, so a rule on it fires on every press instead of only on the first one ever. A repeat within that half second re-arms the release rather than adding a second edge, because a wall switch repeats its Stop. `scenes.sceneId` is not released and keeps answering which scene was called last. `<device>.<n>.button` follows the same rule for the same reason: the dSS reports a press and never takes it back, so it goes true and falls back half a second later. `buttonClickType` and `buttonHoldCount` are not released - they describe the press that happened, not the moment.
 * **The first two minutes after a start**: the adapter subscribes to the dSS events before it has created its objects, so almost nothing is lost while a large installation is being built. Sensor values, states and binary inputs that arrive in that window are applied once the objects exist, on top of the initial snapshot. Scene calls and button presses in that window are deliberately NOT caught up - acting on a press minutes after it happened would be worse than missing it - but the last called scene of every zone group is re-read at the end of the start, so the scene states are correct anyway.
 
 ## Known Issues / System design effects
@@ -229,6 +229,18 @@ It is published under the same MIT license; the original copyright notice is kep
   blind driven to Maximum keeps its latch - it really IS at Maximum - and the scenes of the
   temperature control group, where the same numbers mean lasting modes, are untouched.
   `scenes.sceneId` still answers which scene was called last
+* **A pressed button lets go again.** `<device>.<n>.button` had exactly the problem the
+  momentary scenes had, on the state right next to them: the dSS reports a press and never
+  takes it back, so the state stayed true from the first press to the end of the run and a
+  rule on it fired once. It is released after half a second now, from both paths that set
+  it - the button event and the scene call a wall switch produces. `buttonClickType` and
+  `buttonHoldCount` keep their values; they describe the press, not the moment
+* **Five apartment states finally carry a value.** `daylight`, `daynight`,
+  `daynight_indoors`, `twilight` and `holiday` were created empty and stayed empty, because
+  the adapter read only the word a state describes itself with. The dSS sends these five
+  with a raw value and no word at all - measured: `{"name":"daylight","value":true,
+  "script_id":"solar_computer"}` - so there was nothing to read. Both forms are taken now,
+  and the conversion handles a boolean as well as "off"
 * **A vDC read counts as a read, and may be repeated.** The status tab showed the chip
   "classic" next to 0 output reads while 136 of them were running for four Sonos players:
   the named channel read is called `getOutputChannelValue2` and matched no counter. The
