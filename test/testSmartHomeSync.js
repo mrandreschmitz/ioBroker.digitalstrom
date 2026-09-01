@@ -474,18 +474,25 @@ describe('Smart Home output sync', function () {
         // echte Endwert da ist
         it('writes the position during the travel and keeps the channel pending', async () => {
             const structure = createFakeStructure();
-            let nowValue = START + 12400;
+            const nowValue = START + 12400;
             let statusCalls = 0;
-            const sync = createSync(structure, {
-                getApartmentStatus: async () => {
-                    statusCalls++;
-                    return travellingStatus();
+            const sync = createSync(
+                structure,
+                {
+                    getApartmentStatus: async () => {
+                        statusCalls++;
+                        return travellingStatus();
+                    },
                 },
-            });
+                // Die Nachlese liegt bewusst weit weg: dieser Test prueft die ERSTE
+                // Antwort, und ein zweiter Durchlauf waere auf einem langsamen Runner
+                // ein Rennen gegen die feste Wartezeit
+                { followUpDelay: 5000 },
+            );
             sync.now = () => nowValue;
 
             sync.requestDeviceSync(SHADE(), ['shadePositionOutside']);
-            await delay(60);
+            await waitFor(() => structure.written.length === 1);
 
             expect(statusCalls).to.equal(1);
             expect(structure.written, 'die halbe Strecke steht im State').to.deep.equal([
@@ -500,14 +507,19 @@ describe('Smart Home output sync', function () {
         // und am Ende beim klassischen Read landen
         it('does not burn the follow up budget while the travel runs', async () => {
             const structure = createFakeStructure();
-            let nowValue = START + 1000;
+            const nowValue = START + 1000;
+            let statusCalls = 0;
             const sync = createSync(structure, {
-                getApartmentStatus: async () => travellingStatus(),
+                getApartmentStatus: async () => {
+                    statusCalls++;
+                    return travellingStatus();
+                },
             });
             sync.now = () => nowValue;
 
             sync.requestDeviceSync(SHADE(), ['shadePositionOutside']);
-            await delay(300);
+            // Mehrere Runden abwarten - genau dabei wuerde ein Versuch verbraucht
+            await waitFor(() => statusCalls >= 3);
 
             const entry = /** @type {any} */ (sync.pending.get('shade1'));
             expect(entry, 'noch offen').to.not.equal(undefined);
