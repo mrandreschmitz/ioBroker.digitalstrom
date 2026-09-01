@@ -243,8 +243,10 @@ Die Geräte sind als „Klemme/dSM"."Geräte-ID" strukturiert, darunter jeweils:
   verlorengeht. Sensorwerte, States und Binäreingänge aus diesem Fenster werden angewendet,
   sobald die Objekte existieren — auf die Startaufnahme obendrauf. Szenenaufrufe und
   Tastendrücke aus diesem Fenster werden bewusst NICHT nachgeholt, auf einen minutenalten Druck
-  zu reagieren wäre schlimmer als ihn zu verpassen. Die zuletzt gerufene Szene jeder Zonengruppe
-  wird am Ende des Starts ohnehin neu gelesen, die Szenen-States stimmen also trotzdem.
+  zu reagieren wäre schlimmer als ihn zu verpassen. Die zuletzt gerufene Szene jeder ZONENGRUPPE
+  wird am Ende des Starts neu gelesen, eine dort verpasste Gruppenszene ist also korrigiert.
+  Eine Szene, die der dSS für ein einzelnes Gerät gemeldet hat, wird nicht nachgeholt — sie
+  bleibt stehen, bis der nächste Aufruf sie erreicht.
 
 ## Bekannte Einschränkungen und Systemeigenheiten
 
