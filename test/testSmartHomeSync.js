@@ -456,10 +456,52 @@ describe('Smart Home output sync', function () {
             expect(Math.round(/** @type {number} */ (half))).to.equal(50);
         });
 
-        it('clamps a clock that runs before or after the travel', () => {
+        it('holds the start position when the clock runs before the travel', () => {
             const output = travellingStatus().included.dsDevices[0].attributes.functionBlocks[0].outputs[0];
-            expect(SmartHomeOutputSync.travelPosition(output, START - 60000), 'before the start').to.equal(100);
-            expect(SmartHomeOutputSync.travelPosition(output, END + 60000), 'after the end').to.equal(0);
+            expect(SmartHomeOutputSync.travelPosition(output, START - 60000)).to.equal(100);
+        });
+
+        // Am Ziel klemmen hiesse behaupten, der Rollladen sei angekommen - live gesehen
+        // stand dadurch 2,1 s zu frueh die 100 im State, obwohl er noch fuhr
+        it('writes nothing once the announced end has passed', () => {
+            const output = travellingStatus().included.dsDevices[0].attributes.functionBlocks[0].outputs[0];
+            expect(SmartHomeOutputSync.travelPosition(output, END), 'genau am Ende').to.equal(undefined);
+            expect(SmartHomeOutputSync.travelPosition(output, END + 60000), 'danach').to.equal(undefined);
+            // Kurz davor wird noch interpoliert - und eben NICHT auf das Ziel 0 gerundet
+            // (100 -> 0 in 24,8 s, eine Sekunde vor Schluss also 4)
+            const nearly = SmartHomeOutputSync.travelPosition(output, END - 1000);
+            expect(Math.round(/** @type {number} */ (nearly))).to.equal(4);
+        });
+
+        // Nach dem angekuendigten Ende muss die naechste Abfrage SCHNELL kommen, sonst
+        // wartet der echte Endwert die volle Follow-up-Zeit
+        it('asks again quickly right after the announced end', async () => {
+            const structure = createFakeStructure();
+            let nowValue = END + 1000;
+            let statusCalls = 0;
+            const sync = createSync(
+                structure,
+                {
+                    getApartmentStatus: async () => {
+                        statusCalls++;
+                        // Erst beim dritten Mal liefert der dSS den echten Wert
+                        return statusCalls < 3
+                            ? travellingStatus()
+                            : { included: { dsDevices: [statusDevice('shade1', { shadePositionOutside: 100 })] } };
+                    },
+                },
+                { followUpDelay: 5000 },
+            );
+            sync.now = () => nowValue;
+
+            sync.requestDeviceSync(SHADE(), ['shadePositionOutside']);
+            await waitFor(() => structure.written.length === 1, 3000);
+
+            expect(statusCalls, 'die Nachlese lief im Debounce-Takt, nicht im 5-s-Takt').to.equal(3);
+            expect(structure.written, 'nur der echte Endwert steht im State').to.deep.equal([
+                { id: 'devices.m1.shade1.shadePositionOutside', value: 100 },
+            ]);
+            sync.stop();
         });
 
         it('ignores an output that is not travelling', () => {

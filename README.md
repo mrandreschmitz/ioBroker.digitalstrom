@@ -189,6 +189,13 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ### 2.4.22 (2026-09-01)
 
+* **A travelling output no longer reports its target before it arrives.** The interpolation used
+  to clamp at the target, so once the announced end had passed while the dSS still said "moving",
+  the state claimed the blind was there - seen on a real travel 2.1 seconds early. Nothing is
+  written in that moment now; the real value follows within about two seconds, because the channel
+  keeps its fast schedule for a short grace period after the announced end (a device stuck on
+  "moving" still runs into the normal follow-up handling)
+
 * **A joker with an output follows its scenes.** A switched socket has an output value, but no
   read path of its own: it only ever arrived with the next reconciliation - measured on a real
   installation, the value of a socket switched on at 10:20:04 appeared at 10:21:02, 57 seconds

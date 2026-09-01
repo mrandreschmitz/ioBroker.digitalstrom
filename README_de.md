@@ -266,6 +266,13 @@ Der vollständige Changelog inklusive der Historie von Apollon77 steht in der en
 
 ### 2.4.22 (2026-09-01)
 
+* **Ein fahrender Ausgang meldet sein Ziel nicht mehr, bevor er dort ist.** Die Interpolation
+  klemmte am Zielwert — war das angekündigte Fahrtende überschritten, während der dSS noch
+  „moving" meldete, behauptete der State die Ankunft. An einer echten Fahrt gemessen: 2,1 Sekunden
+  zu früh. In diesem Moment wird jetzt nichts geschrieben; der echte Wert folgt binnen rund zwei
+  Sekunden, weil der Kanal nach dem angekündigten Ende kurz auf dem schnellen Takt bleibt (ein
+  Gerät, das auf „moving" hängen bleibt, landet weiterhin im normalen Follow-up-Verfahren)
+
 * **Ein Joker mit Ausgang folgt jetzt seinen Szenen.** Eine geschaltete Steckdose hat einen
   Ausgangswert, aber keinen eigenen Lesepfad: Er kam immer erst mit dem nächsten Abgleich — an
   einer echten Anlage gemessen erschien der Wert einer um 10:20:04 eingeschalteten Steckdose um
