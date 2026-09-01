@@ -16,3 +16,18 @@ updates:
       timezone: Europe/Berlin
     open-pull-requests-limit: 20
     versioning-strategy: increase
+    # @iobroker/adapter-react-v5 pins the admin UI stack through its peer dependencies:
+    # react and react-dom ^18.3.1, @mui/material and @mui/icons-material ^6.5.0. There is
+    # no release of it that allows more, so a major bump of any of the four cannot be
+    # installed at all - npm ci ends in ERESOLVE and the pull request is red the moment it
+    # is opened. They stay ignored until adapter-react-v5 moves; patch and minor updates
+    # inside the supported range keep coming.
+    ignore:
+      - dependency-name: react
+        update-types: ["version-update:semver-major"]
+      - dependency-name: react-dom
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@mui/material"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@mui/icons-material"
+        update-types: ["version-update:semver-major"]
