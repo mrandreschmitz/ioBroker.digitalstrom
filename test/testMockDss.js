@@ -70,6 +70,8 @@ function createAdapterContext(host, config = {}) {
         setDssState: Digitalstrom.prototype.setDssState,
         eventLog: Digitalstrom.prototype.eventLog,
         registerEventHandlers: Digitalstrom.prototype.registerEventHandlers,
+        parkable: Digitalstrom.prototype.parkable,
+        liveOnly: Digitalstrom.prototype.liveOnly,
         resyncSceneStates: Digitalstrom.prototype.resyncSceneStates,
         initializeSubscriptions: Digitalstrom.prototype.initializeSubscriptions,
         stopAdapter: Digitalstrom.prototype.stopAdapter,

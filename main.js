@@ -27,6 +27,12 @@ const ActivityCounter = require('./lib/activityCounter');
 const configUtils = require('./lib/configUtils');
 const dssConstants = require('./lib/constants');
 
+// Safety valve for the events parked during the startup, not a working limit: the busiest
+// 150 s of a three hour production log carried 88 of them, the whole run 2746. At roughly
+// 300 bytes of payload each this caps the parking at a couple of megabytes even if a start
+// runs all the way into the ten minute watchdog.
+const STARTUP_EVENT_LIMIT = 2000;
+
 // A momentary scene is released again after this pause. Not on the next turn: a wall
 // switch repeats its Stop, measured three times within 481 ms on one blind while the
 // position never moved. Releasing immediately would turn that ONE press into three
@@ -138,6 +144,20 @@ class Digitalstrom extends utils.Adapter {
         this.momentaryReleases = new Map();
         // Overridable in tests so a release does not cost half a second there
         this.momentaryReleaseDelay = MOMENTARY_SCENE_RELEASE;
+        // Events that arrived before the objects existed, in arrival order. null means the
+        // live path, an array means the startup is still building - see replayStartupEvents()
+        /** @type {Array<{apply: () => void, at: number}>|null} */
+        this.pendingEvents = null;
+        this.pendingEventsDropped = 0;
+        // Overridable in tests so an overflow does not need thousands of events
+        this.startupEventLimit = STARTUP_EVENT_LIMIT;
+        // Set SYNCHRONOUSLY when the subscribe goes out, not when it comes back: the second
+        // attempt is decided while the first is still in flight
+        this.eventSubscriptionStarted = false;
+        /** @type {Error|null|undefined} undefined while the early subscribe is in flight */
+        this.eventSubscriptionResult = undefined;
+        /** @type {Array<(err: Error|null) => void>} */
+        this.eventSubscriptionWaiters = [];
 
         this.dataPollInterval = 60000;
         this.dataPollTimeout = null;
@@ -419,6 +439,12 @@ class Digitalstrom extends utils.Adapter {
         // down, and writing after the stop barrier is what isStopping() exists to prevent
         this.momentaryReleases?.forEach(timer => clearTimeout(timer));
         this.momentaryReleases?.clear();
+        // Anything still parked belongs to a startup that is not going to finish. Dropped
+        // rather than carried into the next run, where it would be older than the fresh
+        // snapshot and would overwrite it.
+        this.pendingEvents = null;
+        this.pendingEventsDropped = 0;
+        this.eventSubscriptionWaiters = [];
 
         // Close a still running App-Token dialog: its client lives outside the normal
         // lifecycle and would otherwise keep sockets open after the unload
@@ -632,6 +658,14 @@ class Digitalstrom extends utils.Adapter {
                 }
                 this.log.debug(`getName: ${JSON.stringify(dssName)}`);
 
+                // getName has proven host, login and reachability, so the events can be
+                // subscribed NOW. Measured on a real installation: the adapter was deaf for
+                // 149.7 s, and the classic structure read was done after 2.6 s of it - all
+                // the rest is parsing and creating 5231 objects. Nothing is applied yet:
+                // the level handlers park their events until replayStartupEvents() runs.
+                this.pendingEvents = [];
+                this.startEarlyEventSubscription();
+
                 this.objectHelper.loadExistingObjects(() => {
                     if (this.isStopping()) {
                         return;
@@ -660,8 +694,9 @@ class Digitalstrom extends utils.Adapter {
                                 this.lastScenes = dssStruct.initialScenes;
                                 // Subscribe right away: every millisecond between the initial
                                 // snapshot and the active subscription is a window in which
-                                // scene calls are lost for good.
-                                this.initializeSubscriptions(subscriptionErr => {
+                                // scene calls are lost for good. Usually the early
+                                // subscription already covers it, see ensureEventSubscription().
+                                this.ensureEventSubscription(subscriptionErr => {
                                     if (this.isStopping()) {
                                         return;
                                     }
@@ -687,6 +722,11 @@ class Digitalstrom extends utils.Adapter {
                                         this.startupTimeout = null;
                                     }
                                     this.log.info('Subscribed to states ...');
+
+                                    // Everything the dSS reported while the objects were
+                                    // being created, in arrival order, ON TOP of the initial
+                                    // snapshot that was just written - never before it
+                                    this.replayStartupEvents();
 
                                     this.startDataPolling();
 
@@ -827,6 +867,96 @@ class Digitalstrom extends utils.Adapter {
             return false;
         }
         return !!dssConstants.momentaryScenes[Number(sceneId)];
+    }
+
+    /**
+     * Wraps an event handler so that it parks its event while the objects are being built.
+     *
+     * ONLY for handlers whose event carries a LEVEL - a sensor reading, a state, a binary
+     * input. For those, applying them late is the same as applying them on time: the newest
+     * value wins either way, and the initial snapshot underneath is older than all of them.
+     *
+     * Deliberately NOT for callScene, undoScene and buttonClick. Those are actions, and a
+     * button press replayed two minutes after it happened would make every rule listening
+     * on it act two minutes late - lights on, blinds up, long after the person left the
+     * room. Losing it is the lesser evil, and the scenes are repaired anyway by
+     * resyncSceneStates(), which re-reads the last called scene of every zone group.
+     *
+     * @param {(...args: any[]) => void} handler the live handler
+     * @returns {(...args: any[]) => void} the handler with the parking in front of it
+     */
+    parkable(handler) {
+        return (...args) => {
+            if (!this.pendingEvents) {
+                return handler(...args);
+            }
+            if (this.pendingEvents.length >= this.startupEventLimit) {
+                // The newest value is the one that counts, so the oldest goes. Reported once
+                // at the replay rather than per event.
+                this.pendingEvents.shift();
+                this.pendingEventsDropped++;
+            }
+            this.pendingEvents.push({ apply: () => handler(...args), at: Date.now() });
+        };
+    }
+
+    /**
+     * Wraps an event handler that must NOT run while the objects are being built and must
+     * not be caught up afterwards either.
+     *
+     * These are the actions - a scene call, a button press. Replaying one late would make
+     * every rule listening on it act minutes after the fact, and running it live would let
+     * it reach into a half built tree: handleScene() walks dssStruct.apartmentStructure,
+     * which is still null until the structure is parsed. Dropping it is exactly what
+     * happened before the subscription was moved forward, and the scenes are re-read by
+     * resyncSceneStates() at the end of the start anyway.
+     *
+     * @param {(...args: any[]) => void} handler the live handler
+     * @returns {(...args: any[]) => void} the handler, silent until the objects are there
+     */
+    liveOnly(handler) {
+        return (...args) => {
+            if (this.pendingEvents) {
+                this.log.debug('Event ignored - the objects are still being created');
+                return;
+            }
+            handler(...args);
+        };
+    }
+
+    /**
+     * Applies everything that arrived while the objects did not exist yet, in arrival order.
+     *
+     * Must run AFTER setInitialValues() and never before it. The initial snapshot is the
+     * older picture - it was read while the structure was being parsed - so replaying first
+     * would let the snapshot overwrite the newer value and leave exactly the stale state
+     * this is meant to prevent.
+     */
+    replayStartupEvents() {
+        const parked = this.pendingEvents;
+        this.pendingEvents = null;
+        if (!parked || !parked.length) {
+            this.pendingEventsDropped = 0;
+            return;
+        }
+        const oldest = Math.round((Date.now() - parked[0].at) / 1000);
+        this.log.info(
+            `Applying ${parked.length} event(s) that arrived while the objects were being created, the oldest ${oldest}s ago`,
+        );
+        if (this.pendingEventsDropped) {
+            this.log.warn(
+                `${this.pendingEventsDropped} further event(s) were dropped during the startup - the newest value of a state survived, an intermediate one may not have`,
+            );
+            this.pendingEventsDropped = 0;
+        }
+        parked.forEach(entry => {
+            try {
+                entry.apply();
+            } catch (err) {
+                // One unusable event must not cost the remaining ones
+                this.log.debug(`Parked event could not be applied: ${configUtils.errorMessage(err)}`);
+            }
+        });
     }
 
     /**
@@ -1128,6 +1258,63 @@ class Digitalstrom extends utils.Adapter {
         });
     }
 
+    /**
+     * Makes sure the events are subscribed exactly once, and answers when they are.
+     *
+     * The subscription is started early, before the objects exist, so almost nothing is
+     * lost while they are built. This is the authoritative attempt afterwards: if the
+     * early one is still in flight it waits for it - firing nine more subscribes into a
+     * running one buys nothing - and if the early one failed it tries again, because
+     * failing the whole start on a transient early error would be a regression.
+     *
+     * @param {(err: Error|null) => void} callback
+     */
+    ensureEventSubscription(callback) {
+        if (!this.eventSubscriptionStarted) {
+            return void this.initializeSubscriptions(callback);
+        }
+        const useResult = err => {
+            if (err) {
+                this.eventSubscriptionStarted = false;
+                return void this.initializeSubscriptions(callback);
+            }
+            callback(null);
+        };
+        if (this.eventSubscriptionResult !== undefined) {
+            return void useResult(this.eventSubscriptionResult);
+        }
+        this.eventSubscriptionWaiters.push(useResult);
+    }
+
+    /**
+     * Starts the subscription before the objects exist. Errors are not fatal here - see
+     * ensureEventSubscription(), which decides the start.
+     */
+    startEarlyEventSubscription() {
+        this.eventSubscriptionStarted = true;
+        this.eventSubscriptionResult = undefined;
+        this.initializeSubscriptions(err => {
+            this.eventSubscriptionResult = err || null;
+            const waiting = this.eventSubscriptionWaiters;
+            this.eventSubscriptionWaiters = [];
+            waiting.forEach(cb => cb(err || null));
+        });
+    }
+
+    /**
+     * Lets the early subscription count as failed, so the authoritative attempt subscribes
+     * again instead of trusting a channel that is not delivering.
+     *
+     * @param {Error|null} err what the event channel reported, may be nothing usable
+     */
+    failEarlyEventSubscription(err) {
+        this.eventSubscriptionStarted = false;
+        this.eventSubscriptionResult = undefined;
+        const waiting = this.eventSubscriptionWaiters;
+        this.eventSubscriptionWaiters = [];
+        waiting.forEach(cb => cb(err));
+    }
+
     initializeSubscriptions(callback) {
         const eventNames = Object.keys(dssConstants.availableEvents).filter(name => dssConstants.availableEvents[name]);
         if (!this.dss) {
@@ -1176,34 +1363,41 @@ class Digitalstrom extends utils.Adapter {
         // afterwards. The local constants also keep the handlers free of repeated null checks.
         const dss = this.dss;
         const dssStruct = this.dssStruct;
-        dss.on('deviceSensorValue', data => {
-            this.eventLog(data.name, data, true);
-            if (!data.source || !data.source.isDevice || data.properties.sensorValueFloat === undefined) {
-                this.log.info(`--INVALID ${JSON.stringify(data)}`);
-                return;
-            }
-            const sourceDeviceId = dssStruct.stateMap[`${data.source.dSUID}.sensors.${data.properties.sensorIndex}`];
-            if (!sourceDeviceId) {
-                this.log.info('INVALID Device Sensor update');
-                return;
-            }
-            this.setDssState(sourceDeviceId, data.properties.sensorValueFloat);
-        });
+        dss.on(
+            'deviceSensorValue',
+            this.parkable(data => {
+                this.eventLog(data.name, data, true);
+                if (!data.source || !data.source.isDevice || data.properties.sensorValueFloat === undefined) {
+                    this.log.info(`--INVALID ${JSON.stringify(data)}`);
+                    return;
+                }
+                const sourceDeviceId =
+                    dssStruct.stateMap[`${data.source.dSUID}.sensors.${data.properties.sensorIndex}`];
+                if (!sourceDeviceId) {
+                    this.log.info('INVALID Device Sensor update');
+                    return;
+                }
+                this.setDssState(sourceDeviceId, data.properties.sensorValueFloat);
+            }),
+        );
 
-        dss.on('deviceBinaryInputEvent', data => {
-            this.eventLog(data.name, data, true);
-            if (!data.source || !data.source.isDevice || data.properties.inputType === undefined) {
-                this.log.info(`--INVALID ${JSON.stringify(data)}`);
-                return;
-            }
-            const sourceDeviceId =
-                dssStruct.stateMap[`${data.source.dSUID}.binaryInputs.${data.properties.inputIndex}`];
-            if (!sourceDeviceId) {
-                this.log.info('INVALID Device Binary input event');
-                return;
-            }
-            this.setDssState(sourceDeviceId, parseInt(data.properties.inputState, 10) + 1);
-        });
+        dss.on(
+            'deviceBinaryInputEvent',
+            this.parkable(data => {
+                this.eventLog(data.name, data, true);
+                if (!data.source || !data.source.isDevice || data.properties.inputType === undefined) {
+                    this.log.info(`--INVALID ${JSON.stringify(data)}`);
+                    return;
+                }
+                const sourceDeviceId =
+                    dssStruct.stateMap[`${data.source.dSUID}.binaryInputs.${data.properties.inputIndex}`];
+                if (!sourceDeviceId) {
+                    this.log.info('INVALID Device Binary input event');
+                    return;
+                }
+                this.setDssState(sourceDeviceId, parseInt(data.properties.inputState, 10) + 1);
+            }),
+        );
 
         const handleStateChange = data => {
             this.eventLog(data.name, data, true);
@@ -1226,53 +1420,61 @@ class Digitalstrom extends utils.Adapter {
             // The valueTrue/valueFalse mapping of the state is applied by setDssState()
             this.setDssState(sourceDeviceId, data.properties.state);
         };
-        dss.on('stateChange', handleStateChange);
-        dss.on('addonStateChange', handleStateChange);
+        // One wrapper for both names, so the two share a single parked identity
+        const parkedStateChange = this.parkable(handleStateChange);
+        dss.on('stateChange', parkedStateChange);
+        dss.on('addonStateChange', parkedStateChange);
 
-        dss.on('buttonClick', data => {
-            this.eventLog(data.name, data, true);
-            if (!data.source || !data.source.isDevice) {
-                this.log.info(`--INVALID ${JSON.stringify(data)}`);
-                return;
-            }
-            const buttonIndex = data.properties.buttonIndex ? data.properties.buttonIndex - 1 : 0;
-            if (!dssStruct.stateMap[`${data.source.dSUID}.${buttonIndex}.button`]) {
-                this.log.info('INVALID Button click');
-                return;
-            }
-            this.setState(dssStruct.stateMap[`${data.source.dSUID}.${buttonIndex}.button`], true, true);
-            // setDssState, not setState: the DSS delivers the click type and the hold count as
-            // strings while both objects are declared as numbers. The ids can be missing on
-            // devices that only have the plain button state.
-            const clickTypeId = dssStruct.stateMap[`${data.source.dSUID}.${buttonIndex}.buttonClickType`];
-            clickTypeId && this.setDssState(clickTypeId, data.properties.clickType ?? -1);
-            const holdCountId = dssStruct.stateMap[`${data.source.dSUID}.${buttonIndex}.buttonHoldCount`];
-            holdCountId && this.setDssState(holdCountId, data.properties.holdCount ?? 0);
-        });
+        dss.on(
+            'buttonClick',
+            this.liveOnly(data => {
+                this.eventLog(data.name, data, true);
+                if (!data.source || !data.source.isDevice) {
+                    this.log.info(`--INVALID ${JSON.stringify(data)}`);
+                    return;
+                }
+                const buttonIndex = data.properties.buttonIndex ? data.properties.buttonIndex - 1 : 0;
+                if (!dssStruct.stateMap[`${data.source.dSUID}.${buttonIndex}.button`]) {
+                    this.log.info('INVALID Button click');
+                    return;
+                }
+                this.setState(dssStruct.stateMap[`${data.source.dSUID}.${buttonIndex}.button`], true, true);
+                // setDssState, not setState: the DSS delivers the click type and the hold count as
+                // strings while both objects are declared as numbers. The ids can be missing on
+                // devices that only have the plain button state.
+                const clickTypeId = dssStruct.stateMap[`${data.source.dSUID}.${buttonIndex}.buttonClickType`];
+                clickTypeId && this.setDssState(clickTypeId, data.properties.clickType ?? -1);
+                const holdCountId = dssStruct.stateMap[`${data.source.dSUID}.${buttonIndex}.buttonHoldCount`];
+                holdCountId && this.setDssState(holdCountId, data.properties.holdCount ?? 0);
+            }),
+        );
 
-        dss.on('zoneSensorValue', data => {
-            this.eventLog(data.name, data, true);
-            if (
-                !data.source ||
-                !data.properties ||
-                !data.properties.sensorType ||
-                data.properties.sensorValueFloat === undefined
-            ) {
-                this.log.info(`--INVALID ${JSON.stringify(data)}`);
-                return;
-            }
-            let sourceDeviceId = dssStruct.stateMap[`${data.source.zoneID}.sensors.${data.properties.sensorType}`];
-            if (!sourceDeviceId && data.properties.sensorType === 60) {
-                sourceDeviceId = dssStruct.stateMap['0.sensors.60'];
-            }
-            if (!sourceDeviceId) {
-                this.log.info(
-                    `INVALID Zone Sensor update: ${data.source.zoneID}.sensors.${data.properties.sensorType}`,
-                );
-                return;
-            }
-            this.setDssState(sourceDeviceId, data.properties.sensorValueFloat);
-        });
+        dss.on(
+            'zoneSensorValue',
+            this.parkable(data => {
+                this.eventLog(data.name, data, true);
+                if (
+                    !data.source ||
+                    !data.properties ||
+                    !data.properties.sensorType ||
+                    data.properties.sensorValueFloat === undefined
+                ) {
+                    this.log.info(`--INVALID ${JSON.stringify(data)}`);
+                    return;
+                }
+                let sourceDeviceId = dssStruct.stateMap[`${data.source.zoneID}.sensors.${data.properties.sensorType}`];
+                if (!sourceDeviceId && data.properties.sensorType === 60) {
+                    sourceDeviceId = dssStruct.stateMap['0.sensors.60'];
+                }
+                if (!sourceDeviceId) {
+                    this.log.info(
+                        `INVALID Zone Sensor update: ${data.source.zoneID}.sensors.${data.properties.sensorType}`,
+                    );
+                    return;
+                }
+                this.setDssState(sourceDeviceId, data.properties.sensorValueFloat);
+            }),
+        );
 
         /**
          * Hands a scene event to the device handlers of the affected devices.
@@ -1456,10 +1658,27 @@ class Digitalstrom extends utils.Adapter {
             }
         };
 
-        dss.on('callScene', data => handleScene(data, true));
-        dss.on('undoScene', data => handleScene(data, false));
+        dss.on(
+            'callScene',
+            this.liveOnly(data => handleScene(data, true)),
+        );
+        dss.on(
+            'undoScene',
+            this.liveOnly(data => handleScene(data, false)),
+        );
 
         dss.on('eventError', (eventName, errorCount, err) => {
+            if (this.pendingEvents) {
+                // The objects do not exist yet. Restarting here would loop an adapter that
+                // never writes a single value - before the early subscription this state
+                // could not be reached at all. The subscription counts as failed instead,
+                // so the authoritative attempt after the initial values tries again.
+                this.log.warn(
+                    `Event polling errors (${eventName}) while the objects were being created: ${err} - subscribing again after the startup`,
+                );
+                this.failEarlyEventSubscription(configUtils.asError(err));
+                return;
+            }
             this.log.warn(`Too many event polling errors (${eventName}): ${err} - restarting adapter`);
             this.setConnected(false);
             this.restartAdapter(2000);

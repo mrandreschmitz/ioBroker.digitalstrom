@@ -67,6 +67,21 @@ function createContext(overrides = {}) {
         },
         eventLog: Digitalstrom.prototype.eventLog,
         releaseMomentaryScene: Digitalstrom.prototype.releaseMomentaryScene,
+        parkable: Digitalstrom.prototype.parkable,
+        liveOnly: Digitalstrom.prototype.liveOnly,
+        replayStartupEvents: Digitalstrom.prototype.replayStartupEvents,
+        ensureEventSubscription: Digitalstrom.prototype.ensureEventSubscription,
+        startEarlyEventSubscription: Digitalstrom.prototype.startEarlyEventSubscription,
+        failEarlyEventSubscription: Digitalstrom.prototype.failEarlyEventSubscription,
+        /** @type {Array<{apply: () => void, at: number}>|null} */
+        pendingEvents: null,
+        pendingEventsDropped: 0,
+        startupEventLimit: 2000,
+        eventSubscriptionStarted: false,
+        /** @type {Error|null|undefined} */
+        eventSubscriptionResult: undefined,
+        /** @type {Array<(err: Error|null) => void>} */
+        eventSubscriptionWaiters: [],
         subscribeStates: () => {},
         startDataPolling: () => {},
         clearAdditionalObjects: () => {},
@@ -117,6 +132,131 @@ describe('Adapter logic', () => {
             const cycleSeconds = Digitalstrom.normalizePollInterval(undefined) / 1000 + 20;
             const requestsPerMinute = (2 / cycleSeconds) * 60;
             expect(requestsPerMinute, `default results in ${requestsPerMinute}/min`).to.be.at.most(1);
+        });
+    });
+
+    describe('events that arrive while the objects are being created', () => {
+        function parkingContext(overrides = {}) {
+            const pending = [];
+            const ctx = createContext({
+                initializeSubscriptions(cb) {
+                    pending.push(cb);
+                },
+                ...overrides,
+            });
+            return { ctx, pending };
+        }
+
+        // The whole point of subscribing before the objects exist: an event that arrives
+        // during the 150 s build-up has to survive it.
+        it('applies a parked level event only after the initial snapshot', () => {
+            const { ctx } = parkingContext();
+            const written = [];
+            const handler = value => written.push(value);
+            const parked = Digitalstrom.prototype.parkable.call(ctx, handler);
+
+            ctx.pendingEvents = [];
+            parked('event-value');
+            expect(written, 'nothing may reach a state that does not exist yet').to.deep.equal([]);
+
+            // setInitialValues writes the older snapshot first ...
+            written.push('snapshot');
+            ctx.replayStartupEvents();
+
+            expect(written, 'the event is newer than the snapshot and must win').to.deep.equal([
+                'snapshot',
+                'event-value',
+            ]);
+        });
+
+        it('keeps the arrival order of the parked events', () => {
+            const { ctx } = parkingContext();
+            const written = [];
+            const parked = Digitalstrom.prototype.parkable.call(ctx, value => written.push(value));
+            ctx.pendingEvents = [];
+            parked(1);
+            parked(2);
+            parked(3);
+            ctx.replayStartupEvents();
+            expect(written).to.deep.equal([1, 2, 3]);
+        });
+
+        it('passes an event straight through once the objects are there', () => {
+            const { ctx } = parkingContext();
+            const written = [];
+            const parked = Digitalstrom.prototype.parkable.call(ctx, value => written.push(value));
+            ctx.pendingEvents = null;
+            parked('live');
+            expect(written).to.deep.equal(['live']);
+        });
+
+        // A button press replayed two minutes late would make every rule act two minutes
+        // late. It is dropped instead - exactly what happened before the subscription moved
+        // forward - and the scenes are re-read by resyncSceneStates() at the end.
+        it('drops an action instead of catching it up later', () => {
+            const { ctx } = parkingContext();
+            const acted = [];
+            const live = Digitalstrom.prototype.liveOnly.call(ctx, value => acted.push(value));
+            ctx.pendingEvents = [];
+            live('button press during the startup');
+            ctx.replayStartupEvents();
+            expect(acted, 'a late press must never be acted on').to.deep.equal([]);
+            live('after the startup');
+            expect(acted).to.deep.equal(['after the startup']);
+        });
+
+        it('drops the oldest when the parking overflows and says so', () => {
+            const { ctx } = parkingContext();
+            const written = [];
+            const parked = Digitalstrom.prototype.parkable.call(ctx, value => written.push(value));
+            ctx.pendingEvents = [];
+            ctx.startupEventLimit = 2;
+            parked('oldest');
+            parked('middle');
+            parked('newest');
+            expect(ctx.pendingEventsDropped, 'exactly one was too many').to.equal(1);
+            ctx.replayStartupEvents();
+            expect(written, 'the newest value of a state is the one worth keeping').to.deep.equal(['middle', 'newest']);
+        });
+
+        // Regression risk of the early subscription: firing the nine subscribes a second
+        // time while the first round is still in flight.
+        it('does not subscribe a second time while the first is in flight', () => {
+            const { ctx, pending } = parkingContext();
+            ctx.startEarlyEventSubscription();
+            expect(pending, 'the early attempt went out').to.have.lengthOf(1);
+
+            let finished = 0;
+            ctx.ensureEventSubscription(() => finished++);
+            expect(pending, 'the authoritative attempt waits instead of subscribing again').to.have.lengthOf(1);
+            expect(finished, 'and it does not report success before the dSS answered').to.equal(0);
+
+            pending[0](null);
+            expect(finished, 'the waiting caller is answered by the early result').to.equal(1);
+        });
+
+        it('subscribes again when the early attempt failed', () => {
+            const { ctx, pending } = parkingContext();
+            ctx.startEarlyEventSubscription();
+            pending[0](new Error('dSS was busy'));
+
+            const errs = [];
+            ctx.ensureEventSubscription(err => errs.push(err));
+            expect(pending, 'a failed early attempt must not decide the whole start').to.have.lengthOf(2);
+            pending[1](null);
+            expect(errs).to.deep.equal([null]);
+        });
+
+        it('lets a poll error during the build-up subscribe again instead of restarting', () => {
+            const { ctx, pending } = parkingContext();
+            ctx.pendingEvents = [];
+            ctx.startEarlyEventSubscription();
+            ctx.failEarlyEventSubscription(new Error('event/get keeps failing'));
+
+            const errs = [];
+            ctx.ensureEventSubscription(err => errs.push(err));
+            expect(pending, 'the authoritative attempt starts a fresh subscription').to.have.lengthOf(2);
+            expect(ctx.restarts, 'restarting before a single value was written is a loop').to.deep.equal([]);
         });
     });
 
