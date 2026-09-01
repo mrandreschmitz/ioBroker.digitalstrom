@@ -202,6 +202,14 @@ class Digitalstrom extends utils.Adapter {
             // The state was changed
             this.log.debug(`state ${id} changed: ${state.val} (ack = ${state.ack})`);
 
+            if (state.ack && this.dssStruct && typeof this.dssStruct.notePublishedValue === 'function') {
+                // An acknowledged write is what is in the state now, no matter who wrote
+                // it. Tracking foreign writes here is what keeps the reconciliation able
+                // to correct a value another adapter put there - without it the skipped
+                // re-assert would leave the foreign value standing forever.
+                this.dssStruct.notePublishedValue(id, state.val);
+            }
+
             this.objectHelper.handleStateChange(id, state);
         } else {
             // The state was deleted
@@ -1480,6 +1488,11 @@ class Digitalstrom extends utils.Adapter {
         // value of a user state current, see DSSStructure.noteUserStateValue()
         if (this.dssStruct && typeof this.dssStruct.noteUserStateValue === 'function') {
             this.dssStruct.noteUserStateValue(id, converted);
+        }
+        // What is in the state now - the polling paths compare against this before they
+        // re-assert a value that has not moved, see DSSStructure.setStateSafe()
+        if (this.dssStruct && typeof this.dssStruct.notePublishedValue === 'function') {
+            this.dssStruct.notePublishedValue(id, converted);
         }
         this.setState(id, converted, true);
     }

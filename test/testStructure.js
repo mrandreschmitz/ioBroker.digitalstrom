@@ -126,6 +126,62 @@ describe('DSSStructure', () => {
             expect(written).to.deep.equal([]);
             expect(struct.initialObjectValues).to.not.have.property('devices.m1.dev1.x');
         });
+
+        it('repeats a value that a poll re-asserts only when it really moved', () => {
+            const written = [];
+            const struct = writingStructure(written);
+            struct.objectsReady = true;
+            const id = 'devices.m1.dev1.shadePositionOutside';
+            const poll = { skipUnchanged: true };
+
+            struct.setStateSafe(id, 42, poll);
+            // setDssState is what tells the structure what is in the state now
+            struct.notePublishedValue(id, 42);
+            struct.setStateSafe(id, 42, poll);
+            struct.setStateSafe(id, 43, poll);
+
+            expect(written, 'the second poll of an unchanged value must not reach ioBroker').to.deep.equal([
+                [id, 42],
+                [id, 43],
+            ]);
+        });
+
+        it('never suppresses a write that carries no skipUnchanged', () => {
+            const written = [];
+            const struct = writingStructure(written);
+            struct.objectsReady = true;
+            const id = 'devices.m1.dev1.shadePositionOutside';
+
+            struct.setStateSafe(id, 42);
+            struct.notePublishedValue(id, 42);
+            // An event and the acknowledgement of a user command both land here: the same
+            // value again is a message of its own and has to be published
+            struct.setStateSafe(id, 42);
+
+            expect(written).to.deep.equal([
+                [id, 42],
+                [id, 42],
+            ]);
+        });
+
+        it('writes again after someone else changed the state behind our back', () => {
+            const written = [];
+            const struct = writingStructure(written);
+            struct.objectsReady = true;
+            const id = 'devices.m1.dev1.shadePositionOutside';
+            const poll = { skipUnchanged: true };
+
+            struct.setStateSafe(id, 42, poll);
+            struct.notePublishedValue(id, 42);
+            // onStateChange() reports the acknowledged write of another adapter
+            struct.notePublishedValue(id, 7);
+            struct.setStateSafe(id, 42, poll);
+
+            expect(written, 'the reconciliation has to be able to correct a foreign value').to.deep.equal([
+                [id, 42],
+                [id, 42],
+            ]);
+        });
     });
 
     describe('logOutputReadError', () => {
