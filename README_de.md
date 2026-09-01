@@ -42,14 +42,18 @@ Adapter nutzt bewusst beide als Team:
   kommen gebündelt in **je einem einzigen Request** statt in einem Request pro Wert. Obendrein
   liefert sie die Solltemperaturen der Raumregelung jeder Zone, die in digitalSTROM vergebenen
   Szenennamen und einen Änderungs-Websocket, über den der Adapter Werte abgleicht, die an
-  ioBroker vorbei geändert wurden — etwa von einer Dritt-App.
+  ioBroker vorbei geändert wurden — etwa von einer Dritt-App. Ein fahrender Rollladen trägt darin
+  keinen Wert, aber seine ganze Fahrt: Die Position wird berechnet und folgt der Bewegung live.
+
+**Beide öffnet derselbe Zugang**: das App-Token aus der Einrichtung. Die Smart Home API braucht
+keinen zweiten Schlüssel — ein eigener API-Schlüssel bleibt als Option verfügbar und wird
+bevorzugt genutzt, wenn einer eingetragen ist.
 
 Zusammen heißt das: Der Adapter **startet in Sekunden statt Minuten**, auch auf großen Anlagen,
-Werte sind nach Szenenaufrufen schnell wieder frisch, Farbwerte, die der klassische Weg nicht
-lesen konnte, werden endlich befüllt — und der dSS trägt spürbar weniger Last, bequem innerhalb
-der digitalSTROM-Anfragerichtlinien. Und das bei voller Zuverlässigkeit: Jede Aufgabe der Smart
-Home API fällt automatisch auf den klassischen Weg zurück, der Adapter bleibt also auch mit nur
-dem App-Token vollständig funktionsfähig.
+Werte sind nach Szenenaufrufen schnell wieder frisch — und der dSS trägt spürbar weniger Last,
+bequem innerhalb der digitalSTROM-Anfragerichtlinien. Und das bei voller Zuverlässigkeit: Jede
+Aufgabe der Smart Home API fällt automatisch auf den klassischen Weg zurück, der Adapter bleibt
+also auch mit nur der klassischen Schnittstelle vollständig funktionsfähig.
 
 Der **Status-Tab** der Instanzeinstellungen zeigt diese Arbeitsteilung live — welche
 Schnittstelle gerade Ereignisse, Zählerwerte und Ausgangswerte liefert und wie viel jede von
@@ -78,11 +82,11 @@ direkt im Dialog zusammen:
 
 Zusätzlich zu den Verbindungsdaten stehen folgende Einstellungen zur Verfügung:
 
-* **Zähler- und Ausgangswerte über die Smart Home API lesen**: Der Schalter aus Schritt 3. Ein
-  Request bedient alle Klemmen, ein Status-Request alle Geräteausgänge. Benötigt einen dSS mit
-  Firmware 1.19 oder neuer und den API-Key aus dem Verbindungs-Tab. Gefahrlos aktivierbar: Wann
-  immer die Smart Home API nicht antwortet, übernimmt automatisch der klassische Weg und der
-  Adapter läuft unverändert weiter.
+* **Zähler- und Ausgangswerte über die Smart Home API lesen**: Ein Request bedient alle Klemmen,
+  ein Status-Request alle Geräteausgänge. Benötigt einen dSS mit Firmware 1.19 oder neuer — und
+  sonst nichts: Das App-Token öffnet auch diese Schnittstelle. Gefahrlos aktivierbar: Wann immer
+  die Smart Home API nicht antwortet, übernimmt automatisch der klassische Weg und der Adapter
+  läuft unverändert weiter.
 
 * **Datenabfrageintervall**: Intervall, in dem die Zählerdaten („Energy Meter") von den dSM-Geräten
   abgefragt werden. Standard 100 s, Minimum 60 s. Die digitalSTROM-Regeln 8 und 9 erlauben höchstens

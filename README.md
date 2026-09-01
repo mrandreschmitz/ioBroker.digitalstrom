@@ -42,14 +42,18 @@ deliberately uses both as a team:
   arrive bundled in **one single request each** instead of one request per value. On top it
   delivers the room temperature setpoints of every zone, the scene names given in digitalSTROM,
   and a change-notification websocket the adapter uses to reconcile values that were changed
-  past ioBroker - for example by a third-party app.
+  past ioBroker - for example by a third-party app. A travelling blind carries no value in it,
+  but it carries its whole journey, so the position is computed and follows the movement live.
+
+**Both are opened by the same credential**: the app token from the setup. The Smart Home API
+needs no second key - a separate API key stays available as an option, and is used first when one
+is configured.
 
 Together this means: the adapter **starts in seconds instead of minutes** even on large
-installations, values are fresh again quickly after scene calls, colour values the classic path
-could not read finally get filled - and the dSS carries noticeably less load, comfortably within
-the digitalSTROM request guidelines. All of it at full reliability: every Smart Home API task
-falls back to the classic path automatically, so the adapter stays completely functional with
-just the app token.
+installations, values are fresh again quickly after scene calls, and the dSS carries noticeably
+less load, comfortably within the digitalSTROM request guidelines. All of it at full reliability:
+every Smart Home API task falls back to the classic path automatically, so the adapter stays
+completely functional with just the classic interface.
 
 The **status tab** of the instance settings shows this division of labour live - which interface
 currently delivers events, meter values and output values, and how much each of them actually did
@@ -78,10 +82,11 @@ the dialog:
 
 Additionally to the connection settings you can edit the following settings to your needs:
 
-* **Read meter and output values through the Smart Home API**: The switch of step 3. One request
-  serves all circuits, one status request all device outputs. Needs a dSS with firmware 1.19 or
-  newer and the API key from the connection tab. Safe to enable: whenever the Smart Home API does
-  not answer, the classic path takes over automatically and the adapter keeps running unchanged.
+* **Read meter and output values through the Smart Home API**: One request serves all circuits,
+  one status request all device outputs. Needs a dSS with firmware 1.19 or newer - and nothing
+  else: the app token opens this interface as well. Safe to enable: whenever the Smart Home API
+  does not answer, the classic path takes over automatically and the adapter keeps running
+  unchanged.
 * **Data Polling Interval**: This is the interval the "Energy Meter" data are requested from your DSM devices. Default 100s, minimum 60s. The digitalSTROM rules 8 and 9 allow at most one cyclic read per minute and circuit. One cycle reads two values per circuit (`getConsumption` and `getEnergyMeterValue`) and the timer for the next cycle only starts once they are answered, so a cycle takes about 20s longer than the configured interval - measured against a real DSS: 60s results in ~1.5 requests per minute and circuit, 100s in exactly 1.0. That is why 100s is the default. Lower values stay possible from 60s on, but they exceed the guideline. Set 0 to disable polling of the energy meter data completely. Invalid values fall back to the default.
 * **Use Scene Preset Values**: The Digitalstrom system is not really designed to have the real output values of the devices available all the time and works most with Scenes. For Light and Shader/Blinds some output values are defined for many of the available Scenes. The adapter knows them and when this setting is active the adapter will try to lookup these values when a scene gets triggered and set those values to the states directly. The real values are requested with a delay. This method might deliver wrong values when local priorities are set/used!
 * **Request Device Output values actively**: The adapter initializes all device output values on start and also after scenes that are effective for a device. There are delay but in fact all those messages will go over the Digitalstrom bus. If this is problematic for you you can try to deactivate this feature. This option only controls **reading** output values from the DSS - writing (e.g. setting a blind position or angle, or a dimmer value) always works, independent of this setting.
