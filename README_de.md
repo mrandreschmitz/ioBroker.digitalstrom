@@ -281,6 +281,14 @@ Der vollständige Changelog inklusive der Historie von Apollon77 steht in der en
   monatelang kein Sensor-Event, diese States blieben seit dem Anlegen ihrer Objekte leer.
   Energiezähler und High-Range-Strom haben unverifizierte native Auflösungen und bleiben bewusst
   bei den Events
+* **Der Smart-Home-API-Key ist jetzt optional.** Die neue API nimmt auch die Anmeldung der
+  klassischen Schnittstelle als Cookie an - an einem dSS20 1.19.13 für jeden Endpunkt gemessen,
+  den dieser Adapter liest, UND für den Notification-Websocket. Ohne Key nutzt der Adapter
+  einfach die Anmeldung, die er ohnehin hat; der Smart-Home-Weg braucht also keinen zweiten
+  Zugang. Und ein Key, den der dSS ablehnt (widerrufen oder durch einen neueren gleichen Namens
+  ersetzt), legt den Weg nicht mehr lahm: Der Adapter sagt es einmal, wechselt auf die Anmeldung
+  und läuft weiter. Ein eingetragener Key bleibt der bevorzugte Weg - er ist dauerhaft und
+  braucht keine Erneuerung
 * **Ein Rollladen folgt seiner Fahrt jetzt live, statt am Ende zu springen.** Der Status lässt den
   Wert weg, solange ein Ausgang fährt - er trägt aber die ganze Fahrt mit: wo sie startete, wohin
   sie geht und welches Zeitfenster sie braucht. Jede Bewegung bringt ihr eigenes Fenster vom dSS

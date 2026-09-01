@@ -312,6 +312,86 @@ describe('Smart Home API client', function () {
         });
     });
 
+    // Live gemessen an einem dSS20 1.19.13: die neue API nimmt auch die Session der
+    // klassischen Schnittstelle als Cookie an - fuer JEDEN Lese-Endpunkt und fuer den
+    // Notification-Websocket. Der API-Key ist damit Komfort, keine Voraussetzung.
+    describe('the session of the classic interface as credentials', () => {
+        it('uses the key when there is one', async () => {
+            client = createClient();
+            await client.getApartment();
+            const call = mock.pathsCalled('/api/v1/apartment')[0];
+            expect(call.authorization).to.equal(`Bearer ${createMockSmartHome.API_KEY}`);
+            expect(call.cookie).to.equal(undefined);
+        });
+
+        it('uses the session when there is no key', async () => {
+            client = createClient({
+                apiKey: undefined,
+                getSessionToken: async () => createMockSmartHome.SESSION_TOKEN,
+            });
+            const apartment = await client.getApartment();
+            expect(apartment.type, 'the answer arrives without a key').to.equal('apartment');
+            const call = mock.pathsCalled('/api/v1/apartment')[0];
+            expect(call.cookie).to.equal(`token=${createMockSmartHome.SESSION_TOKEN}`);
+            expect(call.authorization).to.equal(undefined);
+        });
+
+        // Der Fall, der auf der echten Anlage zweimal zugeschlagen hat: der dSS
+        // widerruft den Key, und bisher stand der Smart-Home-Pfad damit still
+        it('switches to the session when the dSS rejects the key', async () => {
+            const warnings = [];
+            client = createClient({
+                logger: Object.assign({}, silentLogger, { warn: msg => warnings.push(String(msg)) }),
+                getSessionToken: async () => createMockSmartHome.SESSION_TOKEN,
+            });
+            mock.rejectKey();
+
+            const apartment = await client.getApartment();
+            expect(apartment.type, 'der Request kommt trotzdem durch').to.equal('apartment');
+            expect(warnings.join(' '), 'einmal deutlich im Log').to.contain('rejected the Smart Home API key');
+
+            // Der zweite Request versucht den toten Key gar nicht mehr
+            const before = mock.pathsCalled('/api/v1/apartment/status').length;
+            await client.getApartmentStatus();
+            const calls = mock.pathsCalled('/api/v1/apartment/status');
+            expect(calls).to.have.lengthOf(before + 1);
+            expect(calls[calls.length - 1].cookie).to.equal(`token=${createMockSmartHome.SESSION_TOKEN}`);
+            expect(warnings, 'die Warnung kommt nur einmal').to.have.lengthOf(1);
+        });
+
+        it('renews a stale session once and retries', async () => {
+            let handedOut = 'stale-token';
+            let renewals = 0;
+            client = createClient({
+                apiKey: undefined,
+                getSessionToken: async forceRenew => {
+                    if (forceRenew) {
+                        renewals++;
+                        handedOut = createMockSmartHome.SESSION_TOKEN;
+                    }
+                    return handedOut;
+                },
+            });
+
+            const apartment = await client.getApartment();
+            expect(renewals, 'genau eine Erneuerung').to.equal(1);
+            expect(apartment.type).to.equal('apartment');
+        });
+
+        it('gives up when the renewed session is rejected as well', async () => {
+            client = createClient({
+                apiKey: undefined,
+                getSessionToken: async () => 'always-wrong',
+            });
+            const failed = await client.getApartment().then(
+                () => null,
+                err => err,
+            );
+            expect(failed, 'der Fehler erreicht den Aufrufer').to.not.equal(null);
+            expect(failed.status).to.equal(401);
+        });
+    });
+
     describe('api key', () => {
         it('creates the key from an existing app token, without a password', async () => {
             const key = await DSSSmartHome.createApiKey({

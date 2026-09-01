@@ -200,6 +200,13 @@ It is published under the same MIT license; the original copyright notice is kep
   with constant consumption - a printer in standby - may not send a sensor event for months, so
   these states stayed empty since their objects were created. Energy meter and high range current
   natives have unverified resolutions and deliberately stay with the events
+* **The Smart Home API key is optional now.** The new API also accepts the login of the classic
+  interface as a cookie - measured against a dSS20 1.19.13 for every endpoint this adapter reads
+  AND for the notification websocket. Without a key the adapter simply uses the login it has
+  anyway, so the Smart Home path needs no second credential. And a key the dSS rejects (revoked,
+  or replaced by a newer one of the same name) no longer takes the path down: the adapter says so
+  once, switches to the login and keeps going. A configured key stays the primary path - it is
+  permanent and needs no renewal
 * **A blind now follows its travel live instead of jumping at the end.** The status leaves the
   value out while an output moves - but it carries the whole journey: where the travel started,
   where it goes, and the window it takes. Every movement brings its own window from the dSS, so

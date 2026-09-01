@@ -894,16 +894,25 @@ class Digitalstrom extends utils.Adapter {
         if (!configUtils.normalizeBoolean(this.config.useSmartHomeApi, false)) {
             return null;
         }
-        if (!this.config.smartHomeApiKey) {
+        if (!this.config.smartHomeApiKey && !this.dss) {
             this.log.warn(
-                'The Smart Home API is switched on but no API key is configured - falling back to the classic API',
+                'The Smart Home API is switched on but there is neither an API key nor a connection to the ' +
+                    'classic interface - falling back to the classic API',
             );
             return null;
+        }
+        if (!this.config.smartHomeApiKey) {
+            // The new API also accepts the login of the classic interface (measured for
+            // every endpoint this adapter reads and for the notification websocket), so
+            // a key is a convenience, not a requirement
+            this.log.info(
+                'No Smart Home API key configured - using the login of the classic interface for the new API',
+            );
         }
         // Same reasoning as for the app token: a value that is not a hex string usually
         // means js-controller could not decrypt it (e.g. after restoring a backup on
         // another host), and the dSS would only answer with an anonymous 401
-        if (!Digitalstrom.looksLikeAppToken(this.config.smartHomeApiKey)) {
+        if (this.config.smartHomeApiKey && !Digitalstrom.looksLikeAppToken(this.config.smartHomeApiKey)) {
             this.log.error(
                 'The stored Smart Home API key does not look like a valid key (expected a long hex string). ' +
                     'Please open the adapter configuration, create the API key again and save. ' +
@@ -914,6 +923,15 @@ class Digitalstrom extends utils.Adapter {
             const client = new DSSSmartHome({
                 host: this.config.host,
                 apiKey: this.config.smartHomeApiKey,
+                // The session of the classic client, renewed by it: serves without a
+                // key, and catches a key the dSS revoked without taking the path down
+                getSessionToken: this.dss
+                    ? forceRenew => {
+                          const dss = /** @type {any} */ (this.dss);
+                          forceRenew && dss.invalidateSession();
+                          return dss.getSessionToken();
+                      }
+                    : undefined,
                 validateCertificate: this.config.validateCertificate,
                 onActivity: (kind, apiPath) => this.countSmartHomeActivity(kind, apiPath),
                 logger: {

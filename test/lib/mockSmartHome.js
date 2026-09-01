@@ -53,6 +53,7 @@ function createMockSmartHome() {
         },
     };
 
+    /** @type {any} */
     const server = http.createServer((req, res) => {
         const url = new URL(req.url || '/', 'http://localhost');
         const query = Object.fromEntries(url.searchParams.entries());
@@ -68,15 +69,27 @@ function createMockSmartHome() {
                     body = raw;
                 }
             }
-            requests.push({ method: req.method, path: url.pathname, query, body });
+            requests.push({
+                method: req.method,
+                path: url.pathname,
+                query,
+                body,
+                authorization: req.headers.authorization,
+                cookie: req.headers.cookie,
+            });
 
             const send = (code, payload, headers) => {
                 res.writeHead(code, { 'Content-Type': 'application/json', ...(headers || {}) });
                 res.end(payload === undefined ? '' : JSON.stringify(payload));
             };
 
+            // The dSS takes the key OR the session of the classic interface as a
+            // cookie - measured against a dSS20 1.19.13 for every read endpoint
+            const keyOk = server.acceptKey && req.headers.authorization === `Bearer ${createMockSmartHome.API_KEY}`;
+            const sessionOk = req.headers.cookie === `token=${server.sessionToken}`;
             if (
-                req.headers.authorization !== `Bearer ${createMockSmartHome.API_KEY}` &&
+                !keyOk &&
+                !sessionOk &&
                 url.pathname.startsWith('/api/v1/apartment') &&
                 url.pathname !== '/api/v1/apartment/applicationTokens'
             ) {
@@ -188,7 +201,25 @@ function createMockSmartHome() {
         return Buffer.concat([Buffer.from(header), payload]);
     }
 
+    // Defaults: the key works, and this is the session the classic interface holds
+    server.acceptKey = true;
+    server.sessionToken = createMockSmartHome.SESSION_TOKEN;
+
     return {
+        /** Lets the dSS reject the API key, as it does after a revoke */
+        rejectKey() {
+            server.acceptKey = false;
+        },
+
+        /**
+         * The session the mock accepts as a cookie
+         *
+         * @param token
+         */
+        setSessionToken(token) {
+            server.sessionToken = token;
+        },
+
         server,
         requests,
 
@@ -250,5 +281,6 @@ function createMockSmartHome() {
 }
 
 createMockSmartHome.API_KEY = 'test-api-key';
+createMockSmartHome.SESSION_TOKEN = 'test-session-token';
 
 module.exports = createMockSmartHome;
