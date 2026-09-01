@@ -605,7 +605,10 @@ describe('DSSStructure', () => {
                     isStopping: () => false,
                 },
             });
-            struct.setStateSafe = (id, value) => written.push({ id, value });
+            struct.setStateSafe = (id, value) => {
+                written.push({ id, value });
+                return true;
+            };
             const dev = {
                 dSUID: 'sonos1',
                 meterDSUID: 'm1',
@@ -777,7 +780,10 @@ describe('DSSStructure', () => {
                 },
             });
             struct.objectsReady = true;
-            struct.setStateSafe = (id, value) => written.push({ id, value });
+            struct.setStateSafe = (id, value) => {
+                written.push({ id, value });
+                return true;
+            };
             return { struct, namedReads, offsetReads, syncRequests, written };
         }
 
@@ -980,7 +986,10 @@ describe('DSSStructure', () => {
                 },
             });
             struct.objectsReady = true;
-            struct.setStateSafe = (id, value) => written.push({ id, value });
+            struct.setStateSafe = (id, value) => {
+                written.push({ id, value });
+                return true;
+            };
             if (withSync) {
                 struct.smartHomeSync = /** @type {any} */ ({ requestDeviceSync: () => true, stop: () => {} });
             }
@@ -1046,7 +1055,10 @@ describe('DSSStructure', () => {
                 adapter: { log: silentLogger, config: {}, setState: () => {}, isStopping: () => false },
             });
             struct.objectsReady = true;
-            struct.setStateSafe = (id, value) => written.push({ id, value });
+            struct.setStateSafe = (id, value) => {
+                written.push({ id, value });
+                return true;
+            };
             struct.propertyUserStates = [{ name: '1614106429', displayName: 'Regensensor', state: 'inactive' }];
             struct.createApartmentUserStates();
             return { struct, sent, written };
@@ -1104,7 +1116,7 @@ describe('DSSStructure', () => {
                 },
             });
             struct.objectsReady = true;
-            struct.setStateSafe = () => {};
+            struct.setStateSafe = () => true;
             if (withSync) {
                 struct.smartHomeSync = /** @type {any} */ ({
                     requestDeviceSync: dev => {
@@ -1204,7 +1216,10 @@ describe('DSSStructure', () => {
                     isStopping: () => false,
                 },
             });
-            struct.setStateSafe = (id, value) => written.push({ id, value });
+            struct.setStateSafe = (id, value) => {
+                written.push({ id, value });
+                return true;
+            };
             const dev = {
                 dSUID: 'dev1',
                 meterDSUID: 'meter1',

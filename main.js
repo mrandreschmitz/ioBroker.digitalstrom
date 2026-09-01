@@ -149,6 +149,9 @@ class Digitalstrom extends utils.Adapter {
         /** @type {Array<{apply: () => void, at: number}>|null} */
         this.pendingEvents = null;
         this.pendingEventsDropped = 0;
+        // A model_ready that arrived while the objects were being created - acted on once
+        // the startup is through, see replayStartupEvents()
+        this.pendingModelReady = false;
         // Overridable in tests so an overflow does not need thousands of events
         this.startupEventLimit = STARTUP_EVENT_LIMIT;
         // Set SYNCHRONOUSLY when the subscribe goes out, not when it comes back: the second
@@ -247,11 +250,14 @@ class Digitalstrom extends utils.Adapter {
             // The state was changed
             this.log.debug(`state ${id} changed: ${state.val} (ack = ${state.ack})`);
 
-            if (state.ack && this.dssStruct && typeof this.dssStruct.notePublishedValue === 'function') {
-                // An acknowledged write is what is in the state now, no matter who wrote
-                // it. Tracking foreign writes here is what keeps the reconciliation able
-                // to correct a value another adapter put there - without it the skipped
-                // re-assert would leave the foreign value standing forever.
+            if (this.dssStruct && typeof this.dssStruct.notePublishedValue === 'function') {
+                // What is in the state now, no matter who wrote it and whether it was
+                // acknowledged. Tracking foreign writes here is what keeps the
+                // reconciliation able to correct a value another adapter put there -
+                // without it the skipped re-assert would leave it standing forever.
+                // Deliberately NOT limited to acknowledged writes: an unacknowledged one
+                // on a read-only state is a value nobody will confirm, and it is exactly
+                // the case the reconciliation has to notice.
                 this.dssStruct.notePublishedValue(id, state.val);
             }
 
@@ -879,8 +885,15 @@ class Digitalstrom extends utils.Adapter {
      * Deliberately NOT for callScene, undoScene and buttonClick. Those are actions, and a
      * button press replayed two minutes after it happened would make every rule listening
      * on it act two minutes late - lights on, blinds up, long after the person left the
-     * room. Losing it is the lesser evil, and the scenes are repaired anyway by
-     * resyncSceneStates(), which re-reads the last called scene of every zone group.
+     * room. Losing it is the lesser evil, and it is what happened before the subscription
+     * moved forward - only for 150 s instead of the 95 s the objects now take.
+     *
+     * The repair afterwards is partial, and the comment used to claim more than it does:
+     * resyncSceneStates() re-reads the last called scene of every ZONE GROUP, so a group
+     * scene missed here is corrected. A scene the dSS reported for a single device is not
+     * - initialScenes only ever holds group keys - and on an installation whose wall
+     * switches report per device that is the common case. Such a scene state stays as it
+     * was until the next call reaches it.
      *
      * @param {(...args: any[]) => void} handler the live handler
      * @returns {(...args: any[]) => void} the handler with the parking in front of it
@@ -917,7 +930,10 @@ class Digitalstrom extends utils.Adapter {
     liveOnly(handler) {
         return (...args) => {
             if (this.pendingEvents) {
-                this.log.debug('Event ignored - the objects are still being created');
+                // Named, because this is the only trace such an event ever leaves - and
+                // nothing catches a device scene up afterwards, see the note above
+                const name = (args[0] && args[0].name) || 'event';
+                this.log.debug(`${name} ignored - the objects are still being created`);
                 return;
             }
             handler(...args);
@@ -937,6 +953,7 @@ class Digitalstrom extends utils.Adapter {
         this.pendingEvents = null;
         if (!parked || !parked.length) {
             this.pendingEventsDropped = 0;
+            this.settlePendingModelReady();
             return;
         }
         const oldest = Math.round((Date.now() - parked[0].at) / 1000);
@@ -957,6 +974,20 @@ class Digitalstrom extends utils.Adapter {
                 this.log.debug(`Parked event could not be applied: ${configUtils.errorMessage(err)}`);
             }
         });
+        this.settlePendingModelReady();
+    }
+
+    /**
+     * Acts on a model_ready that arrived while the objects were being created. Called at
+     * the end of the startup, whether or not anything was parked.
+     */
+    settlePendingModelReady() {
+        if (!this.pendingModelReady) {
+            return;
+        }
+        this.pendingModelReady = false;
+        this.log.info('The dSS re-initialized its model during the startup - restarting now that it is through');
+        this.restartAdapter(10000);
     }
 
     /**
@@ -1690,6 +1721,16 @@ class Digitalstrom extends utils.Adapter {
             this.log.info(
                 'DSS apartment model was (re-)initialized (model_ready event) - restarting adapter to resync the structure',
             );
+            if (this.pendingEvents) {
+                // Since the subscription moved to the front this can arrive WHILE the
+                // objects are being created, which it never could before. Restarting in
+                // the middle of that would throw away a structure that is half built and,
+                // if the dSS keeps re-initializing, would loop without ever writing a
+                // value. The structure being read right now is stale either way, so the
+                // restart is remembered and done once the startup is through.
+                this.pendingModelReady = true;
+                return;
+            }
             this.restartAdapter(10000);
         });
         // Log unhandled Events to see what happens so at all

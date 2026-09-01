@@ -70,6 +70,8 @@ function createContext(overrides = {}) {
         parkable: Digitalstrom.prototype.parkable,
         liveOnly: Digitalstrom.prototype.liveOnly,
         replayStartupEvents: Digitalstrom.prototype.replayStartupEvents,
+        settlePendingModelReady: Digitalstrom.prototype.settlePendingModelReady,
+        pendingModelReady: false,
         ensureEventSubscription: Digitalstrom.prototype.ensureEventSubscription,
         startEarlyEventSubscription: Digitalstrom.prototype.startEarlyEventSubscription,
         failEarlyEventSubscription: Digitalstrom.prototype.failEarlyEventSubscription,
@@ -245,6 +247,40 @@ describe('Adapter logic', () => {
             expect(pending, 'a failed early attempt must not decide the whole start').to.have.lengthOf(2);
             pending[1](null);
             expect(errs).to.deep.equal([null]);
+        });
+
+        // Since the subscription moved to the front, a model_ready can arrive WHILE the
+        // objects are being created - a phase in which it structurally could not before.
+        it('does not restart in the middle of the object creation on a model_ready', () => {
+            const ctx = createContext({
+                dss: new DSS({ host: 'http://127.0.0.1:1', appToken: 'x' }),
+                dssStruct: { stateMap: {}, dssObjects: {}, zoneDevices: {}, apartmentStructure: { zones: [] } },
+            });
+            Digitalstrom.prototype.registerEventHandlers.call(ctx, ['model_ready']);
+            ctx.pendingEvents = [];
+
+            ctx.dss.emit('model_ready');
+            expect(ctx.restarts, 'restarting here would loop without ever writing a value').to.deep.equal([]);
+            expect(ctx.pendingModelReady, 'but it must not be forgotten either').to.equal(true);
+
+            ctx.replayStartupEvents();
+            expect(ctx.restarts, 'the structure read during that is stale, so it restarts after').to.deep.equal([
+                10000,
+            ]);
+            ctx.dss.stop();
+        });
+
+        it('still restarts right away when the model changes during normal operation', () => {
+            const ctx = createContext({
+                dss: new DSS({ host: 'http://127.0.0.1:1', appToken: 'x' }),
+                dssStruct: { stateMap: {}, dssObjects: {}, zoneDevices: {}, apartmentStructure: { zones: [] } },
+            });
+            Digitalstrom.prototype.registerEventHandlers.call(ctx, ['model_ready']);
+            ctx.pendingEvents = null;
+
+            ctx.dss.emit('model_ready');
+            expect(ctx.restarts).to.deep.equal([10000]);
+            ctx.dss.stop();
         });
 
         it('lets a poll error during the build-up subscribe again instead of restarting', () => {
