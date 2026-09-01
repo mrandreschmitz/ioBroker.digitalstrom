@@ -631,6 +631,56 @@ describe('Smart Home output sync', function () {
         expect(structure.classicReads, 'no second classic read').to.have.lengthOf(1);
     });
 
+    // Die stuendliche Probe eines gelernten Kanals kostete das volle Folgebudget: vier
+    // Status-Antworten je Runde, gemessen zwoelf von vierundachtzig in drei Stunden, und
+    // geheilt hat sie nie. Eine Probe ist eine Frage, keine Erwartung.
+    it('gives up a pure probe after one unanswered status instead of four', async () => {
+        const structure = createFakeStructure();
+        let statusCalls = 0;
+        const sync = createSync(
+            structure,
+            {
+                // Antwortet ohne den geprobten Kanal - genau der Fall, den die Probe klaert
+                getApartmentStatus: async () => {
+                    statusCalls++;
+                    return { included: { dsDevices: [statusDevice('shade1', {})] } };
+                },
+            },
+            { relearnInterval: 20, followUpDelay: 10 },
+        );
+
+        sync.undeliverable.set('shade1|shadePositionOutside', sync.now() - 1000);
+        sync.requestDeviceSync(SHADE(), ['shadePositionOutside']);
+
+        await waitFor(() => sync.undeliverable.has('shade1|shadePositionOutside'));
+        expect(statusCalls, 'one unanswered status is answer enough for a probe').to.equal(1);
+        expect(sync.pending.size, 'and the entry is done, not waiting for three more').to.equal(0);
+    });
+
+    // Sobald ein echter Auslöser dazukommt, ist der Eintrag keine blosse Frage mehr
+    it('gives the full budget back as soon as a real trigger joins a probe', async () => {
+        const structure = createFakeStructure();
+        let statusCalls = 0;
+        const sync = createSync(
+            structure,
+            {
+                getApartmentStatus: async () => {
+                    statusCalls++;
+                    return { included: { dsDevices: [statusDevice('shade1', {})] } };
+                },
+            },
+            { relearnInterval: 20, followUpDelay: 10 },
+        );
+
+        sync.undeliverable.set('shade1|shadePositionOutside', sync.now() - 1000);
+        sync.requestDeviceSync(SHADE(), ['shadePositionOutside']);
+        // Ein Kanal ohne Lernvermerk - dafuer wartet jemand wirklich auf einen Wert
+        sync.requestDeviceSync(SHADE(), ['shadeOpeningAngleOutside']);
+
+        await waitFor(() => statusCalls >= 3, 2000);
+        expect(statusCalls, 'a real trigger is worth the full follow-up budget').to.be.at.least(3);
+    });
+
     // Der dSS meldet die eine class-64-Shade-Bank nur unter den ...Outside-Ids, obwohl
     // GR-KL300-Bloecke auch die ...Indoor-Kanaele deklarieren. Der klassische Read
     // (getConfig class 64) wuerde beiden denselben Wert liefern - der Alias auch.
