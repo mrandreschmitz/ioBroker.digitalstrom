@@ -267,6 +267,9 @@ describe('DSS', () => {
                 'apartment/getStructure',
                 'property/query',
                 'device/getOutputValue',
+                // the named channel read of a vDC device - for a Sonos player it is the
+                // ONLY path to audioVolume and powerState, so a lost answer must retry
+                'device/getOutputChannelValue2',
                 'zone/getLastCalledScene',
                 // a registration without side effects, repeating it changes nothing
                 'event/subscribe',

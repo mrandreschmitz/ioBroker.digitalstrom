@@ -109,6 +109,10 @@ class Digitalstrom extends utils.Adapter {
         this.dssQueue = null;
         this.dssStruct = null;
         this.lastScenes = {};
+        // Boolean states whose declared valueTrue/valueFalse did not match what the dSS
+        // sent. Each one is reported once per run, see coerceScalarValue().
+        /** @type {Set<string>} */
+        this.unmappedBooleanStates = new Set();
 
         this.dataPollInterval = 60000;
         this.dataPollTimeout = null;
@@ -779,7 +783,13 @@ class Digitalstrom extends utils.Adapter {
         this.apiActivity.count('classic.requests');
         if (detail.includes('/json/metering/')) {
             this.apiActivity.count('classic.meterReads');
-        } else if (detail.includes('getOutputValue') || detail.includes('getConfig')) {
+        } else if (
+            detail.includes('getOutputValue') ||
+            // covers the named channel read of vDC devices in both spellings,
+            // getOutputChannelValue and getOutputChannelValue2
+            detail.includes('getOutputChannelValue') ||
+            detail.includes('getConfig')
+        ) {
             this.apiActivity.count('classic.outputReads');
         } else if (
             /callScene|undoScene|setValue|setOutputValue|\/state\/set|pushSensorValue|setTemperatureControlValues|\/event\/raise/.test(
@@ -1399,9 +1409,18 @@ class Digitalstrom extends utils.Adapter {
                 return false;
             }
             if (native.valueTrue !== undefined || native.valueFalse !== undefined) {
-                this.log.debug(
-                    `Unmapped value "${value}" for boolean state ${id} (expected "${native.valueTrue}"/"${native.valueFalse}")`,
-                );
+                // This is the only signal that a declared vocabulary has gone stale, and it
+                // sat on debug: on a real installation it fired five times at startup and
+                // nobody ever saw it. It warns once per state now - the value itself still
+                // comes out right through the toBoolean fallback, so this is a report worth
+                // filing, not a failure. Once per state, because a state that keeps sending
+                // the unknown word must not fill the log with it.
+                if (!this.unmappedBooleanStates.has(id)) {
+                    this.unmappedBooleanStates.add(id);
+                    this.log.warn(
+                        `Unmapped value "${value}" for boolean state ${id} (expected "${native.valueTrue}"/"${native.valueFalse}") - the value was interpreted, please report this state and value so the mapping can be corrected`,
+                    );
+                }
             }
             return DSSStructure.toBoolean(value);
         }

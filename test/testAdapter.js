@@ -43,6 +43,7 @@ function createContext(overrides = {}) {
         stopped: false,
         stopCallbacks: [],
         tokenConnections: new Set(),
+        unmappedBooleanStates: new Set(),
         eventHandlersRegistered: false,
         setState(id, value) {
             this.states[id] = value;
@@ -338,6 +339,27 @@ describe('Adapter logic', () => {
             expect(ctx.warnings).to.have.lengthOf(2);
             expect(ctx.warnings.join('\n')).to.contain('validateCertificate');
             expect(ctx.warnings.join('\n')).to.contain('deleteUnknownObjects');
+        });
+
+        it('counts a named vDC channel read as an output read', () => {
+            // The classic reads of a vDC device are called getOutputChannelValue2 and were
+            // sorted into no counter at all: on an installation with Sonos players the
+            // status tab showed "classic" next to 0 reads while 136 of them were running.
+            const counted = [];
+            const ctx = createContext({ apiActivity: { count: metric => counted.push(metric) } });
+            const count = Digitalstrom.prototype.countClassicActivity.bind(ctx);
+
+            count('request', '/json/device/getOutputChannelValue2?dsuid=abc');
+            count('request', '/json/device/getOutputChannelValue?dsuid=abc&offset=0');
+            count('request', '/json/device/getOutputValue?dsuid=abc&offset=0');
+            count('request', '/json/metering/getValues?type=consumption');
+            count('request', '/json/zone/callScene?id=4&sceneNumber=5');
+
+            const outputReads = counted.filter(m => m === 'classic.outputReads').length;
+            expect(outputReads, 'all three spellings of an output read count').to.equal(3);
+            expect(counted.filter(m => m === 'classic.meterReads')).to.have.lengthOf(1);
+            expect(counted.filter(m => m === 'classic.commands')).to.have.lengthOf(1);
+            expect(counted.filter(m => m === 'classic.requests')).to.have.lengthOf(5);
         });
 
         it('keeps real booleans untouched', () => {
