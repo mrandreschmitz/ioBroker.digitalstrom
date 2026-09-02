@@ -13,8 +13,12 @@
         "allowJs": true,
         "checkJs": true,
 
-        "module": "node16",
-        "moduleResolution": "node16",
+        // node20, not node16: this adapter requires Node 22, and from Node 22.12 a CommonJS
+        // file may require() an ES module. chai and its two plugins are ESM since version 5,
+        // and node16 rejects every require() of them although it works at runtime.
+        // The resolution has no node20 of its own, nodenext is its current equivalent.
+        "module": "node20",
+        "moduleResolution": "nodenext",
         // this is necessary for the automatic typing of the adapter config
         "resolveJsonModule": true,
 
