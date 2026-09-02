@@ -3,6 +3,7 @@ const { expect } = require('chai');
 const SmartHomeOutputSync = require('../lib/dssSmartHomeSync');
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+const { waitFor } = require('./lib/helpers');
 
 /**
  * Wartet auf eine Bedingung statt einer festen Zeit - feste Wartefenster in
@@ -12,16 +13,6 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
  * @param {() => boolean} condition
  * @param {number} [timeout]
  */
-async function waitFor(condition, timeout = 5000) {
-    const start = Date.now();
-    while (!condition()) {
-        if (Date.now() - start > timeout) {
-            throw new Error('waitFor: condition not reached in time');
-        }
-        await delay(10);
-    }
-}
-
 /**
  * The sync needs very little of the structure - exactly this surface.
  *

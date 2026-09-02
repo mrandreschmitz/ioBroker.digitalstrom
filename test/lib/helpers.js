@@ -36,4 +36,25 @@ function nodeCallbackPromise(run) {
     );
 }
 
-module.exports = { delay, callbackPromise, nodeCallbackPromise };
+/**
+ * Waits until a condition holds instead of until a clock says it should.
+ *
+ * A fixed timeout is a bet on how fast the runner is, and this repository has lost that
+ * bet before: a timing test that passed everywhere failed on windows-latest, where the
+ * event loop can stall far longer than a local machine ever does.
+ *
+ * @param {() => boolean} condition checked repeatedly until it holds
+ * @param {number} [timeout] milliseconds before giving up
+ * @returns {Promise<void>}
+ */
+async function waitFor(condition, timeout = 5000) {
+    const start = Date.now();
+    while (!condition()) {
+        if (Date.now() - start > timeout) {
+            throw new Error('waitFor: condition not reached in time');
+        }
+        await delay(10);
+    }
+}
+
+module.exports = { delay, callbackPromise, nodeCallbackPromise, waitFor };

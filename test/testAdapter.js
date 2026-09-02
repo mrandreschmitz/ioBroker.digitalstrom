@@ -1,4 +1,5 @@
 const { expect } = require('chai');
+const { waitFor } = require('./lib/helpers');
 const proxyquire = require('proxyquire');
 const DSS = require('../lib/dss');
 const dssConstants = require('../lib/constants');
@@ -1213,37 +1214,37 @@ describe('Adapter logic', () => {
         // Regression: the dSS sends a callScene for Stop and never the matching undoScene -
         // measured over three hours: six of them, not one undoScene - so the state stayed
         // true from the first press to the end of the run and a rule on it fired once.
-        it('lets a Stop fall back to false again', done => {
+        it('lets a Stop fall back to false again', async () => {
             const { dss, writes } = momentaryContext();
+            const stop = w => w[0] === 'devices.m1.dev1.scenes.Stop';
             deviceScene(dss, '15');
             expect(writes, 'true first, the release must not overtake it').to.deep.include([
                 'devices.m1.dev1.scenes.Stop',
                 true,
             ]);
-            setTimeout(() => {
-                expect(writes.filter(w => w[0] === 'devices.m1.dev1.scenes.Stop')).to.deep.equal([
-                    ['devices.m1.dev1.scenes.Stop', true],
-                    ['devices.m1.dev1.scenes.Stop', false],
-                ]);
-                dss.stop();
-                done();
-            }, 40);
+            await waitFor(() => writes.some(w => stop(w) && w[1] === false));
+            expect(writes.filter(stop)).to.deep.equal([
+                ['devices.m1.dev1.scenes.Stop', true],
+                ['devices.m1.dev1.scenes.Stop', false],
+            ]);
+            dss.stop();
         });
 
         // A wall switch repeats its Stop - measured three times within 481 ms while the
         // blind never moved. That is ONE press, and a rule on it has to fire once.
-        it('makes a repeated Stop one edge, not three', done => {
+        it('makes a repeated Stop one edge, not three', async () => {
             const { dss, writes } = momentaryContext();
+            const released = w => w[0] === 'devices.m1.dev1.scenes.Stop' && w[1] === false;
             deviceScene(dss, '15');
             deviceScene(dss, '15');
             deviceScene(dss, '15');
-            setTimeout(() => {
-                const releases = writes.filter(w => w[0] === 'devices.m1.dev1.scenes.Stop' && w[1] === false);
-                expect(releases, 'the release is re-armed, not queued three times').to.have.lengthOf(1);
-                expect(writes[writes.length - 1][1], 'and it is the last thing that happens').to.equal(false);
-                dss.stop();
-                done();
-            }, 40);
+            await waitFor(() => writes.some(released));
+            // A second release would arrive after the first, so give one more window a
+            // chance to produce it before claiming there was only one
+            await new Promise(resolve => setTimeout(resolve, 30));
+            expect(writes.filter(released), 'the release is re-armed, not queued three times').to.have.lengthOf(1);
+            expect(writes[writes.length - 1][1], 'and it is the last thing that happens').to.equal(false);
+            dss.stop();
         });
 
         // A blind driven to Maximum really IS at Maximum - that latch is correct and the
@@ -1418,7 +1419,7 @@ describe('Adapter logic', () => {
         // Regression: the dSS reports a press and never takes it back, so the state stayed
         // true from the first press to the end of the run - the same defect the momentary
         // scenes had, on the state right next to them.
-        it('lets a pressed button go again', done => {
+        it('lets a pressed button go again', async () => {
             const { ctx, dss } = buttonContext();
             ctx.momentaryReleaseDelay = 5;
             Digitalstrom.prototype.registerEventHandlers.call(ctx, ['buttonClick']);
@@ -1428,12 +1429,9 @@ describe('Adapter logic', () => {
                 properties: { clickType: '7', holdCount: '3' },
             });
             expect(ctx.states['devices.m1.dev1.button'], 'true first').to.equal(true);
-            setTimeout(() => {
-                expect(ctx.states['devices.m1.dev1.button'], 'and false again afterwards').to.equal(false);
-                expect(ctx.states['devices.m1.dev1.buttonClickType'], 'the click type is not a moment').to.equal(7);
-                dss.stop();
-                done();
-            }, 40);
+            await waitFor(() => ctx.states['devices.m1.dev1.button'] === false);
+            expect(ctx.states['devices.m1.dev1.buttonClickType'], 'the click type is not a moment').to.equal(7);
+            dss.stop();
         });
 
         it('keeps the click type 0 and the defaults working', done => {
