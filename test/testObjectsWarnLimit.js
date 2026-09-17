@@ -1027,6 +1027,8 @@ describe('Objects warn limit (admin dialog)', () => {
                 appType: 'custom',
                 server: { middlewareMode: true, hmr: false, watch: null },
                 ssr: { noExternal: [/^@mui\//, '@iobroker/adapter-react-v5'] },
+                // Node 22 cannot import the named export of the CommonJS react-color, see the stub
+                resolve: { alias: { 'react-color': path.join(__dirname, 'lib', 'reactColorStub.mjs') } },
                 optimizeDeps: { noDiscovery: true, include: [] },
             });
             // adapter-react-v5 greets the console with a banner when it loads
