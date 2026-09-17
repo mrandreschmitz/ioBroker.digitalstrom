@@ -450,7 +450,15 @@ describe('Websocket watchdog', function () {
      */
     async function createSilentServer(onFrame) {
         const frames = [];
+        /** @type {Set<import('node:net').Socket>} */
+        const sockets = new Set();
         const server = net.createServer(socket => {
+            // Every test closes its client at the end. On Windows that reaches this side as a
+            // reset, and an 'error' without a listener is an uncaught exception that fails
+            // whichever test is running at that moment ("read ECONNRESET").
+            socket.on('error', () => {});
+            sockets.add(socket);
+            socket.on('close', () => sockets.delete(socket));
             socket.once('data', chunk => {
                 const head = chunk.toString('utf8');
                 const match = /Sec-WebSocket-Key: (\S+)/i.exec(head);
@@ -480,7 +488,12 @@ describe('Websocket watchdog', function () {
         return {
             port: address.port,
             frames,
-            close: () => new Promise(resolve => server.close(() => resolve(undefined))),
+            close: () =>
+                new Promise(resolve => {
+                    // server.close() only waits for the open connections - end them instead
+                    sockets.forEach(socket => socket.destroy());
+                    server.close(() => resolve(undefined));
+                }),
         };
     }
 
