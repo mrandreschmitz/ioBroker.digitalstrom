@@ -227,6 +227,20 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ## Changelog
 
+### 2.4.24 (2026-09-17)
+
+* **Commands that follow each other quickly keep their order.** A waiting command was merged into an identical
+  older one even when another command had been queued in between: on, off, on ended off, and a brightness value
+  set while the light was being switched off could be lost. The merged command now moves to the end of the
+  queue, so the last wish wins while identical commands still go to the dSS only once
+* **A value that keeps changing no longer postpones everything.** Every new value restarted the 500 ms wait, so
+  nothing was sent at all while a slider was moving - and a command for another device of the same circuit
+  waited just as long. The wait is bounded now: the queue keeps sending while the changes continue, with the
+  same minimum distance between two requests
+* **The notification channel comes back after a failed login.** When the session login failed while the Smart
+  Home websocket was reconnecting, no further attempt followed until the adapter was restarted. The login is
+  part of the retry now, and a stop during the login no longer opens a connection afterwards
+
 ### 2.4.23 (2026-09-17)
 
 * **The object warning limit can be seen and changed on the settings tab.** Instances that were created before

@@ -360,6 +360,156 @@ describe('DSSQueue', () => {
             queue.pushQueryQueue('meter1', scene(14), 'high', finish);
             queue.pushQueryQueue('meter1', scene(13), 'high', finish);
         });
+
+        // Regression: a pending write used to absorb a later identical write even though
+        // another command was queued in between - on, off, on ended up off.
+        // Regression: a waiting write used to absorb a later one although another command
+        // was queued in between - state true, false, true ended false. The merged entry
+        // now moves to the end of the queue, which keeps the order AND the coalescing.
+        describe('keeps the command order', () => {
+            const scene = number => ({
+                dssClass: 'device',
+                dssFunction: 'callScene',
+                params: { dsuid: 'dev1', sceneNumber: number, category: 'manual' },
+            });
+            const brightness = value => ({
+                dssClass: 'device',
+                dssFunction: 'setValue',
+                params: { dsuid: 'dev1', value },
+            });
+            const read = () => ({
+                dssClass: 'device',
+                dssFunction: 'getOutputValue',
+                params: { dsuid: 'dev1', offset: 0 },
+            });
+            const write = (dsuid, value) => ({ dssClass: 'device', dssFunction: 'setValue', params: { dsuid, value } });
+
+            /**
+             * Pushes every entry and compares the API calls that really went out.
+             * The comparison must NOT happen inside the queue callback: runCallbacks
+             * swallows callback errors, a failing expect would only show up as a timeout.
+             *
+             * @param {object[]} entries entries to push, in that order
+             * @param {string[]} expected the requests that must reach the dSS, in order
+             * @param {(err?: Error) => void} done mocha callback
+             */
+            function runSequence(entries, expected, done) {
+                const sent = [];
+                const dss = {
+                    requestAsync: async (dssClass, dssFunction, params) => {
+                        const value = params.sceneNumber !== undefined ? params.sceneNumber : params.value;
+                        sent.push(`${params.dsuid}:${dssFunction}:${value === undefined ? '' : value}`);
+                        return { ok: true };
+                    },
+                };
+                const queue = createQueue(dss);
+                let open = entries.length;
+                const finish = () => {
+                    if (--open) {
+                        return;
+                    }
+                    setImmediate(() => {
+                        try {
+                            expect(sent).to.deep.equal(expected);
+                        } catch (err) {
+                            return done(/** @type {Error} */ (err));
+                        }
+                        done();
+                    });
+                };
+                entries.forEach(entry => queue.pushQueryQueue('meter1', entry, 'high', finish));
+            }
+
+            it('on -> off -> on ends on', done => {
+                // the repeated "on" is answered by the single send at the end
+                runSequence([scene(5), scene(0), scene(5)], ['dev1:callScene:0', 'dev1:callScene:5'], done);
+            });
+
+            it('brightness 50 -> off -> brightness 75 ends at 75', done => {
+                runSequence(
+                    [brightness(127), scene(0), brightness(191)],
+                    ['dev1:callScene:0', 'dev1:setValue:191'],
+                    done,
+                );
+            });
+
+            it('still merges identical reads into one request, answered after the write', done => {
+                runSequence([read(), scene(0), read()], ['dev1:callScene:0', 'dev1:getOutputValue:'], done);
+            });
+
+            // The order must not cost the coalescing: with a command of another device in
+            // between, a moving slider must still end up as ONE request
+            it('coalesces a moving value behind a command of another device', done => {
+                const entries = [write('dev1', 1), write('dev2', 99)];
+                for (let i = 2; i <= 10; i++) {
+                    entries.push(write('dev1', i));
+                }
+                runSequence(entries, ['dev2:setValue:99', 'dev1:setValue:10'], done);
+            });
+
+            // The worst case of the first attempt: two targets of one circuit changing
+            // alternately (position and angle of one blind, or two dimmers on one meter)
+            // used to defeat the coalescing completely - every single step was sent
+            it('coalesces two targets of one circuit that change alternately', done => {
+                const entries = [];
+                for (let i = 1; i <= 10; i++) {
+                    entries.push(write('dev1', i), write('dev2', i));
+                }
+                runSequence(entries, ['dev1:setValue:10', 'dev2:setValue:10'], done);
+            });
+        });
+    });
+
+    // Regression: every new entry restarted the idle wait, so a slider moving every 100 ms
+    // sent nothing at all until it stopped.
+    describe('bounded wait under continuous changes', () => {
+        const sinon = require('sinon');
+        let clock;
+        beforeEach(() => {
+            clock = sinon.useFakeTimers({ now: 100000, toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+        });
+        afterEach(() => clock.restore());
+
+        it('sends while changes keep arriving, and a waiting command of another device too', async () => {
+            const sent = [];
+            const dss = {
+                requestAsync: async (dssClass, dssFunction, params) => {
+                    sent.push({ at: Date.now(), dsuid: params.dsuid, value: params.value });
+                    return { ok: true };
+                },
+            };
+            const queue = new DSSQueue({
+                logger: silentLogger,
+                prioTimeouts: { high: 500, medium: 10000, low: 20000 },
+                dss,
+            });
+            const start = Date.now();
+            const noop = () => {};
+            queue.pushQueryQueue(
+                'meter1',
+                { dssClass: 'device', dssFunction: 'callScene', params: { dsuid: 'dev2', sceneNumber: 5 } },
+                'high',
+                noop,
+            );
+            for (let i = 1; i <= 20; i++) {
+                await clock.tickAsync(100);
+                queue.pushQueryQueue(
+                    'meter1',
+                    { dssClass: 'device', dssFunction: 'setValue', params: { dsuid: 'dev1', value: i } },
+                    'high',
+                    noop,
+                );
+            }
+            // 2 s of changes: the other device went out after its 500 ms, the slider follows
+            expect(sent[0]).to.include({ dsuid: 'dev2', at: start + 500 });
+            const sliderSends = sent.filter(item => item.dsuid === 'dev1');
+            expect(sliderSends.length, 'slider values sent during the changes').to.be.at.least(2);
+            for (let i = 1; i < sent.length; i++) {
+                expect(sent[i].at - sent[i - 1].at, 'minimum spacing').to.be.at.least(500);
+            }
+            await clock.tickAsync(1000);
+            expect(sent[sent.length - 1].value, 'last value arrives').to.equal(20);
+        });
     });
 
     describe('re-entrant coalescing', () => {

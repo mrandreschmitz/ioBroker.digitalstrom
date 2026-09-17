@@ -1134,12 +1134,16 @@ class Digitalstrom extends utils.Adapter {
         this.smartHome.on('notification', () => this.apiActivity && this.apiActivity.count('smarthome.notifications'));
         this.smartHome.startNotifications().then(
             () =>
-                this.log.info(
-                    'Smart Home notification channel is active - changes made outside of ioBroker are reconciled automatically',
-                ),
+                // A start that had nothing to do (stopping, or another start still
+                // running) resolves without a socket - that is not an open channel
+                this.smartHome && this.smartHome.websocket
+                    ? this.log.info(
+                          'Smart Home notification channel is active - changes made outside of ioBroker are reconciled automatically',
+                      )
+                    : this.log.debug('Smart Home notification channel was not started'),
             err =>
                 this.log.info(
-                    `Smart Home notification channel is not available (${configUtils.errorMessage(err)}) - the adapter works without it`,
+                    `Smart Home notification channel is not available (${configUtils.errorMessage(err)}) - the adapter works without it and keeps retrying in the background`,
                 ),
         );
     }

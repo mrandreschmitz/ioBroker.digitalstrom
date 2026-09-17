@@ -8,8 +8,8 @@ GET /api/v1/apartment/status             (all device output values, one request)
 ```
 
 All structure reads, device and zone commands, sensor values, button events and scene events continue
-to use the classic dSS JSON API. The notification websocket and the other methods implemented by the
-client are not started by the adapter.
+to use the classic dSS JSON API. In addition the adapter starts the notification websocket of the new
+API (see below); the other methods implemented by the client are not used.
 
 ## Output values
 
@@ -57,12 +57,14 @@ answer already delivers a name, that name wins unchanged.
 ## Requirements and activation
 
 - dSS firmware 1.19 or newer
-- an application API key for the Smart Home API
+- optionally an application API key for the Smart Home API - without one, the adapter uses the login
+  of the classic interface for the new API and the notification websocket
 - **Read meter values through the new API** enabled in the adapter settings
 
 The button in the settings creates the API key from the existing classic App-Token. The key is stored
-as an encrypted and protected native setting. The option is disabled by default. If it is disabled or
-no key is configured, meter values use the classic API exactly as before.
+as an encrypted and protected native setting. The option is disabled by default. If it is disabled,
+meter values use the classic API exactly as before. If it is enabled without a key, the classic session
+is used instead; only without both a key and a classic connection the adapter stays on the classic API.
 
 On adapter shutdown, an in-flight key request is aborted locally and any late reply is ignored. An HTTP
 abort cannot undo work the dSS may already have completed: if shutdown happens after the server accepted

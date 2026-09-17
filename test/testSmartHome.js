@@ -207,6 +207,67 @@ describe('Smart Home API client', function () {
     });
 
     describe('notifications', () => {
+        // Regression: authHeaders() ran outside the try/catch, so a single failing session
+        // login during a reconnect ended the reconnects for good.
+        describe('reconnect with session login', () => {
+            const sinon = require('sinon');
+            const MiniWebsocket = require('../lib/websocket');
+            let clock;
+            let connect;
+            beforeEach(() => {
+                // Only setTimeout/clearTimeout are faked, and these two tests issue no
+                // HTTP request - the real mock server of the outer describe keeps its
+                // own socket timers. A request added here would hang at the time jump.
+                clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+                connect = sinon.stub(MiniWebsocket.prototype, 'connect').resolves();
+                sinon.stub(MiniWebsocket.prototype, 'send');
+                sinon.stub(MiniWebsocket.prototype, 'close');
+            });
+            afterEach(() => {
+                client && client.stop();
+                client = null;
+                sinon.restore();
+            });
+
+            it('keeps reconnecting after a temporarily failing login', async () => {
+                let logins = 0;
+                client = createClient({
+                    apiKey: undefined,
+                    getSessionToken: async () => {
+                        if (++logins === 1) {
+                            throw new Error('login failed');
+                        }
+                        return 'token';
+                    },
+                });
+                client.scheduleReconnect();
+                await clock.tickAsync(2000);
+                expect(logins).to.equal(1);
+                expect(connect.called).to.equal(false);
+                await clock.tickAsync(60000);
+                expect(logins, 'login tried again').to.equal(2);
+                expect(connect.callCount, 'one connection').to.equal(1);
+            });
+
+            it('opens no connection when stopped during the login', async () => {
+                /** @type {(token: string) => void} */
+                let release = () => {};
+                client = createClient({
+                    apiKey: undefined,
+                    getSessionToken: () => new Promise(resolve => (release = resolve)),
+                });
+                const first = client.startNotifications();
+                const second = client.startNotifications();
+                client.stop();
+                release('token');
+                await Promise.allSettled([first, second]);
+                await clock.tickAsync(60000);
+                expect(connect.called).to.equal(false);
+                expect(client.websocket).to.equal(null);
+                expect(client.reconnectTimer).to.equal(null);
+            });
+        });
+
         it('connects and sends the signalr handshake with the record separator', async () => {
             client = createClient();
             await client.startNotifications();

@@ -338,6 +338,22 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
 
+### 2.4.24 (2026-09-17)
+
+* **Schnell aufeinanderfolgende Befehle behalten ihre Reihenfolge.** Ein wartender Befehl wurde mit einem
+  gleichen älteren zusammengefasst, auch wenn dazwischen ein anderer Befehl eingereiht war: an, aus, an endete
+  aus, und eine Helligkeit, die während des Ausschaltens gesetzt wurde, konnte verloren gehen. Der
+  zusammengefasste Befehl wandert jetzt ans Ende der Warteschlange – der zuletzt gewünschte Zustand gewinnt,
+  gleiche Befehle gehen weiterhin nur einmal an den dSS
+* **Ein fortlaufend geänderter Wert schiebt nicht mehr alles auf.** Jeder neue Wert startete die
+  500-ms-Wartezeit neu, sodass beim Ziehen eines Reglers gar nichts gesendet wurde – und ein Befehl für ein
+  anderes Gerät desselben Stromkreises wartete genauso lange. Die Wartezeit ist jetzt begrenzt: Die
+  Warteschlange sendet während der Änderungen weiter, mit unverändertem Mindestabstand zwischen zwei Anfragen
+* **Der Benachrichtigungskanal kommt nach einer fehlgeschlagenen Anmeldung zurück.** Schlug die
+  Session-Anmeldung während eines Verbindungsversuchs des Smart-Home-WebSockets fehl, folgte bis zum Neustart
+  des Adapters kein weiterer Versuch. Die Anmeldung gehört jetzt zur Wiederholung, und ein Stopp während der
+  Anmeldung öffnet danach keine Verbindung mehr
+
 ### 2.4.23 (2026-09-17)
 
 * **Die Objekt-Warngrenze lässt sich im Reiter „Einstellungen" ansehen und ändern.** Instanzen, die entstanden
