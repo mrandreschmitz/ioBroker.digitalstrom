@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+    Accordion,
+    AccordionDetails,
+    AccordionSummary,
     Alert,
     Box,
     Button,
@@ -28,8 +31,19 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import BoltIcon from '@mui/icons-material/Bolt';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import DataObjectIcon from '@mui/icons-material/DataObject';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
 import { cardSx, DS_GREEN } from './theme.js';
+import {
+    WARN_LIMIT_QUESTIONS,
+    copyText,
+    describeWarnLimit,
+    formatCount,
+    parseLimitInput,
+} from './objectsWarnLimit.js';
 
 /**
  * Space that stays free below the content, in theme units (1 = 8px).
@@ -129,7 +143,309 @@ function OptionRow({ checked, onChange, label, help }) {
     );
 }
 
-export default function Settings({ native, onChange, onSendTo, alive, t, initialTab = 0, status = null }) {
+/**
+ * Replaces the {placeholders} of a translated text.
+ *
+ * @param {string} text
+ * @param {Record<string, any>} [params]
+ */
+function fill(text, params) {
+    return Object.entries(params || {}).reduce((result, [name, value]) => result.split(`{${name}}`).join(String(value)), text);
+}
+
+/** One label/value pair of the warn limit card. On a narrow window the label sits above its value. */
+function FactRow({ label, children }) {
+    return (
+        <>
+            <Typography variant="body2" color="text.secondary" sx={{ pt: { sm: 0.25 } }}>
+                {label}
+            </Typography>
+            <Box sx={{ minWidth: 0, mb: { xs: 1.5, sm: 0 } }}>{children}</Box>
+        </>
+    );
+}
+
+/**
+ * The objects warn limit of this instance: what is set, what this adapter version suggests, and a
+ * field to change it. The field is a draft until the dialog's own save button writes it - the
+ * readings themselves never mark the dialog as changed.
+ *
+ * @param {object} props
+ * @param {{ snapshot: any, draft: string|null, saveError: string }} props.warnLimit
+ * @param {(text: string|null) => void} props.onDraft
+ * @param {() => void} props.onRefresh
+ * @param {(key: string) => string} props.t
+ * @param {string} props.lang
+ */
+function WarnLimitCard({ warnLimit, onDraft, onRefresh, t, lang }) {
+    const [copyState, setCopyState] = useState('');
+    // One timer at a time, dropped when the card goes away
+    const copyTimer = useRef(null);
+    useEffect(() => () => clearTimeout(copyTimer.current), []);
+    const view = describeWarnLimit(warnLimit.snapshot);
+    const objects = n => fill(t('warnLimit_objects'), { n: formatCount(n, lang) });
+    const current = view.current;
+    const draft = warnLimit.draft;
+    const parsed = draft === null ? null : parseLimitInput(draft);
+    // The example is typed without separators, so it is the plain number - taken from what this
+    // version suggests or what is set, never a number of its own
+    const example = view.adapterDefault ?? (Number.isSafeInteger(current) && current > 0 ? current : null);
+    const exampleText = example === null ? '' : String(example);
+
+    let currentText;
+    if (view.status === 'loading') {
+        currentText = t('warnLimit_loading');
+    } else if (current !== null) {
+        currentText = objects(current);
+    } else if (view.status === 'invalid') {
+        currentText = t('warnLimit_invalidValue');
+    } else if (view.status === 'noValue' || view.status === 'noObject') {
+        currentText = t('warnLimit_notSet');
+    } else if (view.status === 'unsupported') {
+        currentText = t('warnLimit_unsupported');
+    } else {
+        currentText = t('warnLimit_unknown');
+    }
+
+    let defaultText;
+    if (view.adapterDefaultStatus === 'loading') {
+        defaultText = t('warnLimit_loading');
+    } else if (view.adapterDefault !== null) {
+        defaultText = objects(view.adapterDefault);
+    } else {
+        defaultText = t('warnLimit_unknown');
+    }
+
+    let helper;
+    if (warnLimit.saving) {
+        helper = t('warnLimit_saving');
+    } else if (!view.editable) {
+        helper = t('warnLimit_help_locked');
+    } else if (parsed && !parsed.ok) {
+        helper = t(`warnLimit_input_${parsed.reason}`);
+    } else {
+        helper = exampleText ? fill(t('warnLimit_help_edit'), { example: exampleText }) : t('warnLimit_help_editNoExample');
+    }
+
+    const onCopy = async () => {
+        clearTimeout(copyTimer.current);
+        setCopyState('');
+        const copied = await copyText(view.stateId);
+        setCopyState(copied ? 'copied' : 'failed');
+        copyTimer.current = setTimeout(() => setCopyState(''), 4000);
+    };
+
+    return (
+        <Card icon={<DataObjectIcon />} title={t('warnLimit_title')}>
+            <Stack spacing={2.5}>
+                <Typography variant="body2" sx={{ lineHeight: 1.7 }}>
+                    {richText(t('warnLimit_info'))}
+                </Typography>
+
+                <Box
+                    sx={{
+                        display: 'grid',
+                        gridTemplateColumns: { xs: '1fr', sm: 'minmax(180px, max-content) 1fr' },
+                        columnGap: 3,
+                        rowGap: { xs: 0, sm: 1.5 },
+                        // start, not baseline: a wrapped state id would pull its label to the last line
+                        alignItems: 'start',
+                    }}
+                >
+                    <FactRow label={t('warnLimit_label_current')}>
+                        <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+                            <Typography variant="h6" component="span" sx={{ fontWeight: 600, lineHeight: 1.3 }}>
+                                {currentText}
+                            </Typography>
+                            {view.loading && view.status !== 'loading' ? <CircularProgress size={14} /> : null}
+                            {view.ack === false && current !== null ? (
+                                <Chip size="small" variant="outlined" color="warning" label={t('warnLimit_ack_false')} />
+                            ) : null}
+                        </Stack>
+                        {view.effective !== null ? (
+                            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+                                {fill(t('warnLimit_effective_fallback'), { value: objects(view.effective) })}
+                            </Typography>
+                        ) : null}
+                    </FactRow>
+                    <FactRow label={t('warnLimit_label_default')}>
+                        <Typography component="span" sx={{ fontWeight: 500 }}>
+                            {defaultText}
+                        </Typography>
+                        {view.adapterDefault !== null && view.adapterVersion ? (
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                {fill(t('warnLimit_default_version'), { version: view.adapterVersion })}
+                            </Typography>
+                        ) : null}
+                    </FactRow>
+                    <FactRow label={t('warnLimit_label_source')}>
+                        <Typography component="span">
+                            {view.status === 'loading'
+                                ? t('warnLimit_loading')
+                                : current !== null
+                                  ? t('warnLimit_source_state')
+                                  : view.effective !== null
+                                    ? t('warnLimit_source_fallback')
+                                    : ['noAccess', 'disconnected', 'error'].includes(view.status)
+                                      ? t('warnLimit_unknown')
+                                      : t('warnLimit_source_none')}
+                        </Typography>
+                    </FactRow>
+                    <FactRow label={t('warnLimit_label_state')}>
+                        <Box
+                            component="code"
+                            sx={{
+                                display: 'inline-block',
+                                maxWidth: '100%',
+                                fontFamily: '"Roboto Mono", Menlo, Consolas, monospace',
+                                fontSize: 13,
+                                bgcolor: '#f4f6f8',
+                                border: '1px solid #e4e9ee',
+                                borderRadius: 1,
+                                px: 1,
+                                py: 0.25,
+                                overflowWrap: 'anywhere',
+                                wordBreak: 'break-all',
+                                userSelect: 'all',
+                            }}
+                        >
+                            {view.stateId}
+                        </Box>
+                    </FactRow>
+                </Box>
+
+                {/* Reading actions sit with the reading: next to the field they looked like "apply" */}
+                <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
+                    <Button
+                        variant="outlined"
+                        onClick={onRefresh}
+                        disabled={view.loading}
+                        startIcon={view.loading ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon />}
+                    >
+                        {t('warnLimit_button_refresh')}
+                    </Button>
+                    <Button variant="outlined" onClick={onCopy} startIcon={<ContentCopyIcon />}>
+                        {t('warnLimit_button_copy')}
+                    </Button>
+                    {/* The live region is always there, so a screen reader announces the text when it
+                        appears instead of missing a region that arrives together with it */}
+                    <Typography
+                        variant="body2"
+                        role="status"
+                        aria-live="polite"
+                        color={copyState === 'copied' ? 'success.main' : 'text.secondary'}
+                    >
+                        {copyState === 'copied' ? t('warnLimit_copied') : copyState === 'failed' ? t('warnLimit_copyFailed') : ''}
+                    </Typography>
+                </Stack>
+
+                {view.messages.map(message => (
+                    <Alert
+                        key={message.key}
+                        severity={message.severity}
+                        icon={message.severity === 'info' ? <InfoOutlinedIcon fontSize="inherit" /> : undefined}
+                    >
+                        {richText(
+                            fill(t(message.key), {
+                                ...message.params,
+                                ...(message.params?.type ? { type: t(message.params.type) } : {}),
+                                ...(typeof message.params?.fallback === 'number'
+                                    ? { fallback: formatCount(message.params.fallback, lang) }
+                                    : {}),
+                            }),
+                        )}
+                    </Alert>
+                ))}
+
+                {/* What one wants to know before touching the number - the first two are open */}
+                <Box>
+                    <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                        {t('warnLimit_faq_title')}
+                    </Typography>
+                    {WARN_LIMIT_QUESTIONS.map((question, index) => (
+                        <Accordion
+                            key={question}
+                            defaultExpanded={index < 2}
+                            disableGutters
+                            elevation={0}
+                            sx={{
+                                border: '1px solid #e4e9ee',
+                                '&:not(:last-of-type)': { borderBottom: 0 },
+                                '&::before': { display: 'none' },
+                            }}
+                        >
+                            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                                <Typography sx={{ fontWeight: 500 }}>{t(`warnLimit_faq_${question}_q`)}</Typography>
+                            </AccordionSummary>
+                            <AccordionDetails sx={{ pt: 0 }}>
+                                <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
+                                    {richText(t(`warnLimit_faq_${question}_a`))}
+                                </Typography>
+                            </AccordionDetails>
+                        </Accordion>
+                    ))}
+                </Box>
+
+                <Divider sx={{ borderColor: '#eef2f5' }} />
+
+                <Box>
+                    <TextField
+                        label={t('warnLimit_label_edit')}
+                        value={draft !== null ? draft : current !== null && Number.isSafeInteger(current) ? String(current) : ''}
+                        disabled={!view.editable || !!warnLimit.saving}
+                        error={!!parsed && !parsed.ok}
+                        onChange={e => {
+                            const text = e.target.value;
+                            const check = parseLimitInput(text);
+                            // Typing the stored value back, or emptying a field that had no value, is
+                            // no change any more
+                            const unchanged = check.ok ? check.value === current : text.trim() === '' && current === null;
+                            onDraft(unchanged ? null : text);
+                        }}
+                        helperText={helper}
+                        sx={{ maxWidth: 320 }}
+                        inputProps={{ inputMode: 'numeric', autoComplete: 'off', 'aria-label': t('warnLimit_label_edit') }}
+                        InputProps={{ endAdornment: <InputAdornment position="end">{t('warnLimit_unit')}</InputAdornment> }}
+                    />
+                    {parsed && parsed.ok && !warnLimit.saving ? (
+                        // A typed value is only a draft until the save bar below writes it
+                        <Alert severity="warning" sx={{ mt: 1.5 }}>
+                            {t('warnLimit_draft_pending')}
+                        </Alert>
+                    ) : null}
+                    {draft !== null && current !== null && view.status !== 'loading' && warnLimit.draftBase !== current ? (
+                        <Alert severity="info" icon={<InfoOutlinedIcon fontSize="inherit" />} sx={{ mt: 1.5 }}>
+                            {fill(t('warnLimit_draft_changedMeanwhile'), { value: objects(current) })}
+                        </Alert>
+                    ) : null}
+                    {warnLimit.saveError ? (
+                        <Alert severity="warning" sx={{ mt: 1.5 }}>
+                            {warnLimit.saveError}
+                        </Alert>
+                    ) : null}
+                </Box>
+
+                <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
+                    {richText(t('warnLimit_manual'))}
+                </Typography>
+            </Stack>
+        </Card>
+    );
+}
+
+export default function Settings({
+    native,
+    onChange,
+    onSendTo,
+    alive,
+    t,
+    initialTab = 0,
+    status = null,
+    warnLimit = null,
+    onWarnLimitDraft = () => {},
+    onWarnLimitRefresh = () => {},
+    lang = 'en',
+}) {
     const [tab, setTab] = useState(initialTab);
     // Not every field has an explanation. Both this preview and I18n return the key
     // itself when a text is missing, which must not end up on the screen.
@@ -605,6 +921,16 @@ export default function Settings({ native, onChange, onSendTo, alive, t, initial
                                 />
                             </Stack>
                         </Card>
+
+                        {warnLimit ? (
+                            <WarnLimitCard
+                                warnLimit={warnLimit}
+                                onDraft={onWarnLimitDraft}
+                                onRefresh={onWarnLimitRefresh}
+                                t={t}
+                                lang={lang}
+                            />
+                        ) : null}
                     </>
                 ) : null}
 

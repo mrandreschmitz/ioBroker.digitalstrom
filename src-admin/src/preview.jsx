@@ -1,7 +1,7 @@
 // Design preview only. Renders the settings page with fixed data and without any
 // connection to a running instance, so the layout can be looked at during development.
 // This entry point is not part of the built admin interface.
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ThemeProvider } from '@mui/material/styles';
 import { Box, CssBaseline, Fab, Toolbar } from '@mui/material';
@@ -9,10 +9,54 @@ import SaveIcon from '@mui/icons-material/Save';
 import CloseIcon from '@mui/icons-material/Close';
 import Settings from './Settings.jsx';
 import { buildTheme } from './theme.js';
+import { WarnLimitMonitor, storedLimit, warnLimitStateId } from './objectsWarnLimit.js';
 import de from './i18n/de.json';
 import en from './i18n/en.json';
 
 const dict = { de, en };
+
+/**
+ * A pretend admin connection for the warn limit card, so every case can be looked at:
+ * ?warnLimit=5000 | 15000 | text | empty | none | noObject | old | denied | zero, ?instance=1, ?draft=12000.
+ *
+ * @param {string} scenario
+ * @param {number} instance
+ */
+function previewSocket(scenario, instance) {
+    const id = warnLimitStateId('digitalstrom', instance);
+    const numeric = /^\d+$/.test(scenario) ? Number(scenario) : null;
+    const states = {};
+    if (numeric !== null) {
+        states[id] = { val: numeric, ack: true };
+    } else if (scenario === 'text') {
+        states[id] = { val: '10000', ack: false };
+    } else if (scenario === 'empty') {
+        states[id] = { val: null, ack: true };
+    } else if (scenario === 'zero') {
+        states[id] = { val: 0, ack: true };
+    }
+    const objects = {
+        [`system.adapter.digitalstrom.${instance}`]: {
+            common: { host: 'preview', version: '2.4.23', defaultObjectsWarnLimit: 10000 },
+        },
+        'system.host.preview': { common: { installedVersion: scenario === 'old' ? '7.0.7' : '7.2.2' } },
+    };
+    if (scenario !== 'noObject' && scenario !== 'old') {
+        objects[id] = { common: { type: 'number' } };
+    }
+    const listeners = [];
+    const answer = value => new Promise(resolve => setTimeout(() => resolve(value), 300));
+    return {
+        getState: sid => (scenario === 'denied' ? Promise.reject('permissionError') : answer(states[sid] ?? null)),
+        getObject: oid => answer(objects[oid] ?? null),
+        subscribeState: async (sid, cb) => listeners.push(cb),
+        unsubscribeState: () => {},
+        setState: async (sid, state) => {
+            states[sid] = state;
+            listeners.forEach(cb => cb(sid, state));
+        },
+    };
+}
 
 /**
  * Imitates the save bar of the admin, which adapter-react-v5 renders with position
@@ -21,23 +65,25 @@ const dict = { de, en };
  *
  * @param {object} props
  * @param {number} props.offset distance to the bottom edge - 38px in the old admin iframe
+ * @param {string} props.lang the admin labels its bar in the language of the dialog
  */
-function SaveBarStandIn({ offset }) {
+function SaveBarStandIn({ offset, lang }) {
+    const label = lang === 'de' ? ['SPEICHERN', 'SPEICHERN UND SCHLIESSEN', 'SCHLIESSEN'] : ['SAVE', 'SAVE AND CLOSE', 'CLOSE'];
     const buttonStyle = { borderRadius: 3, height: 32 };
     return (
         <Toolbar sx={{ position: 'absolute', left: 0, right: 0, bottom: offset, background: '#2a9fd6' }}>
             <Fab variant="extended" aria-label="Save" style={buttonStyle}>
                 <SaveIcon sx={{ mr: 1 }} />
-                SPEICHERN
+                {label[0]}
             </Fab>
             <Fab variant="extended" aria-label="Save and close" style={{ ...buttonStyle, marginLeft: 10 }}>
                 <SaveIcon sx={{ mr: 1 }} />
-                SPEICHERN UND SCHLIESSEN
+                {label[1]}
             </Fab>
             <Box sx={{ flexGrow: 1 }} />
             <Fab variant="extended" aria-label="Close" style={buttonStyle}>
                 <CloseIcon sx={{ mr: 1 }} />
-                SCHLIESSEN
+                {label[2]}
             </Fab>
         </Toolbar>
     );
@@ -51,6 +97,28 @@ function Preview() {
     const barOffset = params.get('iframe') === '1' ? 38 : 0;
     const noscroll = params.get('noscroll') === '1';
     const words = dict[lang] || dict.en;
+    // ?draft=12000 shows a typed but unsaved value, as in the README screenshot
+    const initialDraft = params.get('draft');
+    const [warnLimit, setWarnLimit] = useState({
+        snapshot: null,
+        draft: initialDraft,
+        draftBase: initialDraft === null ? null : Number(params.get('warnLimit') || '5000'),
+        saveError: '',
+    });
+    const [monitor] = useState(
+        () =>
+            new WarnLimitMonitor({
+                socket: previewSocket(params.get('warnLimit') || '5000', parseInt(params.get('instance') || '0', 10)),
+                adapterName: 'digitalstrom',
+                instance: parseInt(params.get('instance') || '0', 10),
+                host: 'preview',
+                onUpdate: snapshot => setWarnLimit(old => ({ ...old, snapshot })),
+            }),
+    );
+    useEffect(() => {
+        void monitor.start();
+        return () => monitor.dispose();
+    }, [monitor]);
     const [native, setNative] = useState({
         host: '192.168.1.10',
         validateCertificate: false,
@@ -91,9 +159,19 @@ function Preview() {
                         status={status}
                         initialTab={initialTab}
                         t={key => words[key] || key}
+                        lang={lang}
+                        warnLimit={warnLimit.snapshot ? warnLimit : null}
+                        onWarnLimitDraft={draft =>
+                            setWarnLimit(old => ({
+                                ...old,
+                                draft,
+                                draftBase: draft === null ? null : old.draft === null ? storedLimit(old.snapshot) : old.draftBase,
+                            }))
+                        }
+                        onWarnLimitRefresh={() => void monitor.refresh()}
                     />
                 </Box>
-                <SaveBarStandIn offset={barOffset} />
+                <SaveBarStandIn offset={barOffset} lang={lang} />
             </Box>
         </ThemeProvider>
     );
