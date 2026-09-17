@@ -1,8 +1,7 @@
 ![Logo](admin/digitalstrom.png)
 # ioBroker.digitalstrom
 
-[![NPM version](http://img.shields.io/npm/v/iobroker.digitalstrom.svg)](https://www.npmjs.com/package/iobroker.digitalstrom)
-[![Downloads](https://img.shields.io/npm/dm/iobroker.digitalstrom.svg)](https://www.npmjs.com/package/iobroker.digitalstrom)
+[![GitHub release](https://img.shields.io/github/v/release/mrandreschmitz/ioBroker.digitalstrom)](https://github.com/mrandreschmitz/ioBroker.digitalstrom/releases)
 ![Test and Release](https://github.com/mrandreschmitz/ioBroker.digitalstrom/workflows/Test%20and%20Release/badge.svg)
 
 **Deutsche Version: [README_de.md](README_de.md)**
@@ -23,11 +22,14 @@ Support for digitalSTROM devices via DSS
 
 ## Installation
 
-Please install the adapter via Admin UI as usual.
+This fork is installed directly from GitHub. The digitalstrom adapter in the normal adapter list of
+Admin is the original adapter, not this fork.
 
-As soon as the adapter is officially released he will be in the repo and simply selectable.
+In Admin, use the "Custom Install" option with the URL https://github.com/mrandreschmitz/ioBroker.digitalstrom,
+or run `iobroker url https://github.com/mrandreschmitz/ioBroker.digitalstrom` on the command line.
 
-During test phase, or for testing of newer versions (see relevant forum threads) you can also install the adapter directly from GitHub using https://github.com/mrandreschmitz/ioBroker.digitalstrom as URL. Please use the Admin "Custom Install" option for this.
+Requirements: Node.js 22 or newer, js-controller 6.0.11 or newer and Admin 7.6.17 or newer. The
+object warning limit on the settings tab needs js-controller 7.1.0 or newer.
 
 ## Two interfaces, one team
 
@@ -65,13 +67,14 @@ in the last 10 minutes:
 
 The connection tab walks through the setup: the server address (entered once - it serves both
 interfaces), the app token as the base access (created directly from the dialog with your dSS
-credentials, which are not stored), and a switch for the recommended acceleration. **The app token
+credentials, which are not stored - the instance has to be running for this), and a switch for the
+recommended acceleration. **The app token
 opens both interfaces**, so the Smart Home API needs no second credential - a separate API key
 stays available as an option behind a link:
 
 ![Connection tab of the configuration dialog](docs/admin-connection.png)
 
-The polling interval and the behaviour of the adapter sit on the settings tab:
+The polling interval, the behaviour of the adapter and the object warning limit sit on the settings tab:
 
 ![Settings tab of the configuration dialog](docs/admin-settings.png)
 
@@ -86,12 +89,46 @@ Additionally to the connection settings you can edit the following settings to y
   one status request all device outputs. Needs a dSS with firmware 1.19 or newer - and nothing
   else: the app token opens this interface as well. Safe to enable: whenever the Smart Home API
   does not answer, the classic path takes over automatically and the adapter keeps running
-  unchanged.
-* **Data Polling Interval**: This is the interval the "Energy Meter" data are requested from your DSM devices. Default 100s, minimum 60s. The digitalSTROM rules 8 and 9 allow at most one cyclic read per minute and circuit. One cycle reads two values per circuit (`getConsumption` and `getEnergyMeterValue`) and the timer for the next cycle only starts once they are answered, so a cycle takes about 20s longer than the configured interval - measured against a real DSS: 60s results in ~1.5 requests per minute and circuit, 100s in exactly 1.0. That is why 100s is the default. Lower values stay possible from 60s on, but they exceed the guideline. Set 0 to disable polling of the energy meter data completely. Invalid values fall back to the default.
-* **Use Scene Preset Values**: The Digitalstrom system is not really designed to have the real output values of the devices available all the time and works most with Scenes. For Light and Shader/Blinds some output values are defined for many of the available Scenes. The adapter knows them and when this setting is active the adapter will try to lookup these values when a scene gets triggered and set those values to the states directly. The real values are requested with a delay. This method might deliver wrong values when local priorities are set/used!
-* **Request Device Output values actively**: The adapter initializes all device output values on start and also after scenes that are effective for a device. There are delay but in fact all those messages will go over the Digitalstrom bus. If this is problematic for you you can try to deactivate this feature. This option only controls **reading** output values from the DSS - writing (e.g. setting a blind position or angle, or a dimmer value) always works, independent of this setting.
+  unchanged. The switch is off for a new instance - switch it on in step 3 of the connection tab.
+* **Data Polling Interval**: How often, in seconds, the power and energy values of your circuits (dSMs) are read. Default 100s, minimum 60s: a value between 0 and 60 is raised to 60s, 0 switches polling of the meter values off completely, and a value that is not a number falls back to the default. Why 100s: the digitalSTROM rules 8 and 9 allow at most one cyclic read per minute and circuit. On the classic interface one cycle reads two values per circuit (`getConsumption` and `getEnergyMeterValue`), and the next cycle only starts once they are answered, so a cycle takes about 20s longer than the configured interval - measured against a real DSS: 60s results in ~1.5 requests per minute and circuit, 100s in exactly 1.0. Lower values stay possible from 60s on, but they exceed the guideline. With the Smart Home API switched on, one single request per cycle reads the values of all circuits.
+* **Use Scene Preset Values**: digitalSTROM works mainly with scenes, and for lights and blinds many scenes have a known output value. When this option is on and a scene is called, the adapter writes that preset value to the output states right away; the real values are read shortly afterwards (as long as **Actively request Device Output values** is on). With the Smart Home API switched on, blinds do not use the preset: as long as the output values are requested, their real position follows the movement instead. A preset can differ from the real value, for example when a local priority is set on a device.
+* **Actively request Device Output values**: The adapter reads the output values of all devices at start and again after scenes that affect a device. With the Smart Home API switched on this is one bundled status request; without it the values are read individually through the classic interface, and these requests go over the digitalSTROM bus. If that is a problem in your installation, switch the option off - the output states are then no longer read from the DSS. This option only controls **reading** output values from the DSS - writing (e.g. setting a blind position or angle, or a dimmer value) always works, independent of this setting.
 * **Delete unknown objects on startup**: When enabled, all ioBroker objects that are not part of the current DSS structure are deleted on adapter startup. Warning: Objects of devices that are just temporarily unreachable (e.g. a powered-off circuit) are deleted too - including their custom settings like history/InfluxDB configurations! Because of that this option is disabled by default; orphaned objects are then only listed in the log.
 * **Validate TLS certificate of the DSS**: By default the certificate of the DSS is not validated because the DSS uses a self-signed certificate. Only enable this if your DSS has a valid certificate. See the security note below.
+
+After you have saved the settings with an app token, the adapter restarts automatically. It reads
+the structure of your installation (floors, rooms, groups, circuits and devices) and creates the
+ioBroker objects for it. Depending on the size of the installation and the performance of your
+system this takes a while - several thousand objects are quickly reached, so please give the adapter
+time. It already listens to the dSS events while it builds the objects (see the behaviour notes).
+
+As soon as the status light of the instance is green and the log shows "Subscribed to states ...",
+everything is ready and you can e.g.:
+
+* call or undo scenes for the apartment, rooms, groups or devices
+* read states and sensor values; for rooms you can also push sensor values
+* see the values of binary inputs, sensors, buttons and outputs
+
+### Object warning limit
+
+ioBroker (js-controller 7.1.0 or newer) warns when an instance has **more objects than its object warning
+limit**. A digitalSTROM installation easily has several thousand objects, so this adapter suggests a limit of
+10000. Instances that existed before often still have 5000 - with more objects than that, ioBroker warns at
+every start although nothing is wrong.
+
+The card **Object warning limit** on the settings tab shows the limit that is set, the adapter default and the
+state. To change it, enter a whole number such as `10000` and press **Save**:
+
+![Changing the object warning limit](docs/admin-warnlimit-save.png)
+
+Good to know:
+
+* The limit only controls the warning. It does not create, delete or hide objects, and it makes neither
+  digitalSTROM nor ioBroker slower or faster.
+* The new limit applies from the **next start** of the instance. Saving the limit alone does not restart it.
+* A warning that is already shown is not taken back automatically - acknowledge it in Admin under **Hosts**.
+* A good value is a little above the real number of objects, which the warning in the log names
+  ("This instance has ... objects").
 
 ### Security note about the TLS certificate check
 
@@ -102,30 +139,19 @@ What that means: the connection to the DSS is encrypted, but the adapter does no
 Recommendations, in this order:
 
 1. Keep the DSS and ioBroker in a trusted, separated network segment and do not route the DSS connection over the internet or an untrusted WLAN.
-2. If your DSS has a certificate from your own CA or from a public CA (e.g. behind a reverse proxy with a valid certificate), enter that host name and enable the option.
+2. If your DSS has a certificate from a public CA (e.g. behind a reverse proxy with a valid certificate), or from your own CA that Node.js on the ioBroker host already trusts (for example through the environment variable `NODE_EXTRA_CA_CERTS`), enter the host name the certificate was issued for and enable the option.
 3. Migration path if you want validation with the original self-signed certificate: this needs the certificate itself. The adapter currently supports neither a custom CA file nor a certificate fingerprint - both would be possible technically (`ca` / `checkServerIdentity` of the Node.js TLS agent) and are noted as a possible future enhancement. Until then option 1 or 2 is the way to go.
 
-The App-Token is stored encrypted (`encryptedNative`), is not passed on to other adapters (`protectedNative`), is not written to the log and is shown masked in the admin dialog.
-
-After providing an App token and saving the settings the adapter will restart automatically.
-
-When data are correct the adapter read out the apartment and devices structure and create them as ioBroker Objects. This can take some time (depending on the number of devices and floors/zones/groups and the performance of your system several seconds). Please be patient. And I really mean it that way ... Several thousand objects are easy to reach here! Give the adapter time please!
-
-After this the adapter subscribes to several DSS Events to get notified about actions in the system.
-
-The adapter status light will get green and you will see "Subscribed to states ..." as info log. After this everything is ready and you can e.g.:
-* set/undo scenes for apartment, zones, groups or devices
-* read state and sensor values; for zones it is also possible to push sensor values
-* see the values for Binary inputs, Sensors, Buttons and Outputs
+The App-Token is stored encrypted (`encryptedNative`), is not passed on to other adapters (`protectedNative`), is not written to the log and is shown masked in the admin dialog. The same applies to the optional Smart Home API key.
 
 ## State and Object structure
 
 The adapter provides two data structures. The Apartment structure with Floors, Zones (Rooms) and Groups and additionally the structure of Circuits/dSMs and the connected devices with their detail data.
 
 In the structures several "types" of data are included:
-* Scenes: Scenes are implemented as switches. Setting the value tro "true" will send a "callScene" command for this scene. A value of "false" will send an "undoScene" command for this scene - it is up the the DSS server to decide if "undo" is a valid command! When a callScene or undoScene is triggered as event from the DSS server the relevant scene is set to "true" or "false" with ack=true. Scenes that command a movement instead of selecting a position (Stop, Increment, Decrement, Area Stepping Continue, Impulse) fall back to "false" on their own, see the behaviour notes
-* States: States from the system and user defined states via the addon are shown and are read only
-* Sensor values are updated when triggered by an event and can partially also bet changed - changes are send a "pushSensorValue" to the server and it is up to the server if the value is accepted! This is mainly relevant for Temperature or Humidity values
+* Scenes: Scenes are implemented as switches. Setting the value to "true" will send a "callScene" command for this scene. A value of "false" will send an "undoScene" command for this scene - it is up to the DSS server to decide if "undo" is a valid command! When a callScene or undoScene is triggered as event from the DSS server the relevant scene is set to "true" or "false" with ack=true. Scenes that command a movement instead of selecting a position (Stop, Increment, Decrement, Area Stepping Continue, Impulse) fall back to "false" on their own, see the behaviour notes
+* States: the states of the system are shown and are read only. The user defined states of the apartment (`apartment.userStates`) can also be set - the new value is forwarded to the DSS
+* Sensor values are updated when triggered by an event. Most sensor values of a zone can also be written: the new value is sent to the server as "pushSensorValue", and it is up to the server whether it accepts the value! This is mainly relevant for Temperature or Humidity values
 
 ### Apartment object and states
 ![Apartment Objects](img/dss-apartment.png)
@@ -177,6 +203,9 @@ The devices are structured with "circuit/dSM"."deviceID" and the subsctructure i
   welcome.
 * Room temperature control is implemented for the rooms the DSS really regulates: the controller mode and the controller state are read, the operation mode follows the scenes of group 48 and can be set, and the set point of every operation mode is read and writable. Rooms without an active controller deliberately get no such objects.
 * Ventilation is covered by the group scenes, the apartment ventilation status and the two boolean output channels (swing mode, auto intensity). Ventilation devices have no dedicated functionality beyond that, because no such hardware was available to test against. Logs and reports are welcome.
+* If the configuration dialog shows up only as a narrow strip of about 150 px under the title, update
+  Admin: Admin 8.0.11 displayed adapter dialogs like this one that way, Admin 8.0.15 shows them
+  normally again.
 
 ## How to report issues and feature requests
 
@@ -197,6 +226,16 @@ It is published under the same MIT license; the original copyright notice is kep
 [LICENSE](LICENSE).
 
 ## Changelog
+
+### 2.4.23 (2026-09-17)
+
+* **The object warning limit can be seen and changed on the settings tab.** Instances that were created before
+  this adapter suggested 10000 often still have 5000, and ioBroker then warns at every start. The card shows
+  the limit that is really set, the adapter default and the state, explains what the limit does and what it
+  does not do, and saves a new value with the normal Save button - without restarting the instance. The new
+  limit applies from the next start
+* **Closing the dialog with unsaved changes asks only once.** Before, the dialog and Admin both asked
+  "discard?" one after the other
 
 ### 2.4.22 (2026-09-01)
 
@@ -808,6 +847,7 @@ existed in 2.4.2 and earlier - they fail silently, which is why they never showe
 MIT License
 
 Copyright (c) 2020-2021 Apollon77 <iobroker@fischer-ka.de>
+Copyright (c) 2026 André Schmitz (fork, maintenance and modifications)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

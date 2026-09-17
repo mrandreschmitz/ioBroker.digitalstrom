@@ -1,8 +1,7 @@
 ![Logo](admin/digitalstrom.png)
 # ioBroker.digitalstrom
 
-[![NPM version](http://img.shields.io/npm/v/iobroker.digitalstrom.svg)](https://www.npmjs.com/package/iobroker.digitalstrom)
-[![Downloads](https://img.shields.io/npm/dm/iobroker.digitalstrom.svg)](https://www.npmjs.com/package/iobroker.digitalstrom)
+[![GitHub release](https://img.shields.io/github/v/release/mrandreschmitz/ioBroker.digitalstrom)](https://github.com/mrandreschmitz/ioBroker.digitalstrom/releases)
 ![Test and Release](https://github.com/mrandreschmitz/ioBroker.digitalstrom/workflows/Test%20and%20Release/badge.svg)
 
 **English version: [README.md](README.md)**
@@ -23,11 +22,15 @@ Anbindung von digitalSTROM-Geräten über den DSS (digitalSTROM-Server)
 
 ## Installation
 
-Die Installation erfolgt wie gewohnt über die Admin-Oberfläche.
+Dieser Fork wird direkt von GitHub installiert. Der digitalstrom-Adapter in der normalen
+Adapterliste von Admin ist der ursprüngliche Adapter, nicht dieser Fork.
 
-Zum Testen neuerer Versionen kann der Adapter auch direkt von GitHub installiert werden. Verwende dazu
-in Admin die Option „Beliebig / Custom Install" mit der URL
-https://github.com/mrandreschmitz/ioBroker.digitalstrom.
+Verwende in Admin die Option „Beliebig / Custom Install" mit der URL
+https://github.com/mrandreschmitz/ioBroker.digitalstrom oder gib auf der Kommandozeile
+`iobroker url https://github.com/mrandreschmitz/ioBroker.digitalstrom` ein.
+
+Voraussetzungen: Node.js 22 oder neuer, js-controller 6.0.11 oder neuer und Admin 7.6.17 oder neuer. Die
+Objekt-Warngrenze im Reiter „Einstellungen" braucht js-controller 7.1.0 oder neuer.
 
 ## Zwei Schnittstellen, ein Team
 
@@ -65,13 +68,13 @@ ihnen in den letzten 10 Minuten wirklich getan hat:
 
 Der Verbindungs-Tab führt durch die Einrichtung: die Serveradresse (einmal eingetragen — sie
 bedient beide Schnittstellen), das App-Token als Basiszugang (direkt aus dem Dialog mit deinen
-dSS-Anmeldedaten erstellt, die nicht gespeichert werden) und ein Schalter für die empfohlene
-Beschleunigung. **Das App-Token öffnet beide Schnittstellen**, die Smart Home API braucht also
+dSS-Anmeldedaten erstellt, die nicht gespeichert werden – die Instanz muss dafür laufen) und ein
+Schalter für die empfohlene Beschleunigung. **Das App-Token öffnet beide Schnittstellen**, die Smart Home API braucht also
 keinen zweiten Zugang — ein eigener API-Schlüssel bleibt hinter einem Link als Option verfügbar:
 
 ![Reiter „Verbindung" des Konfigurationsdialogs](docs/admin-connection-de.png)
 
-Abfrageintervall und Verhalten des Adapters liegen im Einstellungen-Tab:
+Abfrageintervall, Verhalten des Adapters und die Objekt-Warngrenze liegen im Einstellungen-Tab:
 
 ![Reiter „Einstellungen" des Konfigurationsdialogs](docs/admin-settings-de.png)
 
@@ -86,7 +89,8 @@ Zusätzlich zu den Verbindungsdaten stehen folgende Einstellungen zur Verfügung
   ein Status-Request alle Geräteausgänge. Benötigt einen dSS mit Firmware 1.19 oder neuer — und
   sonst nichts: Das App-Token öffnet auch diese Schnittstelle. Gefahrlos aktivierbar: Wann immer
   die Smart Home API nicht antwortet, übernimmt automatisch der klassische Weg und der Adapter
-  läuft unverändert weiter.
+  läuft unverändert weiter. Bei einer neuen Instanz ist der Schalter aus – du findest ihn in Schritt 3
+  des Verbindungs-Tabs.
 
 * **Datenabfrageintervall**: Intervall, in dem die Zählerdaten („Energy Meter") von den dSM-Geräten
   abgefragt werden. Standard 100 s, Minimum 60 s. Die digitalSTROM-Regeln 8 und 9 erlauben höchstens
@@ -95,16 +99,21 @@ Zusätzlich zu den Verbindungsdaten stehen folgende Einstellungen zur Verfügung
   wenn beide beantwortet sind — ein Zyklus dauert dadurch rund 20 s länger als das eingestellte
   Intervall. An einer echten Anlage gemessen: 60 s ergeben ~1,5 Anfragen pro Minute und Klemme,
   100 s genau 1,0. Deshalb ist 100 s der Standard. Kleinere Werte bleiben ab 60 s möglich,
-  überschreiten die Vorgabe aber. Mit `0` wird die Abfrage vollständig deaktiviert. Ungültige Werte
-  fallen auf den Standard zurück.
-* **Szenen-Preset-Werte verwenden**: Das digitalSTROM-System ist nicht darauf ausgelegt, die echten
-  Ausgangswerte der Geräte ständig bereitzuhalten, sondern arbeitet überwiegend mit Szenen. Für Licht
-  und Rollladen/Jalousie sind für viele Szenen Ausgangswerte definiert. Der Adapter kennt diese Werte
-  und schreibt sie bei einem Szenenaufruf sofort in die States; die echten Werte werden verzögert
-  nachgelesen. Bei gesetzten lokalen Prioritäten kann diese Methode falsche Werte liefern.
-* **Geräte-Ausgangswerte aktiv abfragen**: Der Adapter liest die Ausgangswerte aller Geräte beim Start
-  und nach Szenen, die ein Gerät betreffen. Diese Abfragen laufen über den digitalSTROM-Bus. Falls das
-  in deiner Installation stört, kannst du die Funktion abschalten. Die Option steuert **ausschließlich
+  überschreiten die Vorgabe aber; einen Wert zwischen 1 und 59 s hebt der Adapter auf 60 s an. Mit
+  `0` wird die Abfrage vollständig deaktiviert. Ein leeres Feld oder ein Eintrag, der keine Zahl ist,
+  fällt auf den Standard zurück. Mit eingeschalteter Smart Home API liest ein einziger Request pro
+  Zyklus die Werte aller Klemmen.
+* **Szenen-Voreinstellungswerte verwenden**: digitalSTROM arbeitet vor allem mit Szenen, und für Licht
+  und Rollläden haben viele Szenen einen bekannten Ausgangswert. Ist die Option an und wird eine Szene
+  aufgerufen, schreibt der Adapter diesen Voreinstellungswert sofort in die Ausgangs-States; die echten
+  Werte werden kurz danach gelesen (solange **Ausgabewerte der Geräte aktiv abfragen** an ist). Mit
+  eingeschalteter Smart Home API verwenden Rollläden keinen Voreinstellungswert: Solange die
+  Ausgangswerte abgefragt werden, folgt ihre echte Position der Fahrt. Ein Voreinstellungswert kann vom
+  echten Wert abweichen, etwa wenn an einem Gerät eine lokale Priorität gesetzt ist.
+* **Ausgabewerte der Geräte aktiv abfragen**: Der Adapter liest die Ausgangswerte aller Geräte beim Start
+  und nach Szenen, die ein Gerät betreffen. Ohne Smart Home API laufen diese Abfragen einzeln über
+  den digitalSTROM-Bus, mit ihr kommen die Werte gebündelt in einem Status-Request. Falls die Abfragen
+  in deiner Installation stören, kannst du die Funktion abschalten. Die Option steuert **ausschließlich
   das Lesen** von Ausgangswerten. Das **Schreiben** (Jalousieposition, Lamellenwinkel, Dimmwert)
   funktioniert unabhängig davon immer.
 * **Unbekannte Objekte beim Start löschen**: Ist die Option aktiv, werden beim Adapterstart alle
@@ -114,7 +123,41 @@ Zusätzlich zu den Verbindungsdaten stehen folgende Einstellungen zur Verfügung
   Option standardmäßig aus; verwaiste Objekte werden dann nur im Log aufgelistet.
 * **TLS-Zertifikat des DSS prüfen**: Standardmäßig wird das Zertifikat des DSS nicht geprüft, weil der
   DSS ein selbstsigniertes Zertifikat verwendet. Aktiviere die Option nur, wenn dein DSS ein gültiges
-  Zertifikat besitzt. Siehe den folgenden Sicherheitshinweis.
+  Zertifikat besitzt. Siehe den Sicherheitshinweis weiter unten.
+
+Nachdem du die Einstellungen mit einem App-Token gespeichert hast, startet der Adapter automatisch neu.
+Er liest die Struktur deiner Anlage aus (Etagen, Räume, Gruppen, Stromkreise und Geräte) und legt dafür
+die ioBroker-Objekte an. Je nach Größe der Anlage und Leistung deines Systems dauert das eine Weile –
+mehrere tausend Objekte sind schnell erreicht, bitte hab Geduld. Auf die Ereignisse des dSS hört der
+Adapter dabei schon (siehe „Hinweise zum Verhalten").
+
+Sobald die Statusanzeige der Instanz grün ist und im Log „Subscribed to states …" erscheint, ist alles
+bereit und du kannst zum Beispiel:
+
+* Szenen für Wohnung, Räume, Gruppen oder einzelne Geräte aufrufen und zurücknehmen
+* Status- und Sensorwerte lesen; bei Räumen können Sensorwerte auch gesetzt werden
+* Werte von Binäreingängen, Sensoren, Tastern und Ausgängen sehen
+
+### Objekt-Warngrenze
+
+ioBroker (ab js-controller 7.1.0) warnt, wenn eine Instanz **mehr Objekte hat als ihre Objekt-Warngrenze**.
+Eine digitalSTROM-Anlage kommt schnell auf mehrere Tausend Objekte, deshalb schlägt dieser Adapter 10000 vor.
+Ältere Instanzen stehen oft noch auf 5000 – bei mehr Objekten warnt ioBroker dann bei jedem Start, obwohl
+alles in Ordnung ist.
+
+Die Karte **Objekt-Warngrenze** im Reiter „Einstellungen" zeigt die eingestellte Grenze, den Adapter-Standard
+und den Datenpunkt. Zum Ändern eine ganze Zahl wie `10000` eintragen und **Speichern** klicken:
+
+![Objekt-Warngrenze ändern](docs/admin-warnlimit-save-de.png)
+
+Gut zu wissen:
+
+* Die Grenze steuert nur die Warnung. Sie legt keine Objekte an, löscht oder versteckt keine und macht
+  digitalSTROM und ioBroker weder langsamer noch schneller.
+* Die neue Grenze gilt ab dem **nächsten Start** der Instanz. Das Speichern der Grenze allein startet sie nicht neu.
+* Eine bereits angezeigte Warnung verschwindet nicht von selbst – bestätige sie in Admin unter **Hosts**.
+* Sinnvoll ist ein Wert etwas über der tatsächlichen Objektanzahl; die nennt die Warnung im Log
+  („This instance has … objects").
 
 ### Sicherheitshinweis zur Zertifikatsprüfung
 
@@ -132,32 +175,19 @@ Empfehlungen, in dieser Reihenfolge:
 
 1. Betreibe DSS und ioBroker in einem vertrauenswürdigen, abgetrennten Netzsegment und route die
    Verbindung zum DSS nicht über das Internet oder ein fremdes WLAN.
-2. Besitzt dein DSS ein Zertifikat aus einer eigenen CA oder von einer öffentlichen CA (z. B. hinter
-   einem Reverse Proxy mit gültigem Zertifikat), trage diesen Hostnamen ein und aktiviere die Option.
+2. Besitzt dein DSS ein Zertifikat von einer öffentlichen CA (z. B. hinter einem Reverse Proxy mit
+   gültigem Zertifikat) oder aus einer eigenen CA, der Node.js auf dem ioBroker-Host bereits vertraut
+   (etwa über die Umgebungsvariable `NODE_EXTRA_CA_CERTS`), trage den Hostnamen ein, für den das
+   Zertifikat ausgestellt ist, und aktiviere die Option.
 3. Migrationspfad für eine Prüfung mit dem originalen, selbstsignierten Zertifikat: Dafür wird das
    Zertifikat selbst benötigt. Der Adapter unterstützt derzeit weder eine eigene CA-Datei noch einen
    Zertifikats-Fingerprint. Technisch wäre beides möglich (`ca` bzw. `checkServerIdentity` des
    Node.js-TLS-Agents) und ist als mögliche Erweiterung vorgemerkt. Bis dahin sind Weg 1 oder 2 die
    richtige Wahl.
 
-Der App-Token wird verschlüsselt gespeichert (`encryptedNative`), nicht an andere Adapter
-weitergegeben (`protectedNative`), nicht ins Log geschrieben und im Admin-Dialog maskiert dargestellt.
-
-Nach dem Eintragen des App-Tokens und dem Speichern startet der Adapter automatisch neu.
-
-Stimmen die Daten, liest der Adapter die Wohnungs- und Gerätestruktur aus und legt sie als
-ioBroker-Objekte an. Das kann je nach Anzahl der Geräte, Etagen, Räume und Gruppen sowie der Leistung
-deines Systems einige Zeit dauern. Bitte hab Geduld — und das ist ernst gemeint: Mehrere tausend
-Objekte sind hier schnell erreicht.
-
-Danach abonniert der Adapter mehrere DSS-Events, um über Aktionen im System benachrichtigt zu werden.
-
-Die Statusanzeige des Adapters wird grün und im Log erscheint „Subscribed to states …". Ab diesem
-Moment ist alles bereit und du kannst zum Beispiel:
-
-* Szenen für Wohnung, Räume, Gruppen oder einzelne Geräte aufrufen und zurücknehmen
-* Status- und Sensorwerte lesen; bei Räumen können Sensorwerte auch gesetzt werden
-* Werte von Binäreingängen, Sensoren, Tastern und Ausgängen sehen
+Der App-Token und ein eigener API-Schlüssel werden verschlüsselt gespeichert (`encryptedNative`),
+nicht an andere Adapter weitergegeben (`protectedNative`), nicht ins Log geschrieben und im
+Admin-Dialog maskiert dargestellt.
 
 ## Objekt- und State-Struktur
 
@@ -173,9 +203,11 @@ In den Strukturen kommen mehrere Datentypen vor:
   Szene mit `ack=true` auf `true` bzw. `false` gesetzt. Szenen, die eine Bewegung befehlen statt
   eine Position zu wählen (Stopp, Increment, Decrement, Area Stepping Continue, Impuls), fallen
   von selbst wieder auf `false` zurück, siehe die Hinweise zum Verhalten.
-* **States** aus dem System und benutzerdefinierte States über das Addon werden angezeigt und sind
-  schreibgeschützt.
-* **Sensorwerte** werden über Events aktualisiert und können teilweise auch geschrieben werden.
+* **States** aus dem System werden angezeigt und sind schreibgeschützt. Die benutzerdefinierten States
+  der Wohnung (`apartment.userStates`) lassen sich auch setzen – der neue Wert wird an den DSS
+  weitergegeben.
+* **Sensorwerte** werden über Events aktualisiert. Die meisten Sensorwerte eines Raums lassen sich auch
+  schreiben.
   Änderungen werden als `pushSensorValue` an den Server geschickt; ob der Wert akzeptiert wird,
   entscheidet der Server. Relevant ist das vor allem für Temperatur- und Feuchtewerte.
 
@@ -278,6 +310,9 @@ Die Geräte sind als „Klemme/dSM"."Geräte-ID" strukturiert, darunter jeweils:
   Ausgangskanäle (Schwenkmodus, automatische Intensität) abgedeckt. Darüber hinaus haben
   Lüftungsgeräte keine eigene Funktionalität, da keine passende Hardware zum Testen vorlag. Logs und
   Rückmeldungen sind willkommen.
+* Erscheint der Konfigurationsdialog nur als schmaler Streifen von etwa 150 px unter dem Titel,
+  aktualisiere Admin: Admin 8.0.11 hat Adapter-Dialoge wie diesen so angezeigt, ab Admin 8.0.15
+  erscheinen sie wieder normal.
 
 ## Fehler melden und Funktionswünsche
 
@@ -302,6 +337,16 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
+
+### 2.4.23 (2026-09-17)
+
+* **Die Objekt-Warngrenze lässt sich im Reiter „Einstellungen" ansehen und ändern.** Instanzen, die entstanden
+  sind, bevor dieser Adapter 10000 vorgab, stehen oft noch auf 5000 – dann warnt ioBroker bei jedem Start. Die
+  Karte zeigt die wirklich eingestellte Grenze, den Adapter-Standard und den Datenpunkt, erklärt, was die
+  Grenze bewirkt und was nicht, und speichert einen neuen Wert mit dem normalen „Speichern" – ohne die Instanz
+  neu zu starten. Die neue Grenze gilt ab dem nächsten Start
+* **Schließen mit ungespeicherten Änderungen fragt nur noch einmal nach.** Bisher fragten erst der Dialog und
+  danach Admin „Verwerfen?"
 
 ### 2.4.22 (2026-09-01)
 
