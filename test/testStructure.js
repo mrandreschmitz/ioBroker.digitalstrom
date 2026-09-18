@@ -90,6 +90,77 @@ describe('DSSStructure', () => {
             done();
         });
     });
+    // Regression from a real installation: at 23:13 the DSS answered with temperature,
+    // humidity and the two sun angles, but without brightness - the outdoor brightness
+    // sensor stops sending in the dark. The state vanished on that restart.
+    describe('outdoor sensors', () => {
+        function createWithOutdoor(outdoor, existingStates) {
+            const struct = createStructure({
+                adapter: { log: silentLogger, config: {}, objectHelper: { existingStates: existingStates || {} } },
+            });
+            struct.sensorValues = outdoor === null ? {} : { outdoor };
+            struct.createOutdoorSensors();
+            return struct;
+        }
+
+        it('keeps a known state when the DSS reports no value for it', () => {
+            const struct = createWithOutdoor(
+                { temperature: { value: 13.275, time: '2026-09-17T21:00:30.962Z' } },
+                { 'apartment.sensors.outdoor.brightness': { common: {} } },
+            );
+            expect(struct.dssObjects, 'the known sensor keeps its object').to.have.property(
+                'apartment.sensors.outdoor.brightness',
+            );
+            expect(
+                struct.initialObjectValues['apartment.sensors.outdoor.brightness'],
+                'and no value is written over the old one',
+            ).to.equal(undefined);
+            expect(struct.initialObjectValues['apartment.sensors.outdoor.temperature'].val).to.equal(13.275);
+        });
+
+        it('creates nothing for a sensor ioBroker does not know either', () => {
+            const struct = createWithOutdoor({ temperature: { value: 13.275, time: 0 } }, {});
+            expect(struct.dssObjects).to.not.have.property('apartment.sensors.outdoor.brightness');
+            expect(struct.dssObjects).to.have.property('apartment.sensors.outdoor.temperature');
+        });
+
+        it('keeps a known state even when the answer carries no outdoor block at all', () => {
+            const struct = createWithOutdoor(null, { 'apartment.sensors.outdoor.brightness': { common: {} } });
+            expect(struct.dssObjects).to.have.property('apartment.sensors.outdoor');
+            expect(struct.dssObjects).to.have.property('apartment.sensors.outdoor.brightness');
+        });
+
+        it('still reports a sensor name the adapter does not know', () => {
+            const warnings = [];
+            const struct = createStructure({
+                adapter: {
+                    log: { ...silentLogger, warn: msg => warnings.push(msg) },
+                    config: {},
+                    objectHelper: { existingStates: {} },
+                },
+            });
+            struct.sensorValues = { outdoor: { nonsense: { value: 1, time: 0 } } };
+            struct.createOutdoorSensors();
+            expect(warnings.join(' ')).to.contain('nonsense');
+        });
+    });
+
+    // The DSS answers this state with "hot water", not with active/inactive. As a boolean
+    // every word but "inactive" collapsed to true and the operating mode was lost.
+    describe('apartment state heating_water_system', () => {
+        it('carries the wording of the DSS instead of a flag', () => {
+            const map = dssConstants.apartmentStateRoleMap.heating_water_system;
+            expect(map.type).to.equal('string');
+            expect(map.native, 'no flag mapping that could not match').to.equal(undefined);
+        });
+
+        it('passes the DSS wording through as the initial value', () => {
+            expect(
+                DSSStructure.initialStateValue({ name: 'heating_water_system', value: 1, state: 'hot water' }),
+            ).to.equal('hot water');
+        });
+    });
+
     describe('setStateSafe', () => {
         function writingStructure(written) {
             return createStructure({

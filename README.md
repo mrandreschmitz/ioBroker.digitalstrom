@@ -227,6 +227,15 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ## Changelog
 
+### 2.4.25 (2026-09-17)
+
+* **An outdoor sensor no longer disappears when the dSS reports no value for it.** The dSS leaves a value out of
+  its answer once it has gone stale - an outdoor brightness sensor stops sending in the dark - and the state was
+  then not created at all. A sensor that ioBroker already knows keeps its object and its last value now
+* **The apartment state `heating_water_system` keeps the wording of the dSS.** A real installation answers
+  "hot water", and as a boolean every word but "inactive" collapsed to true, so the operating mode was lost. An
+  apartment state without an active/inactive pair is no longer written to the dSS either
+
 ### 2.4.24 (2026-09-17)
 
 * **Commands that follow each other quickly keep their order.** A waiting command was merged into an identical

@@ -338,6 +338,16 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
 
+### 2.4.25 (2026-09-17)
+
+* **Ein Außensensor verschwindet nicht mehr, wenn der dSS keinen Wert für ihn meldet.** Der dSS lässt einen
+  veraltet gewordenen Wert aus seiner Antwort fallen – ein Außenhelligkeitssensor sendet im Dunkeln nicht mehr –,
+  und das Objekt wurde dann gar nicht angelegt. Ein Sensor, den ioBroker schon kennt, behält jetzt sein Objekt
+  und seinen letzten Wert
+* **Der Apartment-Zustand `heating_water_system` behält den Wortlaut des dSS.** Eine echte Anlage antwortet
+  „hot water“, und als Boolean wurde jedes Wort außer „inactive“ zu wahr – die Betriebsart ging verloren. Ein
+  Apartment-Zustand ohne active/inactive-Paar wird außerdem nicht mehr an den dSS geschrieben
+
 ### 2.4.24 (2026-09-17)
 
 * **Schnell aufeinanderfolgende Befehle behalten ihre Reihenfolge.** Ein wartender Befehl wurde mit einem
