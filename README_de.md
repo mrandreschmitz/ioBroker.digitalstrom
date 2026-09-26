@@ -388,6 +388,10 @@ Der vollständige Changelog inklusive der Historie von Apollon77 steht in der en
   102 Neustarts, 204 Fehlerzeilen und 101 Warnungen. Jetzt läuft er weiter und fragt alle 5 Minuten erneut. Es gibt
   einen Fehler mit dem Hinweis, was zu prüfen ist, und eine Info-Zeile mit der Dauer, sobald der dSS wieder
   antwortet. Ein anderer Fehler zwischendurch, etwa eine abgelehnte Anmeldung, wird noch einmal gemeldet
+* **Ein State des dSS, den der Adapter noch nicht kennt, wird einmal genannt.** `Unhandled State Change` für einen
+  State ohne Objekt erschien bei jeder Änderung auf Info-Ebene: Ein Raum, der seine Schwelle für passive Kühlung
+  überschritt, schrieb dieselbe Zeile viermal in fünf Stunden. Jetzt steht sie einmal pro Lauf auf Info-Ebene, mit
+  der Bitte, den Namen zu melden, und jede weitere Änderung nur noch auf debug
 
 ### 2.4.25 (2026-09-17)
 

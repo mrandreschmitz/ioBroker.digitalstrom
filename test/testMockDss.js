@@ -52,6 +52,7 @@ function createAdapterContext(host, config = {}) {
         stopped: false,
         stopCallbacks: [],
         tokenConnections: new Set(),
+        unhandledStateNames: new Set(),
         eventHandlersRegistered: false,
         /** @type {number[]} */
         restarts: [],

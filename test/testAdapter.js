@@ -53,6 +53,7 @@ function createContext(overrides = {}) {
         stopCallbacks: [],
         tokenConnections: new Set(),
         unmappedBooleanStates: new Set(),
+        unhandledStateNames: new Set(),
         momentaryReleases: new Map(),
         momentaryReleaseDelay: 500,
         eventHandlersRegistered: false,
@@ -1178,6 +1179,72 @@ describe('Adapter logic', () => {
                     properties: {},
                 });
                 expect(ctx.states['devices.m1.dev1.buttonClickType']).to.equal(-1);
+                dss.stop();
+                done();
+            });
+        });
+
+        it('names an unknown state once at info, then at debug', done => {
+            const { ctx, dss } = subscribedContext();
+            /** @type {string[]} */
+            const infos = [];
+            /** @type {string[]} */
+            const debugs = [];
+            ctx.log = {
+                ...silentLog,
+                info: msg => infos.push(String(msg)),
+                debug: msg => debugs.push(String(msg)),
+            };
+            Digitalstrom.prototype.initializeSubscriptions.call(ctx, () => {
+                const emit = (statename, state) =>
+                    dss.emit('stateChange', {
+                        name: 'stateChange',
+                        properties: { callOrigin: '9', statename, state },
+                        source: {},
+                    });
+                emit('zone.zone4.group0.type9.passiveCooling', 'active');
+                emit('zone.zone4.group0.type9.passiveCooling', 'inactive');
+                const first = infos.filter(msg => msg.includes('zone.zone4.group0.type9.passiveCooling'));
+                expect(first, 'the first change names the state').to.have.length(1);
+                expect(first[0]).to.include('Unhandled State Change');
+                // eventLog() writes every event at debug as well, so only the log line counts
+                expect(
+                    debugs.filter(msg => msg.startsWith('Unhandled State Change: zone.zone4.')),
+                    'the repeat goes to debug',
+                ).to.have.length(1);
+                emit('zone.zone2.group0.type9.passiveCooling', 'active');
+                expect(
+                    infos.filter(msg => msg.includes('zone.zone2.group0.type9.passiveCooling')),
+                    'a different name gets its own line',
+                ).to.have.length(1);
+                expect(infos.filter(msg => msg.includes('Unhandled State Change'))).to.have.length(2);
+                dss.stop();
+                done();
+            });
+        });
+
+        it('keeps helper states of addons at debug', done => {
+            const { ctx, dss } = subscribedContext();
+            /** @type {string[]} */
+            const infos = [];
+            /** @type {string[]} */
+            const debugs = [];
+            ctx.log = {
+                ...silentLog,
+                info: msg => infos.push(String(msg)),
+                debug: msg => debugs.push(String(msg)),
+            };
+            Digitalstrom.prototype.initializeSubscriptions.call(ctx, () => {
+                dss.emit('addonStateChange', {
+                    name: 'addonStateChange',
+                    properties: {
+                        statename: '9be5e52c9e465cd880b6b06494f9dcf600_open-tilded',
+                        state: 'inactive',
+                        scriptID: 'system-addon-user-defined-states-helper',
+                    },
+                });
+                expect(infos.filter(msg => msg.includes('open-tilded'))).to.deep.equal([]);
+                expect(debugs.filter(msg => msg.startsWith('Unhandled State Change: '))).to.have.length(1);
                 dss.stop();
                 done();
             });

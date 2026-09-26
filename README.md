@@ -264,6 +264,10 @@ It is published under the same MIT license; the original copyright notice is kep
   lines and 101 warnings. It now keeps running and asks again every 5 minutes. There is one error that says what to
   check, and one info line with the duration when the dSS answers again. A different error in between, for example
   a refused login, is reported once more
+* **A state of the dSS the adapter does not know yet is named once.** `Unhandled State Change` for a state without
+  an object was logged at info level every time it changed: a room crossing its passive cooling threshold wrote
+  the same line four times in five hours. It is now logged once per run at info level, with the request to report
+  the name, and every further change of it at debug level
 
 ### 2.4.25 (2026-09-17)
 

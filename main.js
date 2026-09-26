@@ -144,6 +144,10 @@ class Digitalstrom extends utils.Adapter {
         // sent. Each one is reported once per run, see coerceScalarValue().
         /** @type {Set<string>} */
         this.unmappedBooleanStates = new Set();
+        // dSS state names that have no object here. Each one is named once per run at info,
+        // see handleStateChange in registerEventHandlers().
+        /** @type {Set<string>} */
+        this.unhandledStateNames = new Set();
         // Scene states waiting to be released again, by state id - see handleScene()
         /** @type {Map<string, NodeJS.Timeout>} */
         this.momentaryReleases = new Map();
@@ -1596,15 +1600,22 @@ class Digitalstrom extends utils.Adapter {
                 this.log.info(`--INVALID ${JSON.stringify(data)}`);
                 return;
             }
-            const sourceDeviceId = dssStruct.stateMap[data.properties.statename];
+            const statename = data.properties.statename;
+            const sourceDeviceId = dssStruct.stateMap[statename];
             if (!sourceDeviceId) {
-                if (data.name === 'addonStateChange') {
-                    // Helper states of dSS addons (e.g. "<dsuid>_open-tilded" of the
-                    // window-states addon) have no ioBroker object by design - the
-                    // window state itself arrives via binary input and device state
-                    this.log.debug(`Unhandled State Change: ${data.properties.statename}`);
+                // Helper states of dSS addons (e.g. "<dsuid>_open-tilded" of the
+                // window-states addon) have no ioBroker object by design - the
+                // window state itself arrives via binary input and device state.
+                // Any other state is named once per run: the first line says what is
+                // missing, every repeat is noise. A room crossing its passive cooling
+                // threshold repeated the same line four times in five hours.
+                if (data.name === 'addonStateChange' || this.unhandledStateNames.has(statename)) {
+                    this.log.debug(`Unhandled State Change: ${statename}`);
                 } else {
-                    this.log.info(`Unhandled State Change: ${data.properties.statename}`);
+                    this.unhandledStateNames.add(statename);
+                    this.log.info(
+                        `Unhandled State Change: ${statename} - the DSS reports a state this adapter has no object for. Please report the name in a GitHub issue so it can be mapped. Further changes of it are logged at debug level.`,
+                    );
                 }
                 return;
             }
