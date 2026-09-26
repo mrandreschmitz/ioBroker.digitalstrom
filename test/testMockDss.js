@@ -180,6 +180,13 @@ describe('Integration against a local mock DSS', function () {
                 'apartment.0.5.states.passiveCooling',
             );
             expect(ctx.dssStruct.initialObjectValues['apartment.0.5.states.passiveCooling']).to.equal('active');
+            // The mock lists the climate control under two app ids, as a real dSS does
+            expect(ids, 'one object per state, not a second one per app id').to.not.include(
+                'apartment.0.5.states.passiveCooling_type9',
+            );
+            expect(ctx.dssStruct.stateMap['zone.zone5.group0.type9.passiveCooling']).to.equal(
+                'apartment.0.5.states.passiveCooling',
+            );
             expect(ctx.dssStruct.stateMap['dev1.brightness']).to.equal('devices.meter1.dev1.brightness');
             expect(ctx.dssStruct.stateMap['5.1.scenes.5']).to.equal('apartment.0.5.1.scenes.Preset1');
             // Regression guard for the scene 22/25 collision

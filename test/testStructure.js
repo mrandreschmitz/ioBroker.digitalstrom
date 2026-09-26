@@ -2360,6 +2360,24 @@ describe('DSSStructure', () => {
             expect(DSSStructure.collectAddonSensorStates(null)).to.deep.equal([]);
         });
 
+        it('collectAddonSensorStates keeps a state the dSS lists under two app ids once', () => {
+            // Measured on a dSS20 1.19.13: the climate control appears as
+            // system-addon-heating-controller AND as heating-controller, with the same states
+            const entry = {
+                name: 'zone.zone4.group0.type9.passiveCooling',
+                value: 1,
+                state: 'active',
+                callOrigin: 9,
+            };
+            const collected = DSSStructure.collectAddonSensorStates({
+                'system-addon-heating-controller': { [entry.name]: { ...entry } },
+                'heating-controller': { [entry.name]: { ...entry } },
+            });
+            expect(collected.map(state => `${state.addon} ${state.name}`)).to.deep.equal([
+                'system-addon-heating-controller zone.zone4.group0.type9.passiveCooling',
+            ]);
+        });
+
         it('reads them with a single query2 of /usr/addon-states', async () => {
             const requests = [];
             const struct = createStructure({

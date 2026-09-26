@@ -153,6 +153,16 @@ function createMockDss(options = {}) {
                     'system-addon-user-defined-states': {
                         testUserState: { name: 'testUserState', value: 2, state: 'inactive' },
                     },
+                    // A dSS20 1.19.13 lists its climate control under both app ids, with the
+                    // same states (measured with probe-states.js)
+                    'system-addon-heating-controller': {
+                        'zone.zone5.group0.type9.passiveCooling': {
+                            name: 'zone.zone5.group0.type9.passiveCooling',
+                            value: 1,
+                            state: 'active',
+                            callOrigin: 9,
+                        },
+                    },
                     'heating-controller': {
                         'zone.zone5.group0.type9.passiveCooling': {
                             name: 'zone.zone5.group0.type9.passiveCooling',
