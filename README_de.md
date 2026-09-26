@@ -235,11 +235,12 @@ Die Geräte sind als „Klemme/dSM"."Geräte-ID" strukturiert, darunter jeweils:
 * Geräteszenen, die ausschließlich dieses Gerät ansprechen
 * Gerätesensoren, sofern vom System gemeldet — Werte können also leer bleiben
 * Ausgangswerte (z. B. Helligkeit bei Licht, Position und Winkel bei Rollladen/Jalousie) direkt
-  unterhalb des Geräts. Die vollständige benannte Funktionalität gibt es für Licht und
-  Rollladen/Jalousie; ein Joker (Schwarz) mit Ausgang — etwa eine geschaltete Steckdose — wird
+  unterhalb des Geräts. Die vollständige benannte Funktionalität gibt es für digitalSTROM-Licht und
+  -Rollladen/Jalousie; ein Joker (Schwarz) mit Ausgang — etwa eine geschaltete Steckdose — wird
   ebenfalls gelesen, und vDC-Geräte (Hue, Sonos) erreichen ihre Kanäle über den benannten
-  Kanal-Lesebefehl. Gerätesensoren und Ausgangskanäle ohne Schreibweg (z. B. Farbkanäle von
-  Hue-Lampen, Sonos) sind schreibgeschützt.
+  Kanal-Lesebefehl. Gerätesensoren und Ausgangskanäle ohne Schreibweg sind schreibgeschützt — z. B.
+  alle Kanäle einer mehrkanaligen vDC-Lampe (Hue-Farb- und Farbtemperatur-Lampen, Helligkeit
+  eingeschlossen) und die Sonos-Kanäle.
 * Taster und Binäreingänge, ebenfalls als States und schreibgeschützt
 
 ## Hinweise zum Verhalten
@@ -282,9 +283,10 @@ Die Geräte sind als „Klemme/dSM"."Geräte-ID" strukturiert, darunter jeweils:
   Eine Szene, die der dSS für ein einzelnes Gerät gemeldet hat, wird nicht nachgeholt — sie
   bleibt stehen, bis der nächste Aufruf sie erreicht.
 * **Ein Zustand, den der dSS nicht kennt**: Einige Ein/Aus-Zustände, zum Beispiel den Raumzustand
-  `heating`, meldet der dSS als „unknown“, solange er keine Information dazu hat. Ein solcher State
-  hat keinen Wert (null), bis der dSS active oder inactive meldet. Wer null in einen State
-  schreibt, schickt damit nichts an den dSS.
+  `heating`, meldet der dSS als „unknown“, solange er keine Information dazu hat. Zeigt der Adapter
+  einen solchen State als true/false, hat er keinen Wert (null), bis der dSS active oder inactive
+  meldet; ein State mit dem Wortlaut des dSS, etwa ein User-State oder ein Gerätezustand, zeigt das
+  Wort „unknown“. Wer null in einen State schreibt, schickt damit nichts an den dSS.
 * **Ein dSS, der nicht erreichbar ist**: Antwortet der dSS beim Start nicht (etwa während er neu
   startet, ein Update installiert oder das Netzwerk ausgefallen ist), läuft der Adapter weiter und
   fragt alle 5 Minuten erneut, statt sich selbst neu zu starten. Die erste fehlgeschlagene Prüfung
@@ -307,11 +309,13 @@ Die Geräte sind als „Klemme/dSM"."Geräte-ID" strukturiert, darunter jeweils:
   `inactive`/`active` bei einem normalen Binäreingang und `closed`/`open`/`tilted` bei einem
   Fenstergriff, der drei statt zwei Stellungen meldet.
 * Die vollständige benannte Ausgangsfunktionalität — Helligkeit, Position und Winkel — ist für
-  Licht (Gelb) und Rollladen/Jalousie (Grau) umgesetzt. Die Farbkanäle von vDC-Lampen werden
-  gelesen, aber nicht geschrieben, und bei einer Jalousie mit Innen- und Außenkanälen (GR-KL300)
-  lassen sich nur Position und Winkel außen setzen. Ein Joker (Schwarz) mit Ausgang wird ebenfalls
-  gelesen und folgt seinen Szenen, sein Wert bleibt aber der reine, schreibgeschützte Ausgangswert
-  ohne benannte Bedeutung.
+  digitalSTROM-Licht (Gelb, GE-) und -Rollladen/Jalousie (Grau, GR-) umgesetzt, und eine vDC-Lampe
+  mit nur einem Ausgangskanal (eine dimmbare Hue-Lampe wie die LWV001) nimmt ebenfalls einen
+  Helligkeitswert an. Eine vDC-Lampe mit mehreren Kanälen (Hue-Farb- und Farbtemperatur-Lampen)
+  wird in allen Kanälen gelesen, die Helligkeit eingeschlossen, und über ihre Szenen geschaltet und
+  gedimmt. Bei einer Jalousie mit Innen- und Außenkanälen (GR-KL300) lassen sich nur Position und
+  Winkel außen setzen. Ein Joker (Schwarz) mit Ausgang wird ebenfalls gelesen und folgt seinen
+  Szenen, sein Wert bleibt aber der reine, schreibgeschützte Ausgangswert ohne benannte Bedeutung.
 * vDC-Geräte (Hue-Lampen, Sonos-Player) lesen ihre Ausgangskanäle über den benannten Lesebefehl
   `device/getOutputChannelValue2` — gemessen an einem dSS20 1.19.13. Lautstärke und Ein-Zustand von
   Sonos-Playern sowie die Farbwerte von vDC-Lampen kommen mit und ohne Smart Home API an, und ein
@@ -357,18 +361,22 @@ Der vollständige Changelog inklusive der Historie von Apollon77 steht in der en
 ### **WORK IN PROGRESS**
 
 * **Räume melden die Heizung nicht mehr als aktiv, solange der dSS es nicht weiß.** Solange er keine Information
-  hat, beantwortet der dSS den Raumzustand `heating` mit „unknown“. Jedes Wort, das der Adapter nicht erwartete,
-  galt bisher als wahr – jeder Raum zeigte die Heizung aktiv, und jeder Start schrieb eine Warnung pro Raum ins
-  Log. Ein solcher Zustand bleibt jetzt leer (null), bis der dSS active oder inactive meldet, und die Warnungen
-  sind weg. Das gilt für jeden Ein/Aus-Zustand, den der dSS als unknown meldet. Ein null, das ein Skript in einen
-  State schreibt, geht nicht mehr als „inactive“ an den dSS
+  hat, beantwortet der dSS den Raumzustand `heating` mit „unknown“. Der Adapter wertete dieses Wort als wahr –
+  jeder Raum zeigte die Heizung aktiv, und jeder Start schrieb eine Warnung pro Raum ins Log. Ein solcher Zustand
+  bleibt jetzt leer (null), bis der dSS active oder inactive meldet, und die Warnungen sind weg. Das gilt für jeden
+  State, den der Adapter als true/false zeigt. States mit dem Wortlaut des dSS, etwa die Gerätezustände
+  (`states.0`, ...) und die User-States, zeigen weiter das Wort „unknown“. Ein null, das ein Skript in einen State
+  schreibt, geht nicht mehr als „inactive“ an den dSS
 * **States, die der Adapter nicht schreiben kann, sind als schreibgeschützt markiert.** Das betrifft die Farb- und
   Helligkeitskanäle mehrkanaliger vDC-Lampen (Hue), Lautstärke und Ein-Zustand von Sonos-Playern, die Innenkanäle
   von GR-KL300-Jalousien, den Ausgangswert eines Jokers, alle Gerätesensoren, die Außensensoren und
   `buttonClickType`. Diese States trugen bisher gar kein Schreib-Flag, der Admin bot sie deshalb zum Bearbeiten
   an, obwohl eine Änderung nichts bewirkte. Die schreibbaren States (Szenen, Licht, Rollläden, einkanalige
-  Ausgänge, Raumsensoren, User-States, Sollwerte) bleiben, wie sie sind. Das Flag wird beim ersten Start
-  automatisch korrigiert
+  Ausgänge, Raumsensoren, User-States, die Sollwerte unter `temperatureControl.setpoints`) bleiben, wie sie sind.
+  Ein Gerätesensor wie „Room Temperature Set Point“ meldet nur den Wert des Geräts und ist ebenfalls
+  schreibgeschützt; ein vis-Widget oder Skript, das ihn noch beschreibt, löst jetzt die js-controller-Warnung
+  `Read-only state ... has been written without ack-flag` aus. Die Raumtemperatur stellen Sie über
+  `temperatureControl.setpoints.*` oder `OperationMode`. Das Flag wird beim ersten Start automatisch korrigiert
 * **Namen mit HTML-Codes werden einmal korrigiert.** Ältere dSS-Firmware legte die Namen von Klemmen, Räumen und
   Geräten mit HTML-Codes ab, zum Beispiel `Schlafen &amp; Bad` statt `Schlafen & Bad`, und die damals angelegten
   Objekte behielten diesen Namen – der Adapter lässt Objektnamen bewusst stehen, damit eigene Umbenennungen

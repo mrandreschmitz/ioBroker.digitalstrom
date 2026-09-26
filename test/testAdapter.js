@@ -385,6 +385,14 @@ describe('Adapter logic', () => {
             );
         });
 
+        // A user state is an on/off state in the dSS, but its object keeps the words - the
+        // README names it as the exception to the null rule
+        it('keeps "unknown" as text for a user state', () => {
+            const id = 'apartment.userStates.x';
+            const ctx = ctxWith({ [id]: { common: { type: 'string' } } });
+            expect(Digitalstrom.prototype.coerceStateValue.call(ctx, id, 'unknown')).to.equal('unknown');
+        });
+
         it('still reports a word outside the vocabulary, once', () => {
             const warnings = [];
             const ctx = createContext({
@@ -952,7 +960,14 @@ describe('Adapter logic', () => {
                         'shadePositionIndoor',
                         'shadeOpeningAngleIndoor',
                     ],
-                    { sensorInputCount: 1, sensors: [{ type: 4, valid: true, value: 3 }] },
+                    {
+                        sensorInputCount: 2,
+                        sensors: [
+                            { type: 4, valid: true, value: 3 },
+                            // Room Temperature Set Point: the value of the device, not the set point of the room
+                            { type: 50, valid: true, value: 21 },
+                        ],
+                    },
                 ),
                 device('sw1', 'SW-KL200', ['powerLevel'], { buttonInputCount: 1 }),
             ];
@@ -983,6 +998,8 @@ describe('Adapter logic', () => {
             expect(write('gr1.shadePositionIndoor'), 'no handler for the indoor channels').to.equal(false);
             expect(write('gr1.shadeOpeningAngleIndoor')).to.equal(false);
             expect(write('gr1.sensors.0'), 'device sensor').to.equal(false);
+            expect(created['devices.m1.gr1.sensors.1'].common.role).to.equal('level.temperature');
+            expect(write('gr1.sensors.1'), 'a set point reported by a device').to.equal(false);
             expect(write('sw1.powerLevel'), 'joker output without handler').to.equal(false);
             expect(write('sw1.buttonClickType')).to.equal(false);
 

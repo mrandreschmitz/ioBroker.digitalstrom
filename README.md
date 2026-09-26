@@ -172,7 +172,7 @@ On Apartment level also Sensors (also outdoor values), States and user states ar
 The devices are structured with "circuit/dSM"."deviceID" and the subsctructure inside includes:
 * Device Scenes, will be triggered for this device only
 * Device Sensors, when reported from the system. So values might be empty
-* Output values (e.g. state/brightness for Lights and position/angle for Shades/Blinds) are located directly below the device. Lights and Shades/Blinds carry the full named functionality; a Joker (Black) with an output - a switched socket, for instance - has its output value read as well, and vDC devices (Hue, Sonos) reach their channels through the named channel read. Device sensors and output channels without a write path (the colour channels of Hue lamps or the Sonos channels, for instance) are read-only.
+* Output values (e.g. state/brightness for Lights and position/angle for Shades/Blinds) are located directly below the device. digitalSTROM Lights and Shades/Blinds carry the full named functionality; a Joker (Black) with an output - a switched socket, for instance - has its output value read as well, and vDC devices (Hue, Sonos) reach their channels through the named channel read. Device sensors and output channels without a write path are read-only - for instance all channels of a multi-channel vDC light (Hue colour and colour-temperature lamps, brightness included) and the Sonos channels.
 * Buttons and Binary Inputs will also be represented by states and are read only
 
 ## Behaviour notes
@@ -183,7 +183,7 @@ The devices are structured with "circuit/dSM"."deviceID" and the subsctructure i
 * **User states**: a user state is only forwarded to the dSS when its value really changes, so a script that re-asserts the same value every few minutes causes no requests at all. The value the dSS reports is tracked from both directions, so a state someone changed in the dSS is never mistaken for unchanged.
 * **Momentary scenes and button presses**: Stop, Increment, Decrement, Area Stepping Continue and Impulse are commands, not positions - the dSS sends a callScene for them and never the undoScene that would release it again. Their `scenes.<name>` therefore goes true and falls back to false half a second later, so a rule on it fires on every press instead of only on the first one ever. A repeat within that half second re-arms the release rather than adding a second edge, because a wall switch repeats its Stop. `scenes.sceneId` is not released and keeps answering which scene was called last. `<device>.<n>.button` follows the same rule for the same reason: the dSS reports a press and never takes it back, so it goes true and falls back half a second later. `buttonClickType` and `buttonHoldCount` are not released - they describe the press that happened, not the moment.
 * **The first two minutes after a start**: the adapter subscribes to the dSS events before it has created its objects, so almost nothing is lost while a large installation is being built. Sensor values, states and binary inputs that arrive in that window are applied once the objects exist, on top of the initial snapshot. Scene calls and button presses in that window are deliberately NOT caught up - acting on a press minutes after it happened would be worse than missing it. The last called scene of every ZONE GROUP is re-read at the end of the start, so a group scene missed there is corrected; a scene the dSS reported for a single device is not, and stays as it was until the next call reaches it.
-* **A state the dSS does not know**: the dSS reports some on/off states, for example the room state `heating`, as "unknown" as long as it has no information. Such a state has no value (null) until the dSS reports active or inactive. Writing null into a state sends nothing to the dSS.
+* **A state the dSS does not know**: the dSS reports some on/off states, for example the room state `heating`, as "unknown" as long as it has no information. Where the adapter shows such a state as true/false, it has no value (null) until the dSS reports active or inactive; a state that keeps the wording of the dSS, such as a user state or a device state, shows the word "unknown". Writing null into a state sends nothing to the dSS.
 * **A dSS that cannot be reached**: when the dSS does not answer at startup (for example while it restarts, installs an update or the network is down), the adapter keeps running and asks again every 5 minutes instead of restarting itself. The first failed check is logged as an error that says what to check. Further checks are only logged at debug level, and a different error is reported once more. One info line tells when the dSS answers again and how long it could not be reached, then the start continues. Until then `info.connection` stays false. A dSS that answers but refuses the App-Token is reported as a refused login, with the hint to check the token, and is asked again in the same way.
 
 ## Known Issues / System design effects
@@ -193,11 +193,14 @@ The devices are structured with "circuit/dSM"."deviceID" and the subsctructure i
   without extra bus traffic.
 * Values might be empty when they were not reported by the system
 * Binary inputs were originally implemented without any hardware to test against. They are confirmed to work in the meantime, with motion detectors and window handles reporting through them. The state keeps the number the DSS reports, so history data stays comparable, but the numbers are named: `inactive`/`active` for a normal binary input, and `closed`/`open`/`tilted` for a window handle, which reports three positions instead of two.
-* The full named output functionality - brightness, position and angle - is implemented for Light
-  (Yellow) and Shade/Blind (Gray) devices. The colour channels of vDC lights are read, not written,
-  and of a blind with indoor and outdoor channels (GR-KL300) only the outdoor position and angle can
-  be set. A Joker (Black) with an output is read as well and follows its scenes, but its value stays
-  the plain, read-only output value without a named meaning.
+* The full named output functionality - brightness, position and angle - is implemented for
+  digitalSTROM Light (Yellow, GE-) and Shade/Blind (Gray, GR-) devices, and a vDC light with a single
+  output channel (a dimmable Hue lamp such as the LWV001) takes a brightness value as well. A vDC
+  light with several channels (Hue colour and colour-temperature lamps) is read in all its channels,
+  brightness included, and is switched and dimmed through its scenes. Of a blind with indoor and
+  outdoor channels (GR-KL300) only the outdoor position and angle can be set. A Joker (Black) with an
+  output is read as well and follows its scenes, but its value stays the plain, read-only output
+  value without a named meaning.
 * vDC devices (Hue lamps, Sonos players) read their output channels through the named read
   `device/getOutputChannelValue2` - verified against a dSS20 1.19.13. The audio volume and power
   state of Sonos players and the colour values of vDC lights arrive with and without the Smart Home
@@ -233,17 +236,22 @@ It is published under the same MIT license; the original copyright notice is kep
 ### **WORK IN PROGRESS**
 
 * **Rooms no longer report heating as active while the dSS does not know.** As long as it has no information,
-  the dSS answers the room state `heating` with "unknown". Every word the adapter did not expect used to count as
-  true, so every room showed heating active, and every start logged one warning per room. Such a state now stays
-  empty (null) until the dSS reports active or inactive, and the warnings are gone. This applies to every on/off
-  state the dSS reports as unknown. A null that a script writes into a state is no longer sent to the dSS as
-  "inactive"
+  the dSS answers the room state `heating` with "unknown". The adapter counted this word as true, so every room
+  showed heating active, and every start logged one warning per room. Such a state now stays empty (null) until the
+  dSS reports active or inactive, and the warnings are gone. This applies to every state the adapter shows as
+  true/false. States that keep the wording of the dSS, such as the device states (`states.0`, ...) and the user
+  states, show the word "unknown" as before. A null that a script writes into a state is no longer sent to the dSS
+  as "inactive"
 * **States the adapter cannot write are marked read-only.** This covers the colour and brightness channels of
   multi-channel vDC lights (Hue), the volume and power state of Sonos players, the indoor channels of GR-KL300
   blinds, the output value of a joker, all device sensors, the outdoor sensors and `buttonClickType`. These states
   carried no write flag at all, so the admin offered to edit them although a change had no effect. The states that
-  can be written (scenes, lights, blinds, single-channel outputs, room sensors, user states, set points) are
-  unchanged. The flag is corrected automatically on the first start
+  can be written (scenes, lights, blinds, single-channel outputs, room sensors, user states, the set points under
+  `temperatureControl.setpoints`) are unchanged. A device sensor such as "Room Temperature Set Point" only reports
+  the value of the device and is read-only as well; a vis widget or script that still writes it now causes the
+  js-controller warning `Read-only state ... has been written without ack-flag`. The room temperature is set
+  through `temperatureControl.setpoints.*` or `OperationMode`. The flag is corrected automatically on the first
+  start
 * **Names stored with HTML codes are corrected once.** Older dSS firmware kept the names of circuits, rooms and
   devices with HTML codes, for example `Schlafen &amp; Bad` instead of `Schlafen & Bad`, and the objects created
   back then kept that name, because the adapter leaves object names alone so that your own renames survive. Such
