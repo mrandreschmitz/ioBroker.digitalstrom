@@ -233,7 +233,7 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ## Changelog
 
-### **WORK IN PROGRESS**
+### 2.4.26 (2026-09-26)
 
 * **Rooms no longer report heating as active while the dSS does not know.** As long as it has no information,
   the dSS answers the room state `heating` with "unknown". The adapter counted this word as true, so every room

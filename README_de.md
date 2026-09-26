@@ -358,7 +358,7 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
 
-### **WORK IN PROGRESS**
+### 2.4.26 (2026-09-26)
 
 * **Räume melden die Heizung nicht mehr als aktiv, solange der dSS es nicht weiß.** Solange er keine Information
   hat, beantwortet der dSS den Raumzustand `heating` mit „unknown“. Der Adapter wertete dieses Wort als wahr –
