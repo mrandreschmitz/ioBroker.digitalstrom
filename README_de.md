@@ -279,6 +279,10 @@ Die Geräte sind als „Klemme/dSM"."Geräte-ID" strukturiert, darunter jeweils:
   wird am Ende des Starts neu gelesen, eine dort verpasste Gruppenszene ist also korrigiert.
   Eine Szene, die der dSS für ein einzelnes Gerät gemeldet hat, wird nicht nachgeholt — sie
   bleibt stehen, bis der nächste Aufruf sie erreicht.
+* **Ein Zustand, den der dSS nicht kennt**: Einige Ein/Aus-Zustände, zum Beispiel den Raumzustand
+  `heating`, meldet der dSS als „unknown“, solange er keine Information dazu hat. Ein solcher State
+  hat keinen Wert (null), bis der dSS active oder inactive meldet. Wer null in einen State
+  schreibt, schickt damit nichts an den dSS.
 
 ## Bekannte Einschränkungen und Systemeigenheiten
 
@@ -337,6 +341,15 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
+
+### **WORK IN PROGRESS**
+
+* **Räume melden die Heizung nicht mehr als aktiv, solange der dSS es nicht weiß.** Solange er keine Information
+  hat, beantwortet der dSS den Raumzustand `heating` mit „unknown“. Jedes Wort, das der Adapter nicht erwartete,
+  galt bisher als wahr – jeder Raum zeigte die Heizung aktiv, und jeder Start schrieb eine Warnung pro Raum ins
+  Log. Ein solcher Zustand bleibt jetzt leer (null), bis der dSS active oder inactive meldet, und die Warnungen
+  sind weg. Das gilt für jeden Ein/Aus-Zustand, den der dSS als unknown meldet. Ein null, das ein Skript in einen
+  State schreibt, geht nicht mehr als „inactive“ an den dSS
 
 ### 2.4.25 (2026-09-17)
 

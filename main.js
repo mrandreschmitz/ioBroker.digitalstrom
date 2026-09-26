@@ -261,6 +261,17 @@ class Digitalstrom extends utils.Adapter {
                 this.dssStruct.notePublishedValue(id, state.val);
             }
 
+            if (!state.ack && state.val === null) {
+                // null is "no value" - what this adapter writes for a state the dSS reports
+                // as unknown. There is nothing to send for it, and objectHelper would turn
+                // it into false for a boolean state (!!null) and hand that to the write
+                // handler, which sends the false word of the state ("inactive", "absent",
+                // ...) to the dSS - a command nobody gave. It has to be stopped here: by
+                // the time a write handler runs, the null is already gone.
+                this.log.debug(`Ignoring null for ${id} - there is no value to send to the DSS`);
+                return;
+            }
+
             this.objectHelper.handleStateChange(id, state);
         } else {
             // The state was deleted
@@ -1781,6 +1792,18 @@ class Digitalstrom extends utils.Adapter {
             }
             if (native.valueFalse !== undefined && value === native.valueFalse) {
                 return false;
+            }
+            if (value === DSSStructure.UNKNOWN_STATE_WORD) {
+                // The dSS has no information about this state (see UNKNOWN_STATE_WORD). It
+                // creates the room state heating as unknown, and a dSS20 1.19.13 answers
+                // zone.<id>.heating like that in all eight rooms of a real installation,
+                // five of them with a running temperature control. That is neither true nor
+                // false, and no stale vocabulary either, so it is not reported: the state
+                // gets no value, and the next "active"/"inactive" sets it again. The
+                // toBoolean fallback made it true - "heating active" in eight rooms at
+                // once, plus eight warnings per start. It sits behind the vocabulary
+                // matches on purpose, so a state that declares the word itself still wins.
+                return null;
             }
             if (native.valueTrue !== undefined || native.valueFalse !== undefined) {
                 // This is the only signal that a declared vocabulary has gone stale, and it

@@ -183,6 +183,7 @@ The devices are structured with "circuit/dSM"."deviceID" and the subsctructure i
 * **User states**: a user state is only forwarded to the dSS when its value really changes, so a script that re-asserts the same value every few minutes causes no requests at all. The value the dSS reports is tracked from both directions, so a state someone changed in the dSS is never mistaken for unchanged.
 * **Momentary scenes and button presses**: Stop, Increment, Decrement, Area Stepping Continue and Impulse are commands, not positions - the dSS sends a callScene for them and never the undoScene that would release it again. Their `scenes.<name>` therefore goes true and falls back to false half a second later, so a rule on it fires on every press instead of only on the first one ever. A repeat within that half second re-arms the release rather than adding a second edge, because a wall switch repeats its Stop. `scenes.sceneId` is not released and keeps answering which scene was called last. `<device>.<n>.button` follows the same rule for the same reason: the dSS reports a press and never takes it back, so it goes true and falls back half a second later. `buttonClickType` and `buttonHoldCount` are not released - they describe the press that happened, not the moment.
 * **The first two minutes after a start**: the adapter subscribes to the dSS events before it has created its objects, so almost nothing is lost while a large installation is being built. Sensor values, states and binary inputs that arrive in that window are applied once the objects exist, on top of the initial snapshot. Scene calls and button presses in that window are deliberately NOT caught up - acting on a press minutes after it happened would be worse than missing it. The last called scene of every ZONE GROUP is re-read at the end of the start, so a group scene missed there is corrected; a scene the dSS reported for a single device is not, and stays as it was until the next call reaches it.
+* **A state the dSS does not know**: the dSS reports some on/off states, for example the room state `heating`, as "unknown" as long as it has no information. Such a state has no value (null) until the dSS reports active or inactive. Writing null into a state sends nothing to the dSS.
 
 ## Known Issues / System design effects
 * The digitalSTROM system is scene-centric by design: most actions are scene calls rather than
@@ -226,6 +227,15 @@ It is published under the same MIT license; the original copyright notice is kep
 [LICENSE](LICENSE).
 
 ## Changelog
+
+### **WORK IN PROGRESS**
+
+* **Rooms no longer report heating as active while the dSS does not know.** As long as it has no information,
+  the dSS answers the room state `heating` with "unknown". Every word the adapter did not expect used to count as
+  true, so every room showed heating active, and every start logged one warning per room. Such a state now stays
+  empty (null) until the dSS reports active or inactive, and the warnings are gone. This applies to every on/off
+  state the dSS reports as unknown. A null that a script writes into a state is no longer sent to the dSS as
+  "inactive"
 
 ### 2.4.25 (2026-09-17)
 

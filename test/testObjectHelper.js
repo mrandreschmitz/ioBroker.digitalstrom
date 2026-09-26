@@ -129,3 +129,49 @@ describe('objectHelper instance isolation', () => {
         }
     });
 });
+
+// The two properties of the dependency the unknown handling relies on - if either one
+// changes, revisit Digitalstrom.onStateChange() and setInitialValues()
+describe('objectHelper and a state without value', () => {
+    const id = 'apartment.0.4.states.heating';
+    const heating = () => ({
+        type: 'state',
+        common: { type: 'boolean', role: 'indicator' },
+        native: { valueTrue: 'active', valueFalse: 'inactive' },
+    });
+
+    it('does not write a null initial value - setInitialValues has to', done => {
+        const writes = [];
+        const helper = Digitalstrom.createObjectHelper(silentLog);
+        helper.init(fakeAdapter('digitalstrom.0', writes));
+        helper.setOrUpdateObject(id, heating(), ['name'], null, () => {});
+        helper.processObjectQueue(() => {
+            expect(writes).to.deep.equal([`digitalstrom.0/${id}`]);
+            done();
+        });
+    });
+
+    it('turns a null command into false for a boolean state, so onStateChange stops it first', done => {
+        const received = [];
+        const helper = Digitalstrom.createObjectHelper(silentLog);
+        helper.init(fakeAdapter('digitalstrom.0', []));
+        helper.setOrUpdateObject(id, heating(), ['name'], null, value => received.push(value));
+        helper.processObjectQueue(() => {
+            helper.handleStateChange(`digitalstrom.0.${id}`, { val: null, ack: false });
+            expect(received, 'what the helper alone does').to.deep.equal([false]);
+
+            received.length = 0;
+            const ctx = {
+                log: silentLog,
+                objectHelper: helper,
+                isStopping: () => false,
+                dssStruct: { notePublishedValue: () => {} },
+            };
+            Digitalstrom.prototype.onStateChange.call(ctx, `digitalstrom.0.${id}`, { val: null, ack: false });
+            expect(received, 'nothing may reach the write handler').to.deep.equal([]);
+            Digitalstrom.prototype.onStateChange.call(ctx, `digitalstrom.0.${id}`, { val: true, ack: false });
+            expect(received).to.deep.equal([true]);
+            done();
+        });
+    });
+});

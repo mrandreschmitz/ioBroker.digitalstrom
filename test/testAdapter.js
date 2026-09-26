@@ -333,6 +333,66 @@ describe('Adapter logic', () => {
             expect(coerce('apartment.0.4.states.heating', 'on')).to.equal(true);
         });
 
+        // A dSS20 1.19.13 answers zone.<id>.heating with "unknown" in all eight rooms of a
+        // real installation. The toBoolean fallback made that true - heating active in
+        // eight rooms at once - and warned eight times on every start.
+        it('writes "unknown" as null for a boolean state, without a warning', () => {
+            const warnings = [];
+            const ctx = createContext({
+                log: { ...silentLog, warn: msg => warnings.push(String(msg)) },
+                dssStruct: {
+                    dssObjects: {
+                        'apartment.0.4.states.heating': {
+                            common: { type: 'boolean' },
+                            native: { valueTrue: 'active', valueFalse: 'inactive' },
+                        },
+                    },
+                    stateMap: {},
+                    zoneDevices: {},
+                },
+            });
+            const coerce = Digitalstrom.prototype.coerceStateValue.bind(ctx);
+            expect(coerce('apartment.0.4.states.heating', 'unknown'), 'neither true nor false').to.equal(null);
+            expect(warnings, 'unknown is no stale vocabulary').to.deep.equal([]);
+            // the next word of the dSS sets the state again
+            expect(coerce('apartment.0.4.states.heating', 'active')).to.equal(true);
+            expect(coerce('apartment.0.4.states.heating', 'inactive')).to.equal(false);
+        });
+
+        it('writes "unknown" as null for a boolean state without a vocabulary as well', () => {
+            // status.malfunction of a group: true would announce a malfunction nobody reported
+            const id = 'apartment.groups.64.states.status.malfunction';
+            const ctx = ctxWith({ [id]: { common: { type: 'boolean' }, native: {} } });
+            expect(Digitalstrom.prototype.coerceStateValue.call(ctx, id, 'unknown')).to.equal(null);
+        });
+
+        it('keeps "unknown" as text for a state that carries the wording of the dSS', () => {
+            const ctx = ctxWith({ 'devices.c1.d1.states.0': { common: { type: 'string' } } });
+            expect(Digitalstrom.prototype.coerceStateValue.call(ctx, 'devices.c1.d1.states.0', 'unknown')).to.equal(
+                'unknown',
+            );
+        });
+
+        it('still reports a word outside the vocabulary, once', () => {
+            const warnings = [];
+            const ctx = createContext({
+                log: { ...silentLog, warn: msg => warnings.push(String(msg)) },
+                dssStruct: {
+                    dssObjects: {
+                        'apartment.0.4.states.heating': {
+                            common: { type: 'boolean' },
+                            native: { valueTrue: 'active', valueFalse: 'inactive' },
+                        },
+                    },
+                },
+            });
+            const coerce = Digitalstrom.prototype.coerceStateValue.bind(ctx);
+            expect(coerce('apartment.0.4.states.heating', 'off')).to.equal(false);
+            expect(coerce('apartment.0.4.states.heating', 'off')).to.equal(false);
+            expect(warnings).to.have.lengthOf(1);
+            expect(warnings[0]).to.contain('"off"').and.to.contain('apartment.0.4.states.heating');
+        });
+
         it('converts numbers to strings for string states', () => {
             const ctx = ctxWith({ 'some.state': { common: { type: 'string' } } });
             expect(Digitalstrom.prototype.coerceStateValue.call(ctx, 'some.state', 5)).to.equal('5');
@@ -375,6 +435,24 @@ describe('Adapter logic', () => {
             const ctx = changeContext();
             Digitalstrom.prototype.onStateChange.call(ctx, 'digitalstrom.0.x', { val: 5, ack: false });
             expect(ctx.handled).to.deep.equal([['digitalstrom.0.x', 5]]);
+        });
+
+        it('does not turn a null into a command', () => {
+            // objectHelper makes false of it for a boolean state (!!null), and the write
+            // handler would send "inactive" to the dSS
+            const ctx = changeContext();
+            Digitalstrom.prototype.onStateChange.call(ctx, 'digitalstrom.0.apartment.0.4.states.heating', {
+                val: null,
+                ack: false,
+            });
+            expect(ctx.handled).to.deep.equal([]);
+            Digitalstrom.prototype.onStateChange.call(ctx, 'digitalstrom.0.apartment.0.4.states.heating', {
+                val: false,
+                ack: false,
+            });
+            expect(ctx.handled, 'a real false still is a command').to.deep.equal([
+                ['digitalstrom.0.apartment.0.4.states.heating', false],
+            ]);
         });
 
         it('ignores a state change while the adapter is stopping', () => {
@@ -761,6 +839,34 @@ describe('Adapter logic', () => {
         });
     });
 
+    describe('setInitialValues', () => {
+        it('writes null for a state the dSS reports as unknown instead of skipping it', done => {
+            const written = [];
+            const ctx = createContext({
+                dssStruct: {
+                    dssObjects: {
+                        'apartment.0.4.states.heating': {
+                            common: { type: 'boolean' },
+                            native: { valueTrue: 'active', valueFalse: 'inactive' },
+                        },
+                    },
+                    initialObjectValues: { 'apartment.0.4.states.heating': 'unknown' },
+                },
+                setInitialValues: Digitalstrom.prototype.setInitialValues,
+                setState(id, value, ack, cb) {
+                    written.push([id, value, ack]);
+                    cb && cb();
+                },
+            });
+            ctx.setInitialValues(() => {
+                // This is the only write at startup: objectHelper does not write a null
+                // initial value, and it replaces the true of the earlier versions
+                expect(written).to.deep.equal([['apartment.0.4.states.heating', null, true]]);
+                done();
+            });
+        });
+    });
+
     describe('event handlers', () => {
         function subscribedContext() {
             const dss = new DSS({ host: 'localhost', appToken: 'app', logger: silentLog });
@@ -811,6 +917,31 @@ describe('Adapter logic', () => {
                     properties: { sensorType: '9', sensorValueFloat: '21.5' },
                 });
                 expect(ctx.states['apartment.0.4.sensors.TemperatureValue']).to.equal(21.5);
+                dss.stop();
+                done();
+            });
+        });
+
+        it('writes null for a zone state the dSS reports as unknown, and true for the next active', done => {
+            const { ctx, dss } = subscribedContext();
+            ctx.dssStruct.stateMap['zone.4.heating'] = 'apartment.0.4.states.heating';
+            ctx.dssStruct.dssObjects['apartment.0.4.states.heating'] = {
+                common: { type: 'boolean' },
+                native: { valueTrue: 'active', valueFalse: 'inactive' },
+            };
+            Digitalstrom.prototype.initializeSubscriptions.call(ctx, () => {
+                const emit = (state, value) =>
+                    dss.emit('stateChange', {
+                        name: 'stateChange',
+                        properties: { statename: 'zone.4.heating', state, value, oldvalue: '2' },
+                    });
+                emit('unknown', '3');
+                expect(ctx.states, 'null is written, not dropped as "no value"').to.have.property(
+                    'apartment.0.4.states.heating',
+                    null,
+                );
+                emit('active', '1');
+                expect(ctx.states['apartment.0.4.states.heating']).to.equal(true);
                 dss.stop();
                 done();
             });
