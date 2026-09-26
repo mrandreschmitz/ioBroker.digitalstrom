@@ -248,6 +248,11 @@ It is published under the same MIT license; the original copyright notice is kep
   back then kept that name, because the adapter leaves object names alone so that your own renames survive. Such
   a name is now replaced once by the name the dSS reports today, and the log says so. A name you changed yourself
   is not touched
+* **The startup report no longer asks for an issue about the second input of a 2-way button.** When the push
+  buttons of a shade terminal block such as the GR-KL300 are wired as a 2-way switch, the dSS couples the second
+  input to the first and lists the pair as one device, while it keeps a state for the second input. The adapter
+  found no device for that state and asked for a GitHub issue. It now names such a state on debug together with
+  the device it belongs to, and the info line only lists states that really cannot be assigned
 
 ### 2.4.25 (2026-09-17)
 

@@ -365,6 +365,12 @@ Der vollständige Changelog inklusive der Historie von Apollon77 steht in der en
   Objekte behielten diesen Namen – der Adapter lässt Objektnamen bewusst stehen, damit eigene Umbenennungen
   erhalten bleiben. Ein solcher Name wird jetzt einmal durch den Namen ersetzt, den der dSS heute meldet, und das
   Log vermerkt es. Einen Namen, den Sie selbst geändert haben, rührt der Adapter nicht an
+* **Der Startbericht bittet beim zweiten Eingang eines 2-Wege-Tasters nicht mehr um ein Issue.** Sind die
+  Tastereingänge einer Rollladenklemme wie der GR-KL300 als 2-Wege-Taster verdrahtet, koppelt der dSS den zweiten
+  Eingang an den ersten und führt das Paar als ein Gerät, behält aber einen State für den zweiten Eingang. Der
+  Adapter fand zu diesem State kein Gerät und bat um ein GitHub-Issue. Jetzt nennt er einen solchen State auf
+  debug zusammen mit dem Gerät, zu dem er gehört, und die Info-Zeile listet nur noch States, die sich wirklich
+  nicht zuordnen lassen
 
 ### 2.4.25 (2026-09-17)
 

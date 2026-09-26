@@ -2091,6 +2091,144 @@ describe('DSSStructure', () => {
             expect(entries).to.deep.equal([]);
         });
 
+        describe('the coupled input of a 2-way button', () => {
+            // Taken from a real installation: three GR-KL300 whose push buttons are wired
+            // as a 2-way switch. getStructure lists the terminal block with
+            // buttonInputMode 10 ("2-way up with input 2") and leaves its second input -
+            // the next dSID - out, /usr/states still carries that input's binary state.
+            const master = {
+                dSUID: '302ed89f43f000000000458002a35a2800',
+                name: 'Rolladen Büro',
+                hwInfo: 'GR-KL300',
+                isVdcDevice: false,
+                buttonInputMode: 10,
+            };
+            const partnerState = { name: 'dev.302ed89f43f000000000458002a35a2900.0', value: 2, state: 'inactive' };
+            // A second hidden pair of the same installation. The tests that still expect an
+            // info line pass it along, so each of them also shows that the rule tells the
+            // two cases apart instead of just leaving everything as it was.
+            const otherMaster = Object.assign({}, master, {
+                dSUID: '302ed89f43f000000000458002a35af000',
+                name: 'Rolladen Wohnen Fenster',
+            });
+            const otherPartnerState = { name: 'dev.302ed89f43f000000000458002a35af100.0', value: 2, state: 'inactive' };
+
+            function loggingStructure(info, debug) {
+                return createStructure({
+                    adapter: {
+                        log: Object.assign({}, silentLogger, {
+                            info: msg => info.push(String(msg)),
+                            debug: msg => debug.push(String(msg)),
+                        }),
+                        config: {},
+                    },
+                });
+            }
+
+            it('names it on debug with its device instead of asking for an issue', () => {
+                const info = [];
+                const debug = [];
+                const struct = loggingStructure(info, debug);
+                struct.propertyStates = [partnerState];
+
+                struct.reportUnmappedStates([master]);
+
+                expect(info, 'nothing to report - the dSS hides that input itself').to.deep.equal([]);
+                const line = debug.find(msg => msg.includes('a35a2900'));
+                expect(line, 'but it is still named').to.be.a('string');
+                expect(line).to.contain('Rolladen Büro').and.to.contain('GR-KL300');
+            });
+
+            it('gets the devices from parseData, skipped ones included', done => {
+                const info = [];
+                const debug = [];
+                const struct = loggingStructure(info, debug);
+                // a master the adapter skips (not present) still explains its partner
+                const absentMaster = Object.assign({}, master, { isPresent: false, isValid: true });
+                struct.apartmentStructure = { clusters: [], floors: [], zones: [{ id: 0, devices: [absentMaster] }] };
+                struct.reachableGroups = { zones: [] };
+                struct.sensorValues = { zones: [] };
+                struct.temperatureControlStatus = { zones: [] };
+                struct.apartmentCircuits = [];
+                struct.propertyStates = [partnerState];
+                struct.createUserActions = () => {};
+                struct.createApartment = (apt, reachable, callback) => callback();
+
+                struct.parseData(err => {
+                    expect(err).to.equal(null);
+                    expect(info).to.deep.equal([]);
+                    expect(debug.some(msg => msg.includes('a35a2900'))).to.equal(true);
+                    done();
+                });
+            });
+
+            it('keeps reporting the next dSID of a device that is no 2-way master', () => {
+                const info = [];
+                const debug = [];
+                const struct = loggingStructure(info, debug);
+                struct.propertyStates = [partnerState, otherPartnerState];
+
+                struct.reportUnmappedStates([Object.assign({}, master, { buttonInputMode: 0 }), otherMaster]);
+
+                expect(info, 'a 1-way device hides nothing - this one really is unknown').to.have.lengthOf(1);
+                expect(info[0]).to.contain('a35a2900');
+                expect(info[0], 'the real 2-way partner is still explained').to.not.contain('a35af100');
+                expect(debug.some(msg => msg.includes('a35af100'))).to.equal(true);
+            });
+
+            it('never explains away a dSUID the structure lists itself', () => {
+                const info = [];
+                const struct = loggingStructure(info, []);
+                struct.propertyStates = [partnerState, otherPartnerState];
+                const listedPartner = {
+                    dSUID: '302ed89f43f000000000458002a35a2900',
+                    name: 'Eingang 2',
+                    hwInfo: 'GR-KL300',
+                };
+
+                struct.reportUnmappedStates([master, listedPartner, otherMaster]);
+
+                expect(info).to.have.lengthOf(1);
+                expect(info[0]).to.contain('a35a2900');
+                expect(info[0]).to.not.contain('a35af100');
+            });
+
+            it('does not count along name based dSUIDs of vDC devices', () => {
+                const info = [];
+                const struct = loggingStructure(info, []);
+                // one digit above a real vDC dSUID - there is no dSID to count with
+                struct.propertyStates = [
+                    { name: 'dev.d4b9d12ce8655325c0e4e0e3dc33484900.0' },
+                    partnerState,
+                    otherPartnerState,
+                ];
+                const vdc = { dSUID: 'd4b9d12ce8655325c0e4e0e3dc33484800', isVdcDevice: true, buttonInputMode: 10 };
+                const vdcShaped = Object.assign({}, master, { isVdcDevice: true });
+
+                struct.reportUnmappedStates([vdc, vdcShaped, otherMaster]);
+
+                expect(info).to.have.lengthOf(1);
+                expect(info[0]).to.contain('d4b9d12ce8655325c0e4e0e3dc33484900').and.to.contain('a35a2900');
+                expect(info[0]).to.not.contain('a35af100');
+            });
+
+            it('takes TWO_WAY and ONE_WAY masters only on an even dSID, as the dSS does', () => {
+                const odd = { dSUID: '302ed89f43f000000000458002a35a2900', isVdcDevice: false, buttonInputMode: 13 };
+                const even = Object.assign({}, master, { buttonInputMode: 14 });
+                const devices = new Map([odd, even].map(dev => [dev.dSUID, dev]));
+
+                expect(DSSStructure.twoWayMasterOf('dev.302ed89f43f000000000458002a35a2a00.0', devices)).to.equal(
+                    undefined,
+                );
+                expect(
+                    DSSStructure.twoWayMasterOf(
+                        'dev.302ed89f43f000000000458002a35a2900.0',
+                        new Map([[even.dSUID, even]]),
+                    ),
+                ).to.equal(even);
+            });
+        });
+
         it('survives missing or broken property states', () => {
             const entries = [];
             const struct = reportingStructure(entries);
