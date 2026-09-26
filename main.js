@@ -40,6 +40,11 @@ const STARTUP_EVENT_LIMIT = 2000;
 // stays a single true -> false, exactly as many edges as the user caused.
 const MOMENTARY_SCENE_RELEASE = 500;
 
+// A dSS that did not answer at startup is asked again after this pause - the same five
+// minutes the process restart used to wait. Such a dSS is rebooting, being updated or
+// switched off, and asking more often would buy nothing but log lines.
+const DSS_RETRY_DELAY = 5 * 60 * 1000;
+
 /**
  * The objectHelper of `@apollon/iobroker-tools`. The package ships no types, so the part
  * of it this adapter actually uses is written down here.
@@ -167,6 +172,15 @@ class Digitalstrom extends utils.Adapter {
 
         this.restartTimeout = null;
         this.startupTimeout = null;
+        // Next check of a dSS that did not answer at startup, see waitForDss()
+        /** @type {NodeJS.Timeout|null} */
+        this.dssRetryTimeout = null;
+        // Overridable in tests so a retry does not take five minutes
+        this.dssRetryDelay = DSS_RETRY_DELAY;
+        // The outage waitForDss() is riding out: since when, how many checks failed and which
+        // errors were already reported. null as long as the dSS answers.
+        /** @type {{since: number, failures: number, reported: Set<string>}|null} */
+        this.dssOutage = null;
         this.stopping = false;
         this.stopped = false;
         /** @type {Array<() => void>} */
@@ -452,6 +466,10 @@ class Digitalstrom extends utils.Adapter {
             clearTimeout(this.restartTimeout);
             this.restartTimeout = null;
         }
+        if (this.dssRetryTimeout) {
+            clearTimeout(this.dssRetryTimeout);
+            this.dssRetryTimeout = null;
+        }
         // A scene state that was about to be released stays true - the adapter is going
         // down, and writing after the stop barrier is what isStopping() exists to prevent
         this.momentaryReleases?.forEach(timer => clearTimeout(timer));
@@ -679,123 +697,224 @@ class Digitalstrom extends utils.Adapter {
 
         this.dataPollInterval = Digitalstrom.normalizePollInterval(this.config.dataPollInterval);
 
-        // Watchdog: if initialization does not finish in time (e.g. a stuck request
-        // or a DSS that stops responding mid-init), restart the adapter
-        this.startupTimeout = setTimeout(() => {
-            this.startupTimeout = null;
-            this.log.warn('Initialization did not finish within 10 minutes, restarting adapter');
-            this.restartAdapter(1000, 'the initialization did not finish within 10 minutes');
-        }, 600000);
+        this.waitForDss(dssName => {
+            // Every step checks the stop barrier: an answer that arrives during the
+            // unload must not create new objects, timers or subscriptions any more.
+            if (this.isStopping()) {
+                return;
+            }
+            this.log.debug(`getName: ${JSON.stringify(dssName)}`);
 
-        dss.requestAsync('apartment', 'getName').then(
-            dssName => {
-                // Every step checks the stop barrier: an answer that arrives during the
-                // unload must not create new objects, timers or subscriptions any more.
+            // Watchdog: if initialization does not finish in time (e.g. a stuck request
+            // or a DSS that stops responding mid-init), restart the adapter. Armed only
+            // now that the dSS answered - waitForDss() may wait for hours, and that is
+            // not an initialization that got stuck.
+            this.startupTimeout = setTimeout(() => {
+                this.startupTimeout = null;
+                this.log.warn('Initialization did not finish within 10 minutes, restarting adapter');
+                this.restartAdapter(1000, 'the initialization did not finish within 10 minutes');
+            }, 600000);
+
+            // getName has proven host, login and reachability, so the events can be
+            // subscribed NOW. Measured on a real installation: the adapter was deaf for
+            // 149.7 s, and the classic structure read was done after 2.6 s of it - all
+            // the rest is parsing and creating 5231 objects. Nothing is applied yet:
+            // the level handlers park their events until replayStartupEvents() runs.
+            this.pendingEvents = [];
+            this.startEarlyEventSubscription();
+
+            this.objectHelper.loadExistingObjects(() => {
                 if (this.isStopping()) {
                     return;
                 }
-                this.log.debug(`getName: ${JSON.stringify(dssName)}`);
-
-                // getName has proven host, login and reachability, so the events can be
-                // subscribed NOW. Measured on a real installation: the adapter was deaf for
-                // 149.7 s, and the classic structure read was done after 2.6 s of it - all
-                // the rest is parsing and creating 5231 objects. Nothing is applied yet:
-                // the level handlers park their events until replayStartupEvents() runs.
-                this.pendingEvents = [];
-                this.startEarlyEventSubscription();
-
-                this.objectHelper.loadExistingObjects(() => {
+                this.initializeDSSData(err => {
                     if (this.isStopping()) {
                         return;
                     }
-                    this.initializeDSSData(err => {
+                    if (err) {
+                        this.log.warn(`Error while initializing Data: ${err}`);
+                        this.restartAdapter(60000, 'reading the DSS structure failed');
+                        return;
+                    }
+
+                    this.registerObjects();
+                    this.objectHelper.processObjectQueue(() => {
                         if (this.isStopping()) {
                             return;
                         }
-                        if (err) {
-                            this.log.warn(`Error while initializing Data: ${err}`);
-                            this.restartAdapter(60000, 'reading the DSS structure failed');
-                            return;
-                        }
-
-                        this.registerObjects();
-                        this.objectHelper.processObjectQueue(() => {
+                        // From here on all objects exist, so values may be written directly
+                        dssStruct.objectsReady = true;
+                        this.setInitialValues(() => {
                             if (this.isStopping()) {
                                 return;
                             }
-                            // From here on all objects exist, so values may be written directly
-                            dssStruct.objectsReady = true;
-                            this.setInitialValues(() => {
+                            this.lastScenes = dssStruct.initialScenes;
+                            // Subscribe right away: every millisecond between the initial
+                            // snapshot and the active subscription is a window in which
+                            // scene calls are lost for good. Usually the early
+                            // subscription already covers it, see ensureEventSubscription().
+                            this.ensureEventSubscription(subscriptionErr => {
                                 if (this.isStopping()) {
                                     return;
                                 }
-                                this.lastScenes = dssStruct.initialScenes;
-                                // Subscribe right away: every millisecond between the initial
-                                // snapshot and the active subscription is a window in which
-                                // scene calls are lost for good. Usually the early
-                                // subscription already covers it, see ensureEventSubscription().
-                                this.ensureEventSubscription(subscriptionErr => {
-                                    if (this.isStopping()) {
-                                        return;
-                                    }
-                                    if (subscriptionErr) {
-                                        // Without events the adapter would silently miss every
-                                        // change, so this must not be treated as a running adapter
-                                        this.log.error(
-                                            `Could not subscribe to the DSS events: ${subscriptionErr.message}`,
-                                        );
-                                        this.setConnected(false);
-                                        if (this.startupTimeout) {
-                                            clearTimeout(this.startupTimeout);
-                                            this.startupTimeout = null;
-                                        }
-                                        // Drop the partially created subscriptions before restarting
-                                        dss.unsubscribeAllEvents(() =>
-                                            this.restartAdapter(30000, 'the DSS events could not be subscribed'),
-                                        );
-                                        return;
-                                    }
-                                    this.subscribeStates('*');
-                                    this.setConnected(true);
+                                if (subscriptionErr) {
+                                    // Without events the adapter would silently miss every
+                                    // change, so this must not be treated as a running adapter
+                                    this.log.error(`Could not subscribe to the DSS events: ${subscriptionErr.message}`);
+                                    this.setConnected(false);
                                     if (this.startupTimeout) {
                                         clearTimeout(this.startupTimeout);
                                         this.startupTimeout = null;
                                     }
-                                    this.log.info('Subscribed to states ...');
+                                    // Drop the partially created subscriptions before restarting
+                                    dss.unsubscribeAllEvents(() =>
+                                        this.restartAdapter(30000, 'the DSS events could not be subscribed'),
+                                    );
+                                    return;
+                                }
+                                this.subscribeStates('*');
+                                this.setConnected(true);
+                                if (this.startupTimeout) {
+                                    clearTimeout(this.startupTimeout);
+                                    this.startupTimeout = null;
+                                }
+                                this.log.info('Subscribed to states ...');
 
-                                    // Everything the dSS reported while the objects were
-                                    // being created, in arrival order, ON TOP of the initial
-                                    // snapshot that was just written - never before it
-                                    this.replayStartupEvents();
+                                // Everything the dSS reported while the objects were
+                                // being created, in arrival order, ON TOP of the initial
+                                // snapshot that was just written - never before it
+                                this.replayStartupEvents();
 
-                                    this.startDataPolling();
+                                this.startDataPolling();
 
-                                    // Catches scene calls that happened while the structure
-                                    // was being built, see resyncSceneStates()
-                                    this.resyncSceneStates();
+                                // Catches scene calls that happened while the structure
+                                // was being built, see resyncSceneStates()
+                                this.resyncSceneStates();
 
-                                    this.clearAdditionalObjects();
+                                this.clearAdditionalObjects();
 
-                                    this.startNotificationChannel();
-                                });
+                                this.startNotificationChannel();
                             });
                         });
                     });
                 });
-            },
-            err => {
+            });
+        });
+    }
+
+    /**
+     * Calls back with the answer of apartment/getName as soon as the dSS answers.
+     *
+     * A dSS that refuses connections is rebooting, being updated or switched off. Ending the
+     * process for that turned one night without a dSS into 102 restarts, each with two error
+     * lines and a warning from js-controller. The process stays now and only this check is
+     * repeated: nothing else of the startup exists yet, so there is nothing to tear down or
+     * to create twice. Never calls back after a stop - the unload clears the retry timer and
+     * aborts a check that is still running.
+     *
+     * @param {(dssName: import('./lib/configUtils').DssResponse) => void} callback
+     */
+    waitForDss(callback) {
+        const dss = this.dss;
+        if (!dss || dss.stopped || this.isStopping()) {
+            return;
+        }
+        dss.requestAsync('apartment', 'getName').then(
+            dssName => {
                 if (this.isStopping()) {
                     return;
                 }
-                this.log.error(
-                    `Error while checking DSS connection (getName):${(err && err.message) || JSON.stringify(err)}`,
-                );
-                this.log.error(
-                    'Please check the host and that the host is reachable and check the settings please! Adapter restarts in 5 minutes',
-                );
-                this.restartAdapter(300000, 'the DSS could not be reached');
+                this.noteDssReachable();
+                callback(dssName);
+            },
+            err => {
+                // A stopped client refuses every request - that is a shutdown, not an
+                // outage, and asking it again would only loop
+                if (this.isStopping() || dss.stopped) {
+                    return;
+                }
+                this.noteDssUnreachable(err);
+                this.dssRetryTimeout = setTimeout(() => {
+                    this.dssRetryTimeout = null;
+                    this.waitForDss(callback);
+                }, this.dssRetryDelay || DSS_RETRY_DELAY);
             },
         );
+    }
+
+    /**
+     * Reports a failed connection check - loudly once, then quietly.
+     *
+     * The first failure is an error with the hint what to check. Every further failure with
+     * an error already reported goes to debug: nothing has changed, info.connection stays
+     * false, and a line every five minutes for hours helps nobody. A failure with a NEW error
+     * is reported again - a dSS that accepts the connection but refuses the login needs
+     * somebody to act, even in the middle of an outage.
+     *
+     * @param {unknown} err why the check failed
+     */
+    noteDssUnreachable(err) {
+        const message = configUtils.errorMessage(err);
+        const retryIn = Digitalstrom.formatDuration(this.dssRetryDelay || DSS_RETRY_DELAY);
+        const outage = this.dssOutage;
+        if (!outage) {
+            this.dssOutage = { since: Date.now(), failures: 1, reported: new Set([message]) };
+            this.log.error(
+                `Cannot reach the DSS at ${this.config.host} (getName): ${message}. Please check the host, the network ` +
+                    `and the App-Token in the adapter settings. The adapter asks again every ${retryIn} and only ` +
+                    'reports a different error or the moment the DSS answers again',
+            );
+            return;
+        }
+        outage.failures++;
+        if (!outage.reported.has(message)) {
+            outage.reported.add(message);
+            this.log.error(
+                `The DSS at ${this.config.host} still does not answer, now with a different error: ${message}`,
+            );
+            return;
+        }
+        this.log.debug(
+            `DSS still not reachable (${outage.failures} failed checks in ${Digitalstrom.formatDuration(
+                Date.now() - outage.since,
+            )}): ${message} - asking again in ${retryIn}`,
+        );
+    }
+
+    /**
+     * Closes an outage noted by noteDssUnreachable() with one line saying how long it took.
+     */
+    noteDssReachable() {
+        const outage = this.dssOutage;
+        if (!outage) {
+            return;
+        }
+        this.dssOutage = null;
+        this.log.info(
+            `The DSS answers again after ${Digitalstrom.formatDuration(Date.now() - outage.since)} (${
+                outage.failures
+            } failed check${outage.failures === 1 ? '' : 's'}) - continuing the start`,
+        );
+    }
+
+    /**
+     * Formats a duration for a log line: "45 s", "5 min", "4 min 12 s", "8 h 37 min".
+     *
+     * @param {number} ms duration in milliseconds
+     * @returns {string} readable duration, rounded to seconds
+     */
+    static formatDuration(ms) {
+        const total = Math.max(0, Math.round(ms / 1000));
+        const hours = Math.floor(total / 3600);
+        const minutes = Math.floor((total % 3600) / 60);
+        const seconds = total % 60;
+        if (hours) {
+            return minutes ? `${hours} h ${minutes} min` : `${hours} h`;
+        }
+        if (minutes) {
+            return seconds ? `${minutes} min ${seconds} s` : `${minutes} min`;
+        }
+        return `${seconds} s`;
     }
 
     /**

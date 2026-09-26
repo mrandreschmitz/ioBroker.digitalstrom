@@ -284,6 +284,13 @@ Die Geräte sind als „Klemme/dSM"."Geräte-ID" strukturiert, darunter jeweils:
   `heating`, meldet der dSS als „unknown“, solange er keine Information dazu hat. Ein solcher State
   hat keinen Wert (null), bis der dSS active oder inactive meldet. Wer null in einen State
   schreibt, schickt damit nichts an den dSS.
+* **Ein dSS, der nicht erreichbar ist**: Antwortet der dSS beim Start nicht (etwa während er neu
+  startet, ein Update installiert oder das Netzwerk ausgefallen ist), läuft der Adapter weiter und
+  fragt alle 5 Minuten erneut, statt sich selbst neu zu starten. Die erste fehlgeschlagene Prüfung
+  steht als Fehler im Log, mit dem Hinweis, was zu prüfen ist. Weitere Prüfungen erscheinen nur auf
+  debug, ein anderer Fehler wird noch einmal gemeldet. Eine Info-Zeile sagt, wann der dSS wieder
+  antwortet und wie lange er nicht erreichbar war, danach läuft der Start weiter. Bis dahin bleibt
+  `info.connection` auf false.
 
 ## Bekannte Einschränkungen und Systemeigenheiten
 
@@ -376,6 +383,11 @@ Der vollständige Changelog inklusive der Historie von Apollon77 steht in der en
   restarting because ...` mit dem Grund auf Info-Ebene. Die Instanz fährt vor dem Neustart sauber herunter. Im
   Compact-Modus läuft die alte Instanz dadurch nicht mehr neben der neuen weiter, und der Neustart folgt nach 1 s
   statt nach 30 s
+* **Ein nicht erreichbarer dSS füllt nicht mehr das Log.** Solange der dSS beim Start nicht erreichbar war,
+  beendete der Adapter alle 5 Minuten seinen Prozess und startete neu: Eine Nacht auf einer echten Anlage brachte
+  102 Neustarts, 204 Fehlerzeilen und 101 Warnungen. Jetzt läuft er weiter und fragt alle 5 Minuten erneut. Es gibt
+  einen Fehler mit dem Hinweis, was zu prüfen ist, und eine Info-Zeile mit der Dauer, sobald der dSS wieder
+  antwortet. Ein anderer Fehler zwischendurch, etwa eine abgelehnte Anmeldung, wird noch einmal gemeldet
 
 ### 2.4.25 (2026-09-17)
 

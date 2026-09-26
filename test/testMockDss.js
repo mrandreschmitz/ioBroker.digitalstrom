@@ -4,7 +4,7 @@ const DSS = require('../lib/dss');
 const DSSQueue = require('../lib/dssQueue');
 const DSSStructure = require('../lib/dssStructure');
 const { createMockDss, APP_TOKEN } = require('./lib/mockDss');
-const { delay, callbackPromise, nodeCallbackPromise } = require('./lib/helpers');
+const { delay, callbackPromise, nodeCallbackPromise, waitFor } = require('./lib/helpers');
 
 // adapter-core needs a running js-controller, which is not available here. Only the
 // prototype methods are used, exactly like in testAdapter.js.
@@ -81,6 +81,14 @@ function createAdapterContext(host, config = {}) {
         restartAdapter(timeout) {
             this.restarts.push(timeout);
         },
+        waitForDss: Digitalstrom.prototype.waitForDss,
+        noteDssReachable: Digitalstrom.prototype.noteDssReachable,
+        noteDssUnreachable: Digitalstrom.prototype.noteDssUnreachable,
+        /** @type {NodeJS.Timeout|null} */
+        dssRetryTimeout: null,
+        dssRetryDelay: 50,
+        /** @type {{since: number, failures: number, reported: Set<string>}|null} */
+        dssOutage: null,
         subscribeStates: () => {},
         clearAdditionalObjects: () => {},
     };
@@ -291,6 +299,37 @@ describe('Integration against a local mock DSS', function () {
             levels.length = 0;
             ctx.dssStruct.logQueueError('Error while set State for apartment-user', new Error('HTTP 500'));
             expect(levels).to.include('warn');
+        });
+    });
+
+    describe('a dSS that refuses connections', () => {
+        // The real client against a port nobody listens on - what the production log of
+        // 26.09.2026 showed for 8.5 hours: connect ECONNREFUSED on the login
+        it('is asked again in the same process until it answers', async () => {
+            const port = new URL(mock.host()).port;
+            await mock.stop();
+            /** @type {string[]} */
+            const errors = [];
+            /** @type {string[]} */
+            const infos = [];
+            ctx.log = { ...silentLog, error: msg => errors.push(String(msg)), info: msg => infos.push(String(msg)) };
+            /** @type {any[]} */
+            const answers = [];
+            Digitalstrom.prototype.waitForDss.call(ctx, dssName => answers.push(dssName));
+            await waitFor(() => !!ctx.dssOutage && ctx.dssOutage.failures >= 3);
+            expect(errors, 'one error, not one per check').to.have.lengthOf(1);
+            expect(errors[0]).to.contain('ECONNREFUSED');
+
+            // The dSS is back on the same address
+            mock = createMockDss();
+            await new Promise(resolve => mock.server.listen(Number(port), '127.0.0.1', () => resolve(undefined)));
+            await waitFor(() => answers.length > 0);
+
+            expect(answers[0].result.name).to.equal('Test Apartment');
+            expect(ctx.restarts, 'the process was never restarted').to.deep.equal([]);
+            expect(infos.filter(msg => msg.includes('answers again'))).to.have.lengthOf(1);
+            expect(errors).to.have.lengthOf(1);
+            expect(mock.pathsCalled('apartment/getName'), 'one check reached the dSS').to.have.lengthOf(1);
         });
     });
 

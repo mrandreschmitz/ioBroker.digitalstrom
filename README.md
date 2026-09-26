@@ -184,6 +184,7 @@ The devices are structured with "circuit/dSM"."deviceID" and the subsctructure i
 * **Momentary scenes and button presses**: Stop, Increment, Decrement, Area Stepping Continue and Impulse are commands, not positions - the dSS sends a callScene for them and never the undoScene that would release it again. Their `scenes.<name>` therefore goes true and falls back to false half a second later, so a rule on it fires on every press instead of only on the first one ever. A repeat within that half second re-arms the release rather than adding a second edge, because a wall switch repeats its Stop. `scenes.sceneId` is not released and keeps answering which scene was called last. `<device>.<n>.button` follows the same rule for the same reason: the dSS reports a press and never takes it back, so it goes true and falls back half a second later. `buttonClickType` and `buttonHoldCount` are not released - they describe the press that happened, not the moment.
 * **The first two minutes after a start**: the adapter subscribes to the dSS events before it has created its objects, so almost nothing is lost while a large installation is being built. Sensor values, states and binary inputs that arrive in that window are applied once the objects exist, on top of the initial snapshot. Scene calls and button presses in that window are deliberately NOT caught up - acting on a press minutes after it happened would be worse than missing it. The last called scene of every ZONE GROUP is re-read at the end of the start, so a group scene missed there is corrected; a scene the dSS reported for a single device is not, and stays as it was until the next call reaches it.
 * **A state the dSS does not know**: the dSS reports some on/off states, for example the room state `heating`, as "unknown" as long as it has no information. Such a state has no value (null) until the dSS reports active or inactive. Writing null into a state sends nothing to the dSS.
+* **A dSS that cannot be reached**: when the dSS does not answer at startup (for example while it restarts, installs an update or the network is down), the adapter keeps running and asks again every 5 minutes instead of restarting itself. The first failed check is logged as an error that says what to check. Further checks are only logged at debug level, and a different error is reported once more. One info line tells when the dSS answers again and how long it could not be reached, then the start continues. Until then `info.connection` stays false.
 
 ## Known Issues / System design effects
 * The digitalSTROM system is scene-centric by design: most actions are scene calls rather than
@@ -258,6 +259,11 @@ It is published under the same MIT license; the original copyright notice is kep
   because ...` with the reason at info level. The instance shuts down cleanly before it restarts. In compact
   mode that keeps the old instance from running on next to the new one, and the restart follows after 1 s
   instead of 30 s
+* **An unreachable dSS no longer fills the log.** While the dSS could not be reached at startup, the adapter ended
+  its process every 5 minutes and started again: one night on a real installation produced 102 restarts, 204 error
+  lines and 101 warnings. It now keeps running and asks again every 5 minutes. There is one error that says what to
+  check, and one info line with the duration when the dSS answers again. A different error in between, for example
+  a refused login, is reported once more
 
 ### 2.4.25 (2026-09-17)
 

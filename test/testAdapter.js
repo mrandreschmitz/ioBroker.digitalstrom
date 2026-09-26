@@ -70,6 +70,14 @@ function createContext(overrides = {}) {
         restartAdapter(timeout) {
             this.restarts.push(timeout);
         },
+        waitForDss: Digitalstrom.prototype.waitForDss,
+        noteDssReachable: Digitalstrom.prototype.noteDssReachable,
+        noteDssUnreachable: Digitalstrom.prototype.noteDssUnreachable,
+        /** @type {NodeJS.Timeout|null} */
+        dssRetryTimeout: null,
+        dssRetryDelay: 5,
+        /** @type {{since: number, failures: number, reported: Set<string>}|null} */
+        dssOutage: null,
         eventLog: Digitalstrom.prototype.eventLog,
         releaseMomentaryState: Digitalstrom.prototype.releaseMomentaryState,
         parkable: Digitalstrom.prototype.parkable,
@@ -1290,6 +1298,180 @@ describe('Adapter logic', () => {
             Digitalstrom.prototype.restartAdapter.call(ctx, 1, 'second');
             await waitFor(() => stops.length > 0);
             expect(stops.map(params => params.reason)).to.deep.equal(['restarting because first']);
+        });
+    });
+
+    describe('a dSS that does not answer at startup', () => {
+        const refused = () =>
+            new Error('Request error for /json/system/loginApplication: connect ECONNREFUSED 10.13.10.4:8080');
+        const loginFailed = () => new Error('Login failed: Application Authentication failed');
+        const answer = { ok: true, result: { name: 'dSS' } };
+
+        /**
+         * @param {Array<Error|Record<string, any>|Promise<any>>} answers one per check, the last one repeats; an
+         *   Error rejects, a promise is handed out as it is
+         * @param {Record<string, any>} [overrides]
+         * @returns {Record<string, any>} context whose log lines are collected in ctx.lines
+         */
+        function outageContext(answers, overrides = {}) {
+            /** @type {Array<[string, string]>} */
+            const lines = [];
+            const log = {
+                silly: () => {},
+                debug: msg => lines.push(['debug', String(msg)]),
+                info: msg => lines.push(['info', String(msg)]),
+                warn: msg => lines.push(['warn', String(msg)]),
+                error: msg => lines.push(['error', String(msg)]),
+            };
+            let checks = 0;
+            const dss = {
+                stopped: false,
+                requestAsync: (dssClass, dssFunction) => {
+                    expect(`${dssClass}/${dssFunction}`).to.equal('apartment/getName');
+                    const next = answers[Math.min(checks++, answers.length - 1)];
+                    if (next instanceof Promise) {
+                        return next;
+                    }
+                    return next instanceof Error ? Promise.reject(next) : Promise.resolve(next);
+                },
+                unsubscribeAllEvents: cb => cb(0),
+                stop() {
+                    this.stopped = true;
+                },
+            };
+            return createContext({
+                log,
+                lines,
+                dss,
+                config: { host: '10.13.10.4' },
+                checks: () => checks,
+                dssQueue: { stop: () => {} },
+                dssStruct: { clearTimeouts: () => {} },
+                stopGuardTimeout: 20,
+                ...overrides,
+            });
+        }
+
+        const linesOf = (ctx, level) => ctx.lines.filter(([lineLevel]) => lineLevel === level).map(([, msg]) => msg);
+
+        // The night of 26.09.2026: 102 process restarts in 8.5 hours, each with two error
+        // lines and a js-controller warning - for a dSS that simply refused connections
+        it('waits in the same process and reports the outage once', async () => {
+            const ctx = outageContext([refused(), refused(), refused(), answer]);
+            /** @type {any[]} */
+            const started = [];
+            Digitalstrom.prototype.waitForDss.call(ctx, name => started.push(name));
+            await waitFor(() => started.length > 0);
+
+            expect(ctx.checks(), 'three failed checks and the answer').to.equal(4);
+            expect(started, 'the start continues exactly once').to.deep.equal([answer]);
+            expect(ctx.restarts, 'no process restart for an outage').to.deep.equal([]);
+            const errors = linesOf(ctx, 'error');
+            expect(errors, 'one error for the whole outage').to.have.lengthOf(1);
+            expect(errors[0]).to.contain('10.13.10.4').and.to.contain('ECONNREFUSED').and.to.contain('App-Token');
+            expect(linesOf(ctx, 'debug').filter(msg => msg.includes('still not reachable'))).to.have.lengthOf(2);
+            const infos = linesOf(ctx, 'info');
+            expect(infos, 'one line when it is back').to.have.lengthOf(1);
+            expect(infos[0]).to.match(/answers again after \d+ s \(3 failed checks\)/);
+            expect(ctx.dssOutage, 'the outage is closed').to.equal(null);
+        });
+
+        // A dSS that accepts the connection again but refuses the login needs somebody to act
+        it('reports a different error once more, and each error only once', async () => {
+            const ctx = outageContext([refused(), loginFailed(), refused(), loginFailed(), answer]);
+            /** @type {any[]} */
+            const started = [];
+            Digitalstrom.prototype.waitForDss.call(ctx, name => started.push(name));
+            await waitFor(() => started.length > 0);
+            const errors = linesOf(ctx, 'error');
+            expect(errors).to.have.lengthOf(2);
+            expect(errors[1]).to.contain('different error').and.to.contain('Login failed');
+            expect(linesOf(ctx, 'info')).to.have.lengthOf(1);
+            expect(linesOf(ctx, 'info')[0]).to.contain('(4 failed checks)');
+        });
+
+        it('says nothing extra when the dSS answers right away', async () => {
+            const ctx = outageContext([answer]);
+            /** @type {any[]} */
+            const started = [];
+            Digitalstrom.prototype.waitForDss.call(ctx, name => started.push(name));
+            await waitFor(() => started.length > 0);
+            expect(ctx.lines).to.deep.equal([]);
+            expect(ctx.dssRetryTimeout).to.equal(null);
+        });
+
+        // A long delay on purpose: the check must end because the timer is gone, not
+        // because the test is over before it fires
+        it('stops asking when the adapter is unloaded while it waits', async () => {
+            const ctx = outageContext([refused()], { dssRetryDelay: 60000 });
+            /** @type {any[]} */
+            const started = [];
+            Digitalstrom.prototype.waitForDss.call(ctx, name => started.push(name));
+            await waitFor(() => ctx.dssRetryTimeout !== null);
+            const pendingRetry = ctx.dssRetryTimeout;
+            try {
+                await new Promise(resolve => Digitalstrom.prototype.stopAdapter.call(ctx, resolve));
+                expect(ctx.dssRetryTimeout, 'the retry timer is gone').to.equal(null);
+                // The retry timer firing anyway, or any other late caller
+                Digitalstrom.prototype.waitForDss.call(ctx, name => started.push(name));
+                expect(ctx.checks(), 'no check after the unload').to.equal(1);
+                expect(started).to.deep.equal([]);
+            } finally {
+                clearTimeout(pendingRetry);
+            }
+        });
+
+        // stopAdapter() aborts a check that is still running - its rejection is the shutdown,
+        // not the next failure of an outage
+        it('treats a check the unload aborted as a shutdown, not as an outage', async () => {
+            /** @type {(err: Error) => void} */
+            let abort = () => {};
+            const inFlight = new Promise((resolve, reject) => (abort = reject));
+            const ctx = outageContext([inFlight]);
+            Digitalstrom.prototype.waitForDss.call(ctx, () => {});
+            await new Promise(resolve => Digitalstrom.prototype.stopAdapter.call(ctx, resolve));
+            abort(new Error('Client is stopped, not requesting /json/apartment/getName'));
+            // One turn of the event loop runs every promise reaction that is due
+            await new Promise(resolve => setImmediate(resolve));
+            expect(ctx.dssRetryTimeout, 'no retry after the unload').to.equal(null);
+            expect(ctx.dssOutage, 'no outage either').to.equal(null);
+            expect(linesOf(ctx, 'error')).to.deep.equal([]);
+        });
+
+        // Armed before the check, the 10 minute watchdog restarted the process during every
+        // outage longer than that - the very restart loop the waiting replaces
+        it('arms the startup watchdog only once the dSS answered', () => {
+            /** @type {any} */
+            let continueStart;
+            const ctx = createContext({
+                config: { host: '192.168.1.10', appToken: VALID_APP_TOKEN },
+                log: silentLog,
+                // never calls back, so the start stops right after the watchdog
+                objectHelper: { loadExistingObjects: () => {} },
+                createSmartHomeClient: Digitalstrom.prototype.createSmartHomeClient,
+                startEarlyEventSubscription: () => {},
+                waitForDss: cb => (continueStart = cb),
+            });
+            Digitalstrom.prototype.main.call(ctx);
+            try {
+                expect(continueStart, 'main() waits for the dSS').to.be.a('function');
+                expect(ctx.startupTimeout, 'no watchdog while the dSS does not answer').to.equal(undefined);
+                continueStart(answer);
+                expect(ctx.startupTimeout, 'the watchdog runs once the dSS answered').to.not.equal(undefined);
+            } finally {
+                clearTimeout(ctx.startupTimeout);
+                clearInterval(ctx.apiActivityTimer);
+                ctx.dss.stop();
+            }
+        });
+
+        it('formats the outage duration for the log', () => {
+            expect(Digitalstrom.formatDuration(0)).to.equal('0 s');
+            expect(Digitalstrom.formatDuration(45400)).to.equal('45 s');
+            expect(Digitalstrom.formatDuration(300000)).to.equal('5 min');
+            expect(Digitalstrom.formatDuration(252000)).to.equal('4 min 12 s');
+            expect(Digitalstrom.formatDuration((8 * 60 + 37) * 60000 + 12000)).to.equal('8 h 37 min');
+            expect(Digitalstrom.formatDuration(2 * 3600000)).to.equal('2 h');
         });
     });
 
