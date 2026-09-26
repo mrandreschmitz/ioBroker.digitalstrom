@@ -140,6 +140,30 @@ function createMockDss(options = {}) {
             }
             return { ok: true, result: { events: [] } };
         },
+        // The sensor states of the dSS apps, keyed by app and state name like the real
+        // query2 answer. The user-defined states appear here as well; the adapter
+        // already builds them from property/query above.
+        'property/query2': query => {
+            if (!String(query.query).startsWith('/usr/addon-states/')) {
+                return { ok: true, result: {} };
+            }
+            return {
+                ok: true,
+                result: {
+                    'system-addon-user-defined-states': {
+                        testUserState: { name: 'testUserState', value: 2, state: 'inactive' },
+                    },
+                    'heating-controller': {
+                        'zone.zone5.group0.type9.passiveCooling': {
+                            name: 'zone.zone5.group0.type9.passiveCooling',
+                            value: 1,
+                            state: 'active',
+                            callOrigin: 9,
+                        },
+                    },
+                },
+            };
+        },
         'zone/getReachableScenes': () => ({ ok: true, result: { reachableScenes: [0, 5], userSceneNames: [] } }),
         'zone/getLastCalledScene': () => ({ ok: true, result: { scene: 0 } }),
         'circuit/getConsumption': () => ({ ok: true, result: { consumption: 42 } }),

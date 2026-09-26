@@ -159,7 +159,7 @@ In the structures several "types" of data are included:
 For the Apartment a structure with "floor"."zone" is created with the following substructures inside this:
 * per device group a sub folder is created including the available group scenes
 * scenes for this zone
-* states for this zone
+* states for this zone, in rooms the climate control cools passively also the read-only `passiveCooling`
 * sensor values for this zone
 
 On Apartment level all device groups are available with it's scenes.
@@ -268,6 +268,12 @@ It is published under the same MIT license; the original copyright notice is kep
   an object was logged at info level every time it changed: a room crossing its passive cooling threshold wrote
   the same line four times in five hours. It is now logged once per run at info level, with the request to report
   the name, and every further change of it at debug level
+* **Rooms under passive cooling have a read-only state for it.** The climate control of the dSS keeps a state for
+  each room it cools passively: active while the room temperature is above the passive cooling threshold set for
+  that room, inactive once it drops below. The dSS keeps such states of its apps apart from the other states, so
+  the adapter never read it and only logged each change as `Unhandled State Change`. It is now read at startup
+  and becomes `apartment.<floor>.<room>.states.passiveCooling` (true/false), with a value right after the start
+  and every change the dSS reports. A dSS that does not offer these states starts as before
 
 ### 2.4.25 (2026-09-17)
 

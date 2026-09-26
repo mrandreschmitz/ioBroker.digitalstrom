@@ -219,7 +219,8 @@ Für die Wohnung wird eine Struktur „Etage"."Raum" angelegt, darunter jeweils:
 
 * pro Gerätegruppe ein Unterordner mit den verfügbaren Gruppenszenen
 * die Szenen dieses Raums
-* die States dieses Raums
+* die States dieses Raums, in Räumen, die die Klimasteuerung passiv kühlt, auch das schreibgeschützte
+  `passiveCooling`
 * die Sensorwerte dieses Raums
 
 Auf Wohnungsebene sind alle Gerätegruppen mit ihren Szenen verfügbar. Ebenfalls auf Wohnungsebene
@@ -392,6 +393,13 @@ Der vollständige Changelog inklusive der Historie von Apollon77 steht in der en
   State ohne Objekt erschien bei jeder Änderung auf Info-Ebene: Ein Raum, der seine Schwelle für passive Kühlung
   überschritt, schrieb dieselbe Zeile viermal in fünf Stunden. Jetzt steht sie einmal pro Lauf auf Info-Ebene, mit
   der Bitte, den Namen zu melden, und jede weitere Änderung nur noch auf debug
+* **Räume mit passiver Kühlung haben einen schreibgeschützten State dafür.** Die Klimasteuerung des dSS führt für
+  jeden Raum, den sie passiv kühlt, einen Zustand: aktiv, solange die Raumtemperatur über der für diesen Raum
+  eingestellten Schwelle für passive Kühlung liegt, inaktiv, sobald sie darunter sinkt. Der dSS legt solche
+  Zustände seiner Apps getrennt von den übrigen States ab, deshalb las der Adapter ihn nie und schrieb jede
+  Änderung nur als `Unhandled State Change` ins Log. Jetzt liest er ihn beim Start und legt
+  `apartment.<Etage>.<Raum>.states.passiveCooling` (true/false) an, mit einem Wert direkt nach dem Start und
+  jeder Änderung, die der dSS meldet. Ein dSS, der diese Zustände nicht anbietet, startet wie bisher
 
 ### 2.4.25 (2026-09-17)
 

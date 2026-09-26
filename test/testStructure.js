@@ -2240,6 +2240,248 @@ describe('DSSStructure', () => {
         });
     });
 
+    // The climate control of a real installation (dSS20 1.19.13) keeps
+    // zone.zone<id>.group0.type9.passiveCooling for every room it regulates. It is neither
+    // in /usr/states nor among the user-defined states, so it had no object and each
+    // threshold crossing ended as "Unhandled State Change".
+    describe('sensor states of other dSS apps', () => {
+        const passiveCooling = (zoneId, state, groupId = 0) => ({
+            name: `zone.zone${zoneId}.group${groupId}.type9.passiveCooling`,
+            addon: 'heating-controller',
+            zoneId,
+            groupId,
+            sensorType: 9,
+            identifier: 'passiveCooling',
+            value: state === 'active' ? 1 : 2,
+            state,
+        });
+
+        function zoneStructure(entries = []) {
+            return createStructure({
+                dssQueue: {
+                    pushQueryQueue: (...args) => {
+                        const callback = args[args.length - 1];
+                        setImmediate(() => callback(null, { ok: true, result: { scene: 5 } }));
+                    },
+                },
+                adapter: {
+                    log: Object.assign({}, silentLogger, { info: msg => entries.push(String(msg)) }),
+                    config: {},
+                    setState: () => {},
+                    setDssState: () => {},
+                },
+            });
+        }
+
+        const duschbad = { id: 4, isPresent: true, isValid: true, name: 'Duschbad', groups: [] };
+
+        it('collectAddonSensorStates keeps the sensor states of other apps only', () => {
+            const collected = DSSStructure.collectAddonSensorStates({
+                // already apartment.userStates, and would be a second object for the same state
+                'system-addon-user-defined-states': {
+                    'zone.zone65347.group0.type11.1616436385': {
+                        name: 'zone.zone65347.group0.type11.1616436385',
+                        value: 2,
+                        state: 'inactive',
+                    },
+                },
+                'heating-controller': {
+                    'zone.zone4.group0.type9.passiveCooling': {
+                        name: 'zone.zone4.group0.type9.passiveCooling',
+                        value: 2,
+                        state: 'inactive',
+                        callOrigin: 9,
+                    },
+                    // unusable entries of a dSS answer
+                    broken: null,
+                    alsoBroken: 'text',
+                },
+                // helper states have no object on purpose
+                'system-addon-user-defined-states-helper': {
+                    '9be5e52c9e465cd880b6b06494f9dcf600_open-tilded': {
+                        name: '9be5e52c9e465cd880b6b06494f9dcf600_open-tilded',
+                        value: 2,
+                        state: 'inactive',
+                    },
+                },
+                // an entry without a name falls back to its node name
+                'some-app': { 'zone.zone2.group0.type9.passiveCooling': { value: 1, state: 'active' } },
+                'not-an-app': null,
+            });
+            expect(collected).to.deep.equal([
+                {
+                    name: 'zone.zone4.group0.type9.passiveCooling',
+                    addon: 'heating-controller',
+                    zoneId: 4,
+                    groupId: 0,
+                    sensorType: 9,
+                    identifier: 'passiveCooling',
+                    value: 2,
+                    state: 'inactive',
+                    callOrigin: 9,
+                },
+                {
+                    name: 'zone.zone2.group0.type9.passiveCooling',
+                    addon: 'some-app',
+                    zoneId: 2,
+                    groupId: 0,
+                    sensorType: 9,
+                    identifier: 'passiveCooling',
+                    value: 1,
+                    state: 'active',
+                },
+            ]);
+            expect(DSSStructure.collectAddonSensorStates(null)).to.deep.equal([]);
+        });
+
+        it('reads them with a single query2 of /usr/addon-states', async () => {
+            const requests = [];
+            const struct = createStructure({
+                dss: {
+                    requestAsync: async (dssClass, dssFunction, params) => {
+                        requests.push([dssClass, dssFunction, params]);
+                        return {
+                            ok: true,
+                            result: {
+                                'heating-controller': {
+                                    'zone.zone4.group0.type9.passiveCooling': {
+                                        name: 'zone.zone4.group0.type9.passiveCooling',
+                                        value: 1,
+                                        state: 'active',
+                                    },
+                                },
+                            },
+                        };
+                    },
+                },
+            });
+            await struct.readAddonSensorStates();
+            expect(requests).to.deep.equal([['property', 'query2', { query: '/usr/addon-states/*(*)/*(*)' }]]);
+            expect(struct.addonSensorStates.map(state => state.name)).to.deep.equal([
+                'zone.zone4.group0.type9.passiveCooling',
+            ]);
+        });
+
+        it('readAddonSensorStates never fails the start', async () => {
+            /** @type {string[]} */
+            const logged = [];
+            const record = level => msg => logged.push(`${level}: ${msg}`);
+            let call = 0;
+            const struct = createStructure({
+                dss: {
+                    requestAsync: async () => {
+                        call++;
+                        if (call === 1) {
+                            // a dSS without the node or without query2
+                            return { ok: false, message: 'Property not found' };
+                        }
+                        throw new Error('timeout');
+                    },
+                },
+                adapter: {
+                    log: {
+                        ...silentLogger,
+                        info: record('info'),
+                        warn: record('warn'),
+                        error: record('error'),
+                    },
+                    config: {},
+                },
+            });
+            await struct.readAddonSensorStates();
+            expect(struct.addonSensorStates).to.deep.equal([]);
+            await struct.readAddonSensorStates();
+            expect(call).to.equal(2);
+            expect(struct.addonSensorStates).to.deep.equal([]);
+            expect(logged, 'nothing above debug').to.deep.equal([]);
+        });
+
+        it('creates passiveCooling next to the zone states, read-only and boolean', done => {
+            const struct = zoneStructure();
+            struct.propertyStates = [{ name: 'zone.4.light', state: 'inactive' }];
+            struct.addonSensorStates = [passiveCooling(4, 'active')];
+            struct.processZone('apartment.0', duschbad, [], undefined, undefined, () => {
+                const id = 'apartment.0.4.states.passiveCooling';
+                const obj = struct.dssObjects[id];
+                expect(obj, 'the object exists').to.be.an('object');
+                expect(obj.common.type).to.equal('boolean');
+                expect(obj.common.write, 'the dSS computes it').to.equal(false);
+                expect(obj.native).to.deep.equal({ valueTrue: 'active', valueFalse: 'inactive' });
+                expect(obj.onChange, 'no write handler').to.equal(undefined);
+                expect(struct.stateMap['zone.zone4.group0.type9.passiveCooling']).to.equal(id);
+                expect(struct.initialObjectValues[id], 'a value right after the start').to.equal('active');
+                expect(struct.dssObjects['apartment.0.4.states.light'], 'the zone state stays').to.be.an('object');
+                done();
+            });
+        });
+
+        it('gives a room with only sensor states its states channel', done => {
+            const struct = zoneStructure();
+            struct.propertyStates = [];
+            struct.addonSensorStates = [passiveCooling(4, 'inactive')];
+            struct.processZone('apartment.0', duschbad, [], undefined, undefined, () => {
+                expect(struct.dssObjects['apartment.0.4.states'].type).to.equal('channel');
+                expect(struct.dssObjects['apartment.0.4.states.passiveCooling']).to.be.an('object');
+                done();
+            });
+        });
+
+        it('leaves sensor states of other rooms and of groups out of this room', done => {
+            const entries = [];
+            const struct = zoneStructure(entries);
+            struct.propertyStates = [];
+            struct.addonSensorStates = [
+                passiveCooling(2, 'active'),
+                passiveCooling(4, 'active', 48),
+                // a zone the dSS reports as not present, skipped on purpose
+                passiveCooling(7, 'active'),
+            ];
+            struct.skippedStatePrefixes.add('zone.7.');
+            struct.processZone('apartment.0', duschbad, [], undefined, undefined, () => {
+                const ids = Object.keys(struct.dssObjects);
+                expect(ids.filter(id => id.includes('passiveCooling'))).to.deep.equal([]);
+                expect(ids.filter(id => id.startsWith('apartment.0.2'))).to.deep.equal([]);
+                expect(struct.dssObjects['apartment.0.4.states'], 'no empty states channel').to.equal(undefined);
+
+                struct.reportUnmappedStates();
+                expect(entries, 'exactly one summary line').to.have.lengthOf(1);
+                expect(entries[0]).to.contain('zone.zone4.group48.type9.passiveCooling');
+                expect(entries[0], 'zone 2 was not built here').to.contain('zone.zone2.group0.type9.passiveCooling');
+                expect(entries[0], 'a skipped zone is not reported').to.not.contain('zone.zone7.');
+                done();
+            });
+        });
+
+        it('a sensor state named like a zone state does not overwrite it', done => {
+            const struct = zoneStructure();
+            struct.propertyStates = [{ name: 'zone.4.motion', state: 'inactive' }];
+            struct.addonSensorStates = [
+                {
+                    name: 'zone.zone4.group0.type9.motion',
+                    addon: 'some-app',
+                    zoneId: 4,
+                    groupId: 0,
+                    sensorType: 9,
+                    identifier: 'motion',
+                    value: 1,
+                    state: 'active',
+                },
+            ];
+            struct.processZone('apartment.0', duschbad, [], undefined, undefined, () => {
+                expect(struct.stateMap['zone.4.motion']).to.equal('apartment.0.4.states.motion');
+                expect(struct.stateMap['zone.zone4.group0.type9.motion']).to.equal('apartment.0.4.states.motion_type9');
+                const sensor = struct.dssObjects['apartment.0.4.states.motion_type9'];
+                expect(sensor.common.type).to.equal('boolean');
+                expect(sensor.common.write).to.equal(false);
+                expect(
+                    typeof struct.dssObjects['apartment.0.4.states.motion'].onChange,
+                    'the zone state is kept',
+                ).to.equal('function');
+                done();
+            });
+        });
+    });
+
     describe('instance isolation', () => {
         // Regression: this.groupTypes referenced the shared constants object, so a cluster
         // name of one apartment leaked into every other instance of the same process.

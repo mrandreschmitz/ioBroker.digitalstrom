@@ -275,6 +275,8 @@ describe('DSS', () => {
                 'event/subscribe',
                 // pure startup read of the reachable groups of a zone
                 'apartment/getReachableGroups',
+                // pure startup read of the sensor states of the dSS apps
+                'property/query2',
             ].forEach(entry => {
                 const [c, f] = entry.split('/');
                 expect(DSS.isRetryableRequest(c, f), `${entry} must be retryable`).to.equal(true);

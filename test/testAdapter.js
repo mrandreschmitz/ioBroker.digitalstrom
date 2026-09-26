@@ -1184,6 +1184,36 @@ describe('Adapter logic', () => {
             });
         });
 
+        it('maps a passiveCooling change to its boolean state', done => {
+            const { ctx, dss } = subscribedContext();
+            const id = 'apartment.0.4.states.passiveCooling';
+            const { native, ...common } = dssConstants.zoneSensorStateRoleMap.passiveCooling;
+            ctx.dssStruct.stateMap['zone.zone4.group0.type9.passiveCooling'] = id;
+            ctx.dssStruct.dssObjects[id] = { common, native };
+            Digitalstrom.prototype.initializeSubscriptions.call(ctx, () => {
+                // The event exactly as a dSS20 1.19.13 sent it when the room crossed 22 °C
+                const emit = (state, value, oldvalue) =>
+                    dss.emit('stateChange', {
+                        name: 'stateChange',
+                        properties: {
+                            callOrigin: '9',
+                            oldvalue,
+                            value,
+                            statename: 'zone.zone4.group0.type9.passiveCooling',
+                            state,
+                        },
+                        source: {},
+                    });
+                emit('active', '1', '2');
+                expect(ctx.states[id]).to.equal(true);
+                emit('inactive', '2', '1');
+                expect(ctx.states[id]).to.equal(false);
+                expect(ctx.unmappedBooleanStates.size, 'the vocabulary matches').to.equal(0);
+                dss.stop();
+                done();
+            });
+        });
+
         it('names an unknown state once at info, then at debug', done => {
             const { ctx, dss } = subscribedContext();
             /** @type {string[]} */

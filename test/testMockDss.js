@@ -176,6 +176,10 @@ describe('Integration against a local mock DSS', function () {
             expect(ids, 'the zone must exist').to.include('apartment.0.5');
             expect(ids, 'the zone scenes must exist').to.include('apartment.0.5.scenes.Preset0');
             expect(ids, 'the user state must exist').to.include('apartment.userStates.testUserState');
+            expect(ids, 'the passive cooling state of the room must exist').to.include(
+                'apartment.0.5.states.passiveCooling',
+            );
+            expect(ctx.dssStruct.initialObjectValues['apartment.0.5.states.passiveCooling']).to.equal('active');
             expect(ctx.dssStruct.stateMap['dev1.brightness']).to.equal('devices.meter1.dev1.brightness');
             expect(ctx.dssStruct.stateMap['5.1.scenes.5']).to.equal('apartment.0.5.1.scenes.Preset1');
             // Regression guard for the scene 22/25 collision
@@ -184,9 +188,13 @@ describe('Integration against a local mock DSS', function () {
 
             // Every request really went to the mock DSS
             const paths = mock.requests.map(entry => entry.path);
-            ['apartment/getStructure', 'apartment/getCircuits', 'apartment/getSensorValues', 'property/query'].forEach(
-                path => expect(paths, `${path} must have been requested`).to.include(path),
-            );
+            [
+                'apartment/getStructure',
+                'apartment/getCircuits',
+                'apartment/getSensorValues',
+                'property/query',
+                'property/query2',
+            ].forEach(path => expect(paths, `${path} must have been requested`).to.include(path));
         });
 
         it('reads the device output values when the option is on', async () => {
