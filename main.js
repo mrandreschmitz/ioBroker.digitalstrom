@@ -121,6 +121,10 @@ class Digitalstrom extends utils.Adapter {
             ...options,
             name: 'digitalstrom',
         });
+        // The host starts a compact instance with {compact: true}. js-controller keeps its
+        // own flag for that private, and restartAdapter() has to know it: in compact mode
+        // the host logs the reason of a stop as a warning.
+        this.compactMode = !!(options && options.compact);
         this.on('ready', this.onReady.bind(this));
         this.on('objectChange', this.onObjectChange.bind(this));
         this.on('stateChange', this.onStateChange.bind(this));
@@ -575,14 +579,22 @@ class Digitalstrom extends utils.Adapter {
             // Read here and not at load time: the test stubs of adapter-core do not carry it.
             const exitCode = utils.EXIT_CODES.START_IMMEDIATELY_AFTER_STOP;
             const text = `restarting because ${reason}`;
+            // In compact mode terminate() hands the reason to the host as the "signal" of its
+            // exit event, and the host logs any signal as a warning ("terminated due to
+            // restarting because ..."). There the reason is logged here at info and not passed
+            // on. undefined and not the bare exit code: terminate(156) would make 156 the signal.
+            const stopReason = this.compactMode ? undefined : text;
+            if (this.compactMode) {
+                this.log.info(text);
+            }
             if (typeof this.stop === 'function') {
                 // stop(), not terminate(): only stop() runs onUnload first. terminate() skips
                 // it, and in compact mode this instance would keep polling the dSS events and
                 // keep its timers and its websocket in the shared process next to the new one.
                 // process.exit() is no option either, it would end that whole process.
-                this.stop({ exitCode, reason: text }).catch(() => this.terminate(text, exitCode));
+                this.stop({ exitCode, reason: stopReason }).catch(() => this.terminate(stopReason, exitCode));
             } else {
-                this.terminate(text, exitCode);
+                this.terminate(stopReason, exitCode);
             }
         }, timeout || 1000);
     }

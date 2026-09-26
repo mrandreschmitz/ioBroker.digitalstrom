@@ -383,7 +383,9 @@ Der vollständige Changelog inklusive der Historie von Apollon77 steht in der en
   `Terminated (-100): Without reason` protokolliert ioBroker jetzt `Terminated (START_IMMEDIATELY_AFTER_STOP):
   restarting because ...` mit dem Grund auf Info-Ebene. Die Instanz fährt vor dem Neustart sauber herunter. Im
   Compact-Modus läuft die alte Instanz dadurch nicht mehr neben der neuen weiter, und der Neustart folgt nach 1 s
-  statt nach 30 s
+  statt nach 30 s. Im Compact-Modus schreibt der Adapter den Grund in eine eigene Info-Zeile, und die Zeile von
+  ioBroker lautet `Without reason`: Einen dort übergebenen Grund würde js-controller als Warnung des Hosts
+  protokollieren
 * **Ein nicht erreichbarer dSS füllt nicht mehr das Log.** Solange der dSS beim Start nicht erreichbar war,
   beendete der Adapter alle 5 Minuten seinen Prozess und startete neu: Eine Nacht auf einer echten Anlage brachte
   102 Neustarts, 204 Fehlerzeilen und 101 Warnungen. Jetzt läuft er weiter und fragt alle 5 Minuten erneut. Es gibt

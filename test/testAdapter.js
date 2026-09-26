@@ -1381,6 +1381,41 @@ describe('Adapter logic', () => {
             expect(terminated).to.deep.equal([['restarting because reading the DSS structure failed', 156]]);
         });
 
+        // In compact mode js-controller 7.2.2 emits exit(code, reason), and the host logs a
+        // reason as "instance ... terminated due to <reason>" at warn level
+        it('logs the reason itself and stops without one in compact mode', async () => {
+            /** @type {any[]} */
+            const stops = [];
+            /** @type {string[]} */
+            const infos = [];
+            const ctx = createContext({
+                restartTimeout: null,
+                compactMode: true,
+                log: { ...silentLog, info: msg => infos.push(msg) },
+                stop: async params => {
+                    stops.push(params);
+                },
+            });
+            Digitalstrom.prototype.restartAdapter.call(ctx, 1, 'of too many event polling errors (callScene)');
+            await waitFor(() => stops.length > 0);
+            expect(stops).to.deep.equal([{ exitCode: 156, reason: undefined }]);
+            expect(infos).to.deep.equal(['restarting because of too many event polling errors (callScene)']);
+        });
+
+        it('falls back to terminate() without a reason in compact mode', async () => {
+            /** @type {any[]} */
+            const terminated = [];
+            const ctx = createContext({
+                restartTimeout: null,
+                compactMode: true,
+                stop: () => Promise.reject(new Error('stop failed')),
+                terminate: (reason, exitCode) => terminated.push([reason, exitCode]),
+            });
+            Digitalstrom.prototype.restartAdapter.call(ctx, 1, 'reading the DSS structure failed');
+            await waitFor(() => terminated.length > 0);
+            expect(terminated, 'a bare 156 would become the signal').to.deep.equal([[undefined, 156]]);
+        });
+
         // The second reason comes with the shorter delay: a second timer would fire first
         it('schedules a single restart for several reasons', async () => {
             /** @type {any[]} */

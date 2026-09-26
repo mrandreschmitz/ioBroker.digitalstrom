@@ -258,7 +258,8 @@ It is published under the same MIT license; the original copyright notice is kep
   `Terminated (-100): Without reason`, ioBroker now logs `Terminated (START_IMMEDIATELY_AFTER_STOP): restarting
   because ...` with the reason at info level. The instance shuts down cleanly before it restarts. In compact
   mode that keeps the old instance from running on next to the new one, and the restart follows after 1 s
-  instead of 30 s
+  instead of 30 s. In compact mode the adapter writes the reason in an info line of its own, and the line of
+  ioBroker says `Without reason`: js-controller would log a reason handed over there as a warning of the host
 * **An unreachable dSS no longer fills the log.** While the dSS could not be reached at startup, the adapter ended
   its process every 5 minutes and started again: one night on a real installation produced 102 restarts, 204 error
   lines and 101 warnings. It now keeps running and asks again every 5 minutes. There is one error that says what to
