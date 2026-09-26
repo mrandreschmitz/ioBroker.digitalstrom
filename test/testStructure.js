@@ -2212,6 +2212,32 @@ describe('DSSStructure', () => {
                 expect(info[0]).to.not.contain('a35af100');
             });
 
+            // Every value of ButtonInputMode (dss-mainline modelconst.h) on an even and an
+            // odd master, against Device::is2WayMaster() (device.cpp): 6/8/10/12 always,
+            // 13/14 only on an even dSID, nothing else
+            it('follows Device::is2WayMaster() for every buttonInputMode', () => {
+                const always = [6, 8, 10, 12];
+                const evenOnly = [13, 14];
+                const modes = [0, 1, 2, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 22, 23, 65, 255];
+                const evenDsuid = master.dSUID; // serial ...02a35a28
+                const oddDsuid = '302ed89f43f000000000458002a35a2900';
+                const partnerOf = { [evenDsuid]: 'a35a2900', [oddDsuid]: 'a35a2a00' };
+                for (const dSUID of [evenDsuid, oddDsuid]) {
+                    const even = dSUID === evenDsuid;
+                    for (const mode of modes) {
+                        const dev = { dSUID, isVdcDevice: false, buttonInputMode: mode };
+                        const expected = always.includes(mode) || (even && evenOnly.includes(mode)) ? dev : undefined;
+                        expect(
+                            DSSStructure.twoWayMasterOf(
+                                `dev.302ed89f43f000000000458002${partnerOf[dSUID]}.0`,
+                                new Map([[dSUID, dev]]),
+                            ),
+                            `mode ${mode} on an ${even ? 'even' : 'odd'} dSID`,
+                        ).to.equal(expected);
+                    }
+                }
+            });
+
             it('takes TWO_WAY and ONE_WAY masters only on an even dSID, as the dSS does', () => {
                 const odd = { dSUID: '302ed89f43f000000000458002a35a2900', isVdcDevice: false, buttonInputMode: 13 };
                 const even = Object.assign({}, master, { buttonInputMode: 14 });

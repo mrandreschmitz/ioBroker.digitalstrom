@@ -222,9 +222,30 @@ describe('common.write of an existing installation', () => {
         expect(extended[0].common.write).to.equal(false);
     });
 
-    it('leaves it alone on the start after that', async () => {
+    // js-controller adds these to every object it stores
+    const asStored = obj => ({
+        ...obj,
+        _id: `digitalstrom.0.${ID}`,
+        from: 'system.adapter.digitalstrom.0',
+        user: 'system.user.admin',
+        ts: 1,
+        acl: { object: 1636, state: 1636, owner: 'system.user.admin', ownerGroup: 'system.group.administrator' },
+    });
+
+    // Without `user` on purpose: the helper strips from/ts/acl/_id but not user, so a real
+    // stored object is extended again at every start anyway. This isolates the flag.
+    it('the flag alone no longer makes the stored object differ', async () => {
         const stored = definition({ read: true, write: false });
         expect(await start(stored, definition({ write: false })), 'nothing to write').to.deep.equal([]);
+    });
+
+    // An object as a real installation stores it (5300 of 5301 carry "user") - whatever
+    // the helper writes again, the flag must not flip back
+    it('a real stored object may be extended again, but the flag stays false', async () => {
+        const extended = await start(asStored(definition({ read: true, write: false })), definition({ write: false }));
+        for (const payload of extended) {
+            expect(payload.common.write).to.equal(false);
+        }
     });
 
     // Why the flag must not be put into the definitions of the output channels: the
