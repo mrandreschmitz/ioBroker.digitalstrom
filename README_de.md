@@ -360,6 +360,11 @@ Der vollständige Changelog inklusive der Historie von Apollon77 steht in der en
   an, obwohl eine Änderung nichts bewirkte. Die schreibbaren States (Szenen, Licht, Rollläden, einkanalige
   Ausgänge, Raumsensoren, User-States, Sollwerte) bleiben, wie sie sind. Das Flag wird beim ersten Start
   automatisch korrigiert
+* **Namen mit HTML-Codes werden einmal korrigiert.** Ältere dSS-Firmware legte die Namen von Klemmen, Räumen und
+  Geräten mit HTML-Codes ab, zum Beispiel `Schlafen &amp; Bad` statt `Schlafen & Bad`, und die damals angelegten
+  Objekte behielten diesen Namen – der Adapter lässt Objektnamen bewusst stehen, damit eigene Umbenennungen
+  erhalten bleiben. Ein solcher Name wird jetzt einmal durch den Namen ersetzt, den der dSS heute meldet, und das
+  Log vermerkt es. Einen Namen, den Sie selbst geändert haben, rührt der Adapter nicht an
 
 ### 2.4.25 (2026-09-17)
 

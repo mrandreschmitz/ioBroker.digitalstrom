@@ -243,6 +243,11 @@ It is published under the same MIT license; the original copyright notice is kep
   carried no write flag at all, so the admin offered to edit them although a change had no effect. The states that
   can be written (scenes, lights, blinds, single-channel outputs, room sensors, user states, set points) are
   unchanged. The flag is corrected automatically on the first start
+* **Names stored with HTML codes are corrected once.** Older dSS firmware kept the names of circuits, rooms and
+  devices with HTML codes, for example `Schlafen &amp; Bad` instead of `Schlafen & Bad`, and the objects created
+  back then kept that name, because the adapter leaves object names alone so that your own renames survive. Such
+  a name is now replaced once by the name the dSS reports today, and the log says so. A name you changed yourself
+  is not touched
 
 ### 2.4.25 (2026-09-17)
 

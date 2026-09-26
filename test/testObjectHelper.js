@@ -234,3 +234,53 @@ describe('common.write of an existing installation', () => {
         expect(extended[0].common.write).to.equal(false);
     });
 });
+
+describe('objectHelper name handling', () => {
+    // registerObjects() relies on this: ['name'] keeps the stored name of an existing
+    // object, [] writes the name from the dSS. The helper is a dependency, so pin it here.
+    function storedFolder(name) {
+        return {
+            _id: 'digitalstrom.0.devices.m1',
+            type: 'folder',
+            common: { name, read: true },
+            native: {},
+            from: 'system.adapter.digitalstrom.0',
+            user: 'system.user.admin',
+            ts: 1,
+        };
+    }
+
+    function run(keep, done, check) {
+        const payloads = [];
+        const helper = Digitalstrom.createObjectHelper(silentLog);
+        const adapter = fakeAdapter('digitalstrom.0', []);
+        adapter.getAdapterObjects = cb => cb({ 'digitalstrom.0.devices.m1': storedFolder('Schlafen &amp; Bad') });
+        adapter.getObject = (id, cb) => cb(null, storedFolder('Schlafen &amp; Bad'));
+        adapter.extendObject = (id, obj, cb) => {
+            payloads.push(obj);
+            cb && cb();
+        };
+        helper.init(adapter);
+        helper.loadExistingObjects(() => {
+            helper.setOrUpdateObject('devices.m1', { type: 'folder', common: { name: 'Schlafen & Bad' } }, keep);
+            helper.processObjectQueue(() => {
+                check(payloads);
+                done();
+            });
+        });
+    }
+
+    it("['name'] keeps the stored name of an existing object", done => {
+        run(['name'], done, payloads => {
+            expect(payloads).to.have.lengthOf(1);
+            expect(payloads[0].common).to.not.have.property('name');
+        });
+    });
+
+    it('[] writes the name', done => {
+        run([], done, payloads => {
+            expect(payloads).to.have.lengthOf(1);
+            expect(payloads[0].common.name).to.equal('Schlafen & Bad');
+        });
+    });
+});

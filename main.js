@@ -1890,11 +1890,52 @@ class Digitalstrom extends utils.Adapter {
         this.log.debug(`${handled ? '' : 'UNHANDLED '}EVENT: ${eventName}: ${JSON.stringify(event)}`);
     }
 
+    /**
+     * Undoes the HTML escaping that older dSS firmware applied to every name it stored.
+     *
+     * The dSS ran each name set through its JSON API through escapeHTML() and handed the
+     * stored text out unchanged, so getCircuits answered "Schlafen &amp; Bad" (dss-mainline
+     * src/util.cpp escapeHTML(), src/web/handler/circuitrequesthandler.cpp setName). Current
+     * firmware answers "Schlafen & Bad". One pass on purpose: escapeHTML() replaced "&"
+     * first, so "&amp;lt;" was a literal "&lt;" and has to stay one. "&#39;" is accepted as
+     * the short spelling of the same apostrophe.
+     *
+     * @param {string} text name as it was stored
+     * @returns {string} the name as it was typed in the dSS
+     */
+    static decodeDssEntities(text) {
+        /** @type {Record<string, string>} */
+        const entities = { amp: '&', quot: '"', '#039': "'", '#39': "'", lt: '<', gt: '>' };
+        return text.replace(/&(amp|quot|#0?39|lt|gt);/g, (match, entity) => entities[entity]);
+    }
+
+    /**
+     * True when the stored name is nothing but the old dSS escaping of today's name.
+     *
+     * Nobody chose such a name, so it may be replaced. Any other difference is a rename by
+     * the user, and that one is kept.
+     *
+     * @param {unknown} storedName common.name of the existing object
+     * @param {unknown} wantedName name the dSS reports now
+     * @returns {boolean} true if the stored name has to be replaced once
+     */
+    static isDssEscapedName(storedName, wantedName) {
+        return (
+            typeof storedName === 'string' &&
+            typeof wantedName === 'string' &&
+            storedName !== wantedName &&
+            Digitalstrom.decodeDssEntities(storedName) === wantedName
+        );
+    }
+
     registerObjects() {
         const dssStruct = this.dssStruct;
         if (!dssStruct) {
             return;
         }
+        // Read before the loop: setOrUpdateObject() removes every object it is handed from
+        // this list, whatever is left afterwards is deleted as unknown
+        const existing = this.objectHelper.existingStates || {};
         const objNames = Object.keys(dssStruct.dssObjects);
         this.log.info(`Create ${objNames.length} objects ...`);
         objNames.forEach(id => {
@@ -1916,7 +1957,16 @@ class Digitalstrom extends utils.Adapter {
                 obj.common.write = typeof onChange === 'function';
             }
 
-            this.objectHelper.setOrUpdateObject(id, obj, ['name'], initValue, onChange);
+            // The stored name normally wins, the user may have renamed the object. An object
+            // created while the dSS still escaped its names kept "Schlafen &amp; Bad" that way
+            // forever. That name is written ONCE - from the next start on both are equal and
+            // the stored name wins again.
+            const storedName = existing[id] && existing[id].common ? existing[id].common.name : undefined;
+            const repairName = Digitalstrom.isDssEscapedName(storedName, obj.common && obj.common.name);
+            if (repairName) {
+                this.log.info(`Name of ${id} corrected from "${storedName}" to "${obj.common.name}"`);
+            }
+            this.objectHelper.setOrUpdateObject(id, obj, repairName ? [] : ['name'], initValue, onChange);
         });
     }
 

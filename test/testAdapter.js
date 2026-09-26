@@ -986,6 +986,68 @@ describe('Adapter logic', () => {
                 });
             struct.clearTimeouts();
         });
+
+        it('replaces a stored name only when it is the old dSS escaping of the current one', () => {
+            const preserved = {};
+            const infos = [];
+            // Measured on a real installation: three circuit folders were named
+            // "Schlafen &amp; Bad" while getCircuits delivers "Schlafen & Bad"
+            const ctx = createContext({
+                log: { ...silentLog, info: msg => infos.push(String(msg)) },
+                dssStruct: {
+                    dssObjects: {
+                        'devices.m1': { type: 'folder', common: { name: 'Schlafen & Bad' } },
+                        'devices.m2': { type: 'folder', common: { name: 'Keller & Heizung' } },
+                        'devices.m3': { type: 'folder', common: { name: 'Küche' } },
+                        'devices.m4': { type: 'folder', common: { name: 'Büro & Duschbad' } },
+                        'apartment.0.5': { type: 'folder', common: { name: "Eltern's Zimmer" } },
+                    },
+                },
+                objectHelper: {
+                    existingStates: {
+                        'devices.m1': { type: 'folder', common: { name: 'Schlafen &amp; Bad' } },
+                        // renamed by the user - must survive
+                        'devices.m2': { type: 'folder', common: { name: 'Heizungskeller' } },
+                        'devices.m3': { type: 'folder', common: { name: 'Küche' } },
+                        // devices.m4 is new
+                        'apartment.0.5': { type: 'folder', common: { name: 'Eltern&#039;s Zimmer' } },
+                    },
+                    setOrUpdateObject: (id, obj, keep) => (preserved[id] = keep),
+                },
+            });
+
+            Digitalstrom.prototype.registerObjects.call(ctx);
+
+            expect(preserved).to.deep.equal({
+                'devices.m1': [],
+                'devices.m2': ['name'],
+                'devices.m3': ['name'],
+                'devices.m4': ['name'],
+                'apartment.0.5': [],
+            });
+            expect(infos.filter(msg => msg.includes('corrected'))).to.have.lengthOf(2);
+            expect(infos.join('\n')).to.contain('"Schlafen &amp; Bad" to "Schlafen & Bad"');
+        });
+    });
+
+    describe('isDssEscapedName', () => {
+        it('decodes exactly what escapeHTML() of the dSS produced, in one pass', () => {
+            expect(Digitalstrom.decodeDssEntities('Wohnen, Flur &amp; Garten')).to.equal('Wohnen, Flur & Garten');
+            expect(Digitalstrom.decodeDssEntities('&quot;a&quot; &#039;b&#039; &lt;c&gt;')).to.equal(`"a" 'b' <c>`);
+            expect(Digitalstrom.decodeDssEntities('&amp;lt;'), 'a literal "&lt;" stays one').to.equal('&lt;');
+            expect(Digitalstrom.decodeDssEntities('A&nbsp;B'), 'the dSS never produced it').to.equal('A&nbsp;B');
+            expect(Digitalstrom.decodeDssEntities('Küche')).to.equal('Küche');
+        });
+
+        it('only accepts the escaped form of the current name', () => {
+            expect(Digitalstrom.isDssEscapedName('Schlafen &amp; Bad', 'Schlafen & Bad')).to.equal(true);
+            expect(Digitalstrom.isDssEscapedName('Schlafen &amp; Bad Scenes', 'Schlafen & Bad Scenes')).to.equal(true);
+            expect(Digitalstrom.isDssEscapedName('Schlafen & Bad', 'Schlafen & Bad'), 'already right').to.equal(false);
+            expect(Digitalstrom.isDssEscapedName('Mein Bad', 'Schlafen & Bad'), 'user rename').to.equal(false);
+            expect(Digitalstrom.isDssEscapedName('A & B', 'A &amp; B'), 'never towards the entity').to.equal(false);
+            expect(Digitalstrom.isDssEscapedName({ de: 'Bad &amp; WC' }, 'Bad & WC'), 'translated').to.equal(false);
+            expect(Digitalstrom.isDssEscapedName(undefined, 'Bad & WC'), 'new object').to.equal(false);
+        });
     });
 
     describe('setInitialValues', () => {
