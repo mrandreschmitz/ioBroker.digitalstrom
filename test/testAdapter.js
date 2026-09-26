@@ -1237,6 +1237,10 @@ describe('Adapter logic', () => {
                 const first = infos.filter(msg => msg.includes('zone.zone4.group0.type9.passiveCooling'));
                 expect(first, 'the first change names the state').to.have.length(1);
                 expect(first[0]).to.include('Unhandled State Change');
+                // A state the dSS added while the adapter runs gets its object at the next
+                // start - the line says so before it asks for an issue
+                expect(first[0]).to.include('next start');
+                expect(first[0].indexOf('next start')).to.be.below(first[0].indexOf('GitHub issue'));
                 // eventLog() writes every event at debug as well, so only the log line counts
                 expect(
                     debugs.filter(msg => msg.startsWith('Unhandled State Change: zone.zone4.')),

@@ -1642,13 +1642,15 @@ class Digitalstrom extends utils.Adapter {
                 // window state itself arrives via binary input and device state.
                 // Any other state is named once per run: the first line says what is
                 // missing, every repeat is noise. A room crossing its passive cooling
-                // threshold repeated the same line four times in five hours.
+                // threshold repeated the same line four times in five hours. stateMap is
+                // built at startup, so a state the dSS added since then (a new user state,
+                // a room put under regulation) only needs a restart, not an issue.
                 if (data.name === 'addonStateChange' || this.unhandledStateNames.has(statename)) {
                     this.log.debug(`Unhandled State Change: ${statename}`);
                 } else {
                     this.unhandledStateNames.add(statename);
                     this.log.info(
-                        `Unhandled State Change: ${statename} - the DSS reports a state this adapter has no object for. Please report the name in a GitHub issue so it can be mapped. Further changes of it are logged at debug level.`,
+                        `Unhandled State Change: ${statename} - the DSS reports a state this adapter has no object for. A state added in the DSS after the adapter started gets its object at the next start of the adapter; if the name is still reported after a restart, please report it in a GitHub issue so it can be mapped. Further changes of it are logged at debug level.`,
                     );
                 }
                 return;

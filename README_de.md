@@ -395,8 +395,10 @@ Der vollständige Changelog inklusive der Historie von Apollon77 steht in der en
   der dSS das App-Token ab, meldet der Adapter eine abgelehnte Anmeldung und nicht „nicht erreichbar“
 * **Ein State des dSS, den der Adapter noch nicht kennt, wird einmal genannt.** `Unhandled State Change` für einen
   State ohne Objekt erschien bei jeder Änderung auf Info-Ebene: Ein Raum, der seine Schwelle für passive Kühlung
-  überschritt, schrieb dieselbe Zeile viermal in fünf Stunden. Jetzt steht sie einmal pro Lauf auf Info-Ebene, mit
-  der Bitte, den Namen zu melden, und jede weitere Änderung nur noch auf debug
+  überschritt, schrieb dieselbe Zeile viermal in fünf Stunden. Jetzt steht sie einmal pro Lauf auf Info-Ebene und
+  jede weitere Änderung nur noch auf debug. Die Zeile sagt, dass ein State, den der dSS nach dem Start des Adapters
+  angelegt hat, beim nächsten Start sein Objekt bekommt, und bittet nur dann darum, den Namen zu melden, wenn er
+  auch nach einem Neustart noch erscheint
 * **Räume mit passiver Kühlung haben einen schreibgeschützten State dafür.** Die Klimasteuerung des dSS führt für
   jeden Raum, den sie passiv kühlt, einen Zustand: aktiv, solange die Raumtemperatur über der für diesen Raum
   eingestellten Schwelle für passive Kühlung liegt, inaktiv, sobald sie darunter sinkt. Der dSS legt solche

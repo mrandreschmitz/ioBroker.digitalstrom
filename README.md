@@ -268,8 +268,9 @@ It is published under the same MIT license; the original copyright notice is kep
   unreachable
 * **A state of the dSS the adapter does not know yet is named once.** `Unhandled State Change` for a state without
   an object was logged at info level every time it changed: a room crossing its passive cooling threshold wrote
-  the same line four times in five hours. It is now logged once per run at info level, with the request to report
-  the name, and every further change of it at debug level
+  the same line four times in five hours. It is now logged once per run at info level, and every further change
+  of it at debug level. The line says that a state added in the dSS after the adapter started gets its object at
+  the next start, and asks to report the name only if it is still reported after a restart
 * **Rooms under passive cooling have a read-only state for it.** The climate control of the dSS keeps a state for
   each room it cools passively: active while the room temperature is above the passive cooling threshold set for
   that room, inactive once it drops below. The dSS keeps such states of its apps apart from the other states, so
