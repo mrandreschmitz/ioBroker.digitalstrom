@@ -11,6 +11,9 @@ const { Digitalstrom } = proxyquire('../main', {
         Adapter: class FakeAdapter {
             on() {}
         },
+        // The value js-controller defines for START_IMMEDIATELY_AFTER_STOP, see
+        // packages/common-db/src/lib/common/exitCodes.ts of ioBroker.js-controller
+        EXIT_CODES: { START_IMMEDIATELY_AFTER_STOP: 156 },
         '@noCallThru': true,
     },
     '@apollon/iobroker-tools': {
@@ -1217,6 +1220,76 @@ describe('Adapter logic', () => {
             ctx.setConnected(false);
             expect(ctx.states['info.connection']).to.equal(false);
             expect(ctx.connected).to.equal(false);
+        });
+    });
+
+    describe('restart through js-controller', () => {
+        // Production log of 26.09.2026: every restart said "Terminated (-100): Without
+        // reason" as a warning. -100 only became 156 because a process exit code is cut to
+        // 8 bits - in compact mode the host got -100 itself, logged an error and waited 30 s.
+        it('stops with START_IMMEDIATELY_AFTER_STOP and says why', async () => {
+            /** @type {any[]} */
+            const stops = [];
+            const ctx = createContext({
+                restartTimeout: null,
+                stop: async params => {
+                    stops.push(params);
+                },
+            });
+            Digitalstrom.prototype.restartAdapter.call(ctx, 1, 'of too many event polling errors (callScene)');
+            await waitFor(() => stops.length > 0);
+            expect(stops).to.deep.equal([
+                { exitCode: 156, reason: 'restarting because of too many event polling errors (callScene)' },
+            ]);
+        });
+
+        // stop() runs onUnload before it terminates - terminate() alone would leave the
+        // event polls, timers and the websocket of this instance running in compact mode
+        it('prefers stop() and only falls back to terminate() without it', async () => {
+            /** @type {any[]} */
+            const terminated = [];
+            const ctx = createContext({
+                restartTimeout: null,
+                terminate: (reason, exitCode) => terminated.push([reason, exitCode]),
+            });
+            Digitalstrom.prototype.restartAdapter.call(
+                ctx,
+                1,
+                'the dSS re-initialized its apartment model (model_ready)',
+            );
+            await waitFor(() => terminated.length > 0);
+            expect(terminated).to.deep.equal([
+                ['restarting because the dSS re-initialized its apartment model (model_ready)', 156],
+            ]);
+        });
+
+        it('still terminates when stop() fails', async () => {
+            /** @type {any[]} */
+            const terminated = [];
+            const ctx = createContext({
+                restartTimeout: null,
+                stop: () => Promise.reject(new Error('stop failed')),
+                terminate: (reason, exitCode) => terminated.push([reason, exitCode]),
+            });
+            Digitalstrom.prototype.restartAdapter.call(ctx, 1, 'reading the DSS structure failed');
+            await waitFor(() => terminated.length > 0);
+            expect(terminated).to.deep.equal([['restarting because reading the DSS structure failed', 156]]);
+        });
+
+        // The second reason comes with the shorter delay: a second timer would fire first
+        it('schedules a single restart for several reasons', async () => {
+            /** @type {any[]} */
+            const stops = [];
+            const ctx = createContext({
+                restartTimeout: null,
+                stop: async params => {
+                    stops.push(params);
+                },
+            });
+            Digitalstrom.prototype.restartAdapter.call(ctx, 30, 'first');
+            Digitalstrom.prototype.restartAdapter.call(ctx, 1, 'second');
+            await waitFor(() => stops.length > 0);
+            expect(stops.map(params => params.reason)).to.deep.equal(['restarting because first']);
         });
     });
 

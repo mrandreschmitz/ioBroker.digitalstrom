@@ -532,15 +532,36 @@ class Digitalstrom extends utils.Adapter {
         }
     }
 
-    restartAdapter(timeout) {
+    /**
+     * Ends this instance so that js-controller starts it again.
+     *
+     * @param {number} timeout ms until the restart
+     * @param {string} reason why, completing "restarting because ..." - js-controller logs
+     *   it next to the exit code
+     */
+    restartAdapter(timeout, reason) {
         if (this.restartTimeout || this.isStopping()) {
             return;
         }
         this.restartTimeout = setTimeout(() => {
             this.restartTimeout = null;
-            // terminate() is provided by adapter-core and is the only safe way to end an
-            // adapter - process.exit() would kill the whole host process in compact mode
-            this.terminate(-100);
+            // START_IMMEDIATELY_AFTER_STOP is the code js-controller restarts after one second
+            // and logs at info level together with the reason. The -100 used before only
+            // became that code because a process exit code is cut to 8 bits: the instance
+            // logged "Terminated (-100): Without reason" as a warning at every restart, and in
+            // compact mode, where nothing is cut, the host logged an error and waited 30 s.
+            // Read here and not at load time: the test stubs of adapter-core do not carry it.
+            const exitCode = utils.EXIT_CODES.START_IMMEDIATELY_AFTER_STOP;
+            const text = `restarting because ${reason}`;
+            if (typeof this.stop === 'function') {
+                // stop(), not terminate(): only stop() runs onUnload first. terminate() skips
+                // it, and in compact mode this instance would keep polling the dSS events and
+                // keep its timers and its websocket in the shared process next to the new one.
+                // process.exit() is no option either, it would end that whole process.
+                this.stop({ exitCode, reason: text }).catch(() => this.terminate(text, exitCode));
+            } else {
+                this.terminate(text, exitCode);
+            }
         }, timeout || 1000);
     }
 
@@ -663,7 +684,7 @@ class Digitalstrom extends utils.Adapter {
         this.startupTimeout = setTimeout(() => {
             this.startupTimeout = null;
             this.log.warn('Initialization did not finish within 10 minutes, restarting adapter');
-            this.restartAdapter(1000);
+            this.restartAdapter(1000, 'the initialization did not finish within 10 minutes');
         }, 600000);
 
         dss.requestAsync('apartment', 'getName').then(
@@ -693,7 +714,7 @@ class Digitalstrom extends utils.Adapter {
                         }
                         if (err) {
                             this.log.warn(`Error while initializing Data: ${err}`);
-                            this.restartAdapter(60000);
+                            this.restartAdapter(60000, 'reading the DSS structure failed');
                             return;
                         }
 
@@ -729,7 +750,9 @@ class Digitalstrom extends utils.Adapter {
                                             this.startupTimeout = null;
                                         }
                                         // Drop the partially created subscriptions before restarting
-                                        dss.unsubscribeAllEvents(() => this.restartAdapter(30000));
+                                        dss.unsubscribeAllEvents(() =>
+                                            this.restartAdapter(30000, 'the DSS events could not be subscribed'),
+                                        );
                                         return;
                                     }
                                     this.subscribeStates('*');
@@ -770,7 +793,7 @@ class Digitalstrom extends utils.Adapter {
                 this.log.error(
                     'Please check the host and that the host is reachable and check the settings please! Adapter restarts in 5 minutes',
                 );
-                this.restartAdapter(300000);
+                this.restartAdapter(300000, 'the DSS could not be reached');
             },
         );
     }
@@ -998,7 +1021,7 @@ class Digitalstrom extends utils.Adapter {
         }
         this.pendingModelReady = false;
         this.log.info('The dSS re-initialized its model during the startup - restarting now that it is through');
-        this.restartAdapter(10000);
+        this.restartAdapter(10000, 'the dSS re-initialized its apartment model during the startup');
     }
 
     /**
@@ -1736,7 +1759,7 @@ class Digitalstrom extends utils.Adapter {
             }
             this.log.warn(`Too many event polling errors (${eventName}): ${err} - restarting adapter`);
             this.setConnected(false);
-            this.restartAdapter(2000);
+            this.restartAdapter(2000, `of too many event polling errors (${eventName})`);
         });
 
         dss.on('model_ready', () => {
@@ -1755,7 +1778,7 @@ class Digitalstrom extends utils.Adapter {
                 this.pendingModelReady = true;
                 return;
             }
-            this.restartAdapter(10000);
+            this.restartAdapter(10000, 'the dSS re-initialized its apartment model (model_ready)');
         });
         // Log unhandled Events to see what happens so at all
         eventNames.forEach(

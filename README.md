@@ -253,6 +253,11 @@ It is published under the same MIT license; the original copyright notice is kep
   input to the first and lists the pair as one device, while it keeps a state for the second input. The adapter
   found no device for that state and asked for a GitHub issue. It now names such a state on debug together with
   the device it belongs to, and the info line only lists states that really cannot be assigned
+* **A restart the adapter asks for is no longer logged as a warning.** Instead of
+  `Terminated (-100): Without reason`, ioBroker now logs `Terminated (START_IMMEDIATELY_AFTER_STOP): restarting
+  because ...` with the reason at info level. The instance shuts down cleanly before it restarts. In compact
+  mode that keeps the old instance from running on next to the new one, and the restart follows after 1 s
+  instead of 30 s
 
 ### 2.4.25 (2026-09-17)
 

@@ -371,6 +371,11 @@ Der vollständige Changelog inklusive der Historie von Apollon77 steht in der en
   Adapter fand zu diesem State kein Gerät und bat um ein GitHub-Issue. Jetzt nennt er einen solchen State auf
   debug zusammen mit dem Gerät, zu dem er gehört, und die Info-Zeile listet nur noch States, die sich wirklich
   nicht zuordnen lassen
+* **Ein Neustart, den der Adapter selbst anfordert, erscheint nicht mehr als Warnung.** Statt
+  `Terminated (-100): Without reason` protokolliert ioBroker jetzt `Terminated (START_IMMEDIATELY_AFTER_STOP):
+  restarting because ...` mit dem Grund auf Info-Ebene. Die Instanz fährt vor dem Neustart sauber herunter. Im
+  Compact-Modus läuft die alte Instanz dadurch nicht mehr neben der neuen weiter, und der Neustart folgt nach 1 s
+  statt nach 30 s
 
 ### 2.4.25 (2026-09-17)
 
