@@ -275,7 +275,8 @@ It is published under the same MIT license; the original copyright notice is kep
   that room, inactive once it drops below. The dSS keeps such states of its apps apart from the other states, so
   the adapter never read it and only logged each change as `Unhandled State Change`. It is now read at startup
   and becomes `apartment.<floor>.<room>.states.passiveCooling` (true/false), with a value right after the start
-  and every change the dSS reports. A dSS that does not offer these states starts as before
+  and every change the dSS reports. A dSS that does not offer these states starts as before. When reading them
+  fails at a start, the states of the last start stay, with their last value, until the dSS reports a change
 
 ### 2.4.25 (2026-09-17)
 

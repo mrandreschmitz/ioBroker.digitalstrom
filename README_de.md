@@ -403,7 +403,9 @@ Der vollständige Changelog inklusive der Historie von Apollon77 steht in der en
   Zustände seiner Apps getrennt von den übrigen States ab, deshalb las der Adapter ihn nie und schrieb jede
   Änderung nur als `Unhandled State Change` ins Log. Jetzt liest er ihn beim Start und legt
   `apartment.<Etage>.<Raum>.states.passiveCooling` (true/false) an, mit einem Wert direkt nach dem Start und
-  jeder Änderung, die der dSS meldet. Ein dSS, der diese Zustände nicht anbietet, startet wie bisher
+  jeder Änderung, die der dSS meldet. Ein dSS, der diese Zustände nicht anbietet, startet wie bisher. Schlägt das
+  Lesen bei einem Start fehl, bleiben die States des letzten Starts mit ihrem letzten Wert stehen, bis der dSS eine
+  Änderung meldet
 
 ### 2.4.25 (2026-09-17)
 

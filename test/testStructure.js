@@ -2397,7 +2397,8 @@ describe('DSSStructure', () => {
         });
 
         it('creates passiveCooling next to the zone states, read-only and boolean', done => {
-            const struct = zoneStructure();
+            const entries = [];
+            const struct = zoneStructure(entries);
             struct.propertyStates = [{ name: 'zone.4.light', state: 'inactive' }];
             struct.addonSensorStates = [passiveCooling(4, 'active')];
             struct.processZone('apartment.0', duschbad, [], undefined, undefined, () => {
@@ -2406,11 +2407,120 @@ describe('DSSStructure', () => {
                 expect(obj, 'the object exists').to.be.an('object');
                 expect(obj.common.type).to.equal('boolean');
                 expect(obj.common.write, 'the dSS computes it').to.equal(false);
-                expect(obj.native).to.deep.equal({ valueTrue: 'active', valueFalse: 'inactive' });
+                expect(obj.native).to.deep.equal({
+                    valueTrue: 'active',
+                    valueFalse: 'inactive',
+                    dssStateName: 'zone.zone4.group0.type9.passiveCooling',
+                });
                 expect(obj.onChange, 'no write handler').to.equal(undefined);
                 expect(struct.stateMap['zone.zone4.group0.type9.passiveCooling']).to.equal(id);
                 expect(struct.initialObjectValues[id], 'a value right after the start').to.equal('active');
                 expect(struct.dssObjects['apartment.0.4.states.light'], 'the zone state stays').to.be.an('object');
+                // A state with an object must not end up in the line that asks for an issue
+                struct.reportUnmappedStates();
+                expect(entries, 'nothing is reported').to.deep.equal([]);
+                done();
+            });
+        });
+
+        // A start whose query2 failed (ECONNRESET, a timeout while the dSS is busy after an
+        // update) left the objects of the last start unclaimed: listed as unknown, deleted
+        // with "Delete unknown objects" together with their history, and each change asked
+        // for a GitHub issue about a state the adapter has an object for.
+        it('keeps the objects of the last start when the read failed', async () => {
+            const entries = [];
+            const struct = zoneStructure(entries);
+            struct.dss = {
+                requestAsync: async () => {
+                    throw new Error('Request error for /json/property/query2: read ECONNRESET');
+                },
+            };
+            const stored = name => ({
+                type: 'state',
+                common: { type: 'boolean', custom: { 'history.0': { enabled: true } } },
+                native: { valueTrue: 'active', valueFalse: 'inactive', dssStateName: name },
+            });
+            struct.adapter.objectHelper = {
+                existingStates: {
+                    'apartment.0.4.states.passiveCooling': stored('zone.zone4.group0.type9.passiveCooling'),
+                    // the id of the last start stays, suffix included
+                    'apartment.0.4.states.motion_type9': stored('zone.zone4.group0.type9.motion'),
+                    // another room, a group of this room, and a zone state without a dSS name
+                    'apartment.0.2.states.passiveCooling': stored('zone.zone2.group0.type9.passiveCooling'),
+                    'apartment.0.4.states.x': stored('zone.zone4.group48.type9.x'),
+                    'apartment.0.4.states.light': { type: 'state', common: {}, native: {} },
+                },
+            };
+            await struct.readAddonSensorStates();
+            struct.propertyStates = [];
+            await new Promise(resolve =>
+                struct.processZone('apartment.0', duschbad, [], undefined, undefined, resolve),
+            );
+
+            const id = 'apartment.0.4.states.passiveCooling';
+            expect(struct.dssObjects[id], 'not an unknown object').to.be.an('object');
+            expect(struct.dssObjects[id].common.write).to.equal(false);
+            expect(struct.dssObjects[id].native.dssStateName).to.equal('zone.zone4.group0.type9.passiveCooling');
+            expect(struct.stateMap['zone.zone4.group0.type9.passiveCooling'], 'its events apply').to.equal(id);
+            expect(struct.stateMap['zone.zone4.group0.type9.motion']).to.equal('apartment.0.4.states.motion_type9');
+            expect(struct.initialObjectValues, 'the last value stays').to.not.have.property(id);
+            expect(struct.dssObjects['apartment.0.4.states'].type, 'its channel').to.equal('channel');
+            expect(struct.dssObjects).to.not.have.property('apartment.0.2.states.passiveCooling');
+            expect(struct.dssObjects).to.not.have.property('apartment.0.4.states.x');
+            expect(struct.dssObjects).to.not.have.property('apartment.0.4.states.light');
+            struct.reportUnmappedStates();
+            expect(entries, 'nothing is reported').to.deep.equal([]);
+        });
+
+        // A state the dSS answered without is gone - it stays an unknown object as before
+        it('lets a state the dSS no longer reports become unknown when the read worked', async () => {
+            const struct = zoneStructure();
+            struct.dss = { requestAsync: async () => ({ ok: true, result: { 'heating-controller': {} } }) };
+            struct.adapter.objectHelper = {
+                existingStates: {
+                    'apartment.0.4.states.passiveCooling': {
+                        type: 'state',
+                        common: { type: 'boolean' },
+                        native: { dssStateName: 'zone.zone4.group0.type9.passiveCooling' },
+                    },
+                },
+            };
+            await struct.readAddonSensorStates();
+            struct.propertyStates = [];
+            await new Promise(resolve =>
+                struct.processZone('apartment.0', duschbad, [], undefined, undefined, resolve),
+            );
+            expect(struct.dssObjects).to.not.have.property('apartment.0.4.states.passiveCooling');
+            expect(struct.stateMap).to.not.have.property('zone.zone4.group0.type9.passiveCooling');
+        });
+
+        // The dSS takes the identifier unchecked from the app (zone.addStateSensor()), and
+        // js-controller only cleans an object id in setObject - setState keeps the raw one
+        it('cleans characters js-controller forbids out of the object id, the dSS name stays the key', done => {
+            const struct = zoneStructure();
+            struct.propertyStates = [];
+            struct.addonSensorStates = DSSStructure.collectAddonSensorStates({
+                'third-party-app': {
+                    'zone.zone4.group0.type9.too*warm?': {
+                        name: 'zone.zone4.group0.type9.too*warm?',
+                        value: 1,
+                        state: 'active',
+                    },
+                    'zone.zone4.group0.type9.Wärme': {
+                        name: 'zone.zone4.group0.type9.Wärme',
+                        value: 2,
+                        state: 'inactive',
+                    },
+                },
+            });
+            struct.processZone('apartment.0', duschbad, [], undefined, undefined, () => {
+                const id = 'apartment.0.4.states.too_warm_';
+                expect(struct.dssObjects[id], 'the object exists under the cleaned id').to.be.an('object');
+                expect(Object.keys(struct.dssObjects).filter(key => /[*?]/.test(key))).to.deep.equal([]);
+                expect(struct.stateMap['zone.zone4.group0.type9.too*warm?']).to.equal(id);
+                expect(struct.initialObjectValues[id]).to.equal('active');
+                // letters of any language are allowed in an id and stay
+                expect(struct.stateMap['zone.zone4.group0.type9.Wärme']).to.equal('apartment.0.4.states.Wärme');
                 done();
             });
         });
@@ -2448,6 +2558,26 @@ describe('DSSStructure', () => {
                 expect(entries[0]).to.contain('zone.zone4.group48.type9.passiveCooling');
                 expect(entries[0], 'zone 2 was not built here').to.contain('zone.zone2.group0.type9.passiveCooling');
                 expect(entries[0], 'a skipped zone is not reported').to.not.contain('zone.zone7.');
+                done();
+            });
+        });
+
+        it('does not ask for an issue about a sensor state of a group processZone skipped', done => {
+            const entries = [];
+            const debug = [];
+            const struct = zoneStructure(entries);
+            struct.adapter.log.debug = msg => debug.push(String(msg));
+            struct.propertyStates = [];
+            struct.addonSensorStates = [passiveCooling(4, 'active', 48)];
+            // group 48 is not reachable, so processZone skips it on purpose
+            const zone = { ...duschbad, groups: [{ id: 48, devices: [] }] };
+            struct.processZone('apartment.0', zone, [], undefined, undefined, () => {
+                expect(struct.skippedStatePrefixes.has('zone.4.group.48.')).to.equal(true);
+                struct.reportUnmappedStates();
+                expect(entries.join('\n'), 'no info line asks for an issue').to.not.contain('zone.zone4.group48.');
+                expect(
+                    debug.some(msg => /^1 DSS state\(s\) belong to zones or groups this adapter skipped/.test(msg)),
+                ).to.equal(true);
                 done();
             });
         });
