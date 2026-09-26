@@ -1905,6 +1905,16 @@ class Digitalstrom extends utils.Adapter {
             const onChange = obj.onChange;
             delete obj.value;
             delete obj.onChange;
+            // common.write is mandatory for a state, and a missing one is read differently:
+            // the admin offers to edit the state, the type detector treats it as read-only.
+            // Writable is exactly what has a write handler. It is decided HERE because only
+            // now is the handler final - the light, shade and single channel paths hang it
+            // onto the generic output channel after addStateObject, and the objectHelper
+            // keeps an explicit flag, so an earlier false could never become true again.
+            // An explicit flag of the definition stays as it is.
+            if (obj.type === 'state' && obj.common && typeof obj.common.write !== 'boolean') {
+                obj.common.write = typeof onChange === 'function';
+            }
 
             this.objectHelper.setOrUpdateObject(id, obj, ['name'], initValue, onChange);
         });

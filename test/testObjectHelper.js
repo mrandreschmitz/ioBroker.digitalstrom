@@ -175,3 +175,62 @@ describe('objectHelper and a state without value', () => {
         });
     });
 });
+
+// The update path of an existing installation: registerObjects now hands every state an
+// explicit common.write, and the objects that were stored without one have to get it.
+describe('common.write of an existing installation', () => {
+    const ID = 'devices.m1.hue1.hue';
+    const definition = write => ({
+        type: 'state',
+        common: { name: 'Colored Light Hue', type: 'number', role: 'level.color.hue', ...write },
+        native: {},
+    });
+
+    /**
+     * Runs one start of the helper against a stored object.
+     *
+     * @param {Record<string, any>} stored the object as js-controller has it
+     * @param {Record<string, any>} obj the definition of this start
+     * @param {(value: any) => void} [onChange] write handler
+     * @returns {Promise<Array<Record<string, any>>>} the extendObject payloads
+     */
+    function start(stored, obj, onChange) {
+        const extended = [];
+        const adapter = fakeAdapter('digitalstrom.0', []);
+        adapter.getAdapterObjects = cb => cb({ [`digitalstrom.0.${ID}`]: JSON.parse(JSON.stringify(stored)) });
+        adapter.getObject = (id, cb) => cb(null, stored);
+        adapter.extendObject = (id, payload, cb) => {
+            extended.push(JSON.parse(JSON.stringify(payload)));
+            cb && cb();
+        };
+        const helper = Digitalstrom.createObjectHelper(silentLog);
+        helper.init(adapter);
+        return new Promise(resolve =>
+            helper.loadExistingObjects(() => {
+                helper.setOrUpdateObject(ID, obj, ['name'], undefined, onChange);
+                helper.processObjectQueue(() => resolve(extended));
+            }),
+        );
+    }
+
+    // js-controller stored "write: undefined" as no property at all
+    const storedWithoutWrite = definition({ read: true });
+
+    it('gives a state stored without the flag write: false on the next start', async () => {
+        const extended = await start(storedWithoutWrite, definition({ write: false }));
+        expect(extended).to.have.lengthOf(1);
+        expect(extended[0].common.write).to.equal(false);
+    });
+
+    it('leaves it alone on the start after that', async () => {
+        const stored = definition({ read: true, write: false });
+        expect(await start(stored, definition({ write: false })), 'nothing to write').to.deep.equal([]);
+    });
+
+    // Why the flag must not be put into the definitions of the output channels: the
+    // helper keeps an explicit value, so a handler attached later could not lift it
+    it('keeps an explicit write: false even with a handler', async () => {
+        const extended = await start(storedWithoutWrite, definition({ write: false }), () => {});
+        expect(extended[0].common.write).to.equal(false);
+    });
+});

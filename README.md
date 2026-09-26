@@ -172,7 +172,7 @@ On Apartment level also Sensors (also outdoor values), States and user states ar
 The devices are structured with "circuit/dSM"."deviceID" and the subsctructure inside includes:
 * Device Scenes, will be triggered for this device only
 * Device Sensors, when reported from the system. So values might be empty
-* Output values (e.g. state/brightness for Lights and position/angle for Shades/Blinds) are located directly below the device. Lights and Shades/Blinds carry the full named functionality; a Joker (Black) with an output - a switched socket, for instance - has its output value read as well, and vDC devices (Hue, Sonos) reach their channels through the named channel read.
+* Output values (e.g. state/brightness for Lights and position/angle for Shades/Blinds) are located directly below the device. Lights and Shades/Blinds carry the full named functionality; a Joker (Black) with an output - a switched socket, for instance - has its output value read as well, and vDC devices (Hue, Sonos) reach their channels through the named channel read. Device sensors and output channels without a write path (the colour channels of Hue lamps or the Sonos channels, for instance) are read-only.
 * Buttons and Binary Inputs will also be represented by states and are read only
 
 ## Behaviour notes
@@ -192,10 +192,11 @@ The devices are structured with "circuit/dSM"."deviceID" and the subsctructure i
   without extra bus traffic.
 * Values might be empty when they were not reported by the system
 * Binary inputs were originally implemented without any hardware to test against. They are confirmed to work in the meantime, with motion detectors and window handles reporting through them. The state keeps the number the DSS reports, so history data stays comparable, but the numbers are named: `inactive`/`active` for a normal binary input, and `closed`/`open`/`tilted` for a window handle, which reports three positions instead of two.
-* The full named output functionality - brightness, position, angle and the colour channels - is
-  implemented for Light (Yellow) and Shade/Blind (Gray) devices. A Joker (Black) with an output is
-  read as well and follows its scenes, but its value stays the plain output value without a named
-  meaning.
+* The full named output functionality - brightness, position and angle - is implemented for Light
+  (Yellow) and Shade/Blind (Gray) devices. The colour channels of vDC lights are read, not written,
+  and of a blind with indoor and outdoor channels (GR-KL300) only the outdoor position and angle can
+  be set. A Joker (Black) with an output is read as well and follows its scenes, but its value stays
+  the plain, read-only output value without a named meaning.
 * vDC devices (Hue lamps, Sonos players) read their output channels through the named read
   `device/getOutputChannelValue2` - verified against a dSS20 1.19.13. The audio volume and power
   state of Sonos players and the colour values of vDC lights arrive with and without the Smart Home
@@ -236,6 +237,12 @@ It is published under the same MIT license; the original copyright notice is kep
   empty (null) until the dSS reports active or inactive, and the warnings are gone. This applies to every on/off
   state the dSS reports as unknown. A null that a script writes into a state is no longer sent to the dSS as
   "inactive"
+* **States the adapter cannot write are marked read-only.** This covers the colour and brightness channels of
+  multi-channel vDC lights (Hue), the volume and power state of Sonos players, the indoor channels of GR-KL300
+  blinds, the output value of a joker, all device sensors, the outdoor sensors and `buttonClickType`. These states
+  carried no write flag at all, so the admin offered to edit them although a change had no effect. The states that
+  can be written (scenes, lights, blinds, single-channel outputs, room sensors, user states, set points) are
+  unchanged. The flag is corrected automatically on the first start
 
 ### 2.4.25 (2026-09-17)
 

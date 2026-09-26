@@ -837,6 +837,155 @@ describe('Adapter logic', () => {
             // value/onChange must not end up in the created object
             expect(dssObjects['apartment.0.4.states.heating']).to.not.have.property('value');
         });
+
+        // Production export: 274 states had no common.write at all - the Hue channels,
+        // the Sonos, the indoor channels of a GR-KL300, every device sensor, the outdoor
+        // sensors and buttonClickType. The admin offered to edit them, nothing handled it.
+        it('derives common.write from the write handler when the definition leaves it open', () => {
+            const created = {};
+            const handler = () => {};
+            const dssObjects = {
+                'devices.m1.hue1.hue': {
+                    type: 'state',
+                    common: { type: 'number', role: 'level.color.hue' },
+                    native: {},
+                },
+                'devices.m1.ge1.brightness': {
+                    type: 'state',
+                    common: { type: 'number', role: 'level.brightness' },
+                    native: {},
+                    onChange: handler,
+                },
+                // dSS computed indicator: declared read-only, the handler only serves scripts
+                'apartment.states.presence': {
+                    type: 'state',
+                    common: { type: 'boolean', role: 'indicator', read: true, write: false },
+                    native: {},
+                    onChange: handler,
+                },
+                'devices.m1.ge1': { type: 'device', common: { name: 'Licht' } },
+            };
+            const ctx = createContext({
+                dssStruct: { dssObjects },
+                objectHelper: {
+                    setOrUpdateObject: (id, obj, preserve, value, onChange) => {
+                        created[id] = { common: { ...obj.common }, onChange };
+                    },
+                },
+            });
+
+            Digitalstrom.prototype.registerObjects.call(ctx);
+
+            expect(created['devices.m1.hue1.hue'].common.write, 'no handler - read-only').to.equal(false);
+            expect(created['devices.m1.ge1.brightness'].common.write).to.equal(true);
+            expect(created['devices.m1.ge1.brightness'].onChange, 'the handler still reaches the helper').to.equal(
+                handler,
+            );
+            expect(created['apartment.states.presence'].common.write, 'an explicit flag stays').to.equal(false);
+            expect(created['devices.m1.ge1'].common, 'only states carry the flag').to.not.have.property('write');
+        });
+
+        // The handler of a light, a shade or a single channel device is hung onto the
+        // generic output channel AFTER addStateObject - deciding the flag any earlier would
+        // freeze it at false, because the objectHelper keeps an explicit value
+        it('gives a real device structure an explicit and correct flag on every state', async () => {
+            const DSSStructure = require('../lib/dssStructure');
+            const EventEmitter = require('node:events');
+            const struct = new DSSStructure({
+                dss: new EventEmitter(),
+                dssQueue: {
+                    queueSetOutputValue: (d, i, l, v, p, cb) => setImmediate(() => cb && cb(null, v)),
+                    queueUpdateOutputValue: (d, i, l, p, cb) => setImmediate(() => cb && cb(null, 0)),
+                    queueReadOutputChannels: (d, p, cb) => setImmediate(() => cb && cb(null, {})),
+                    pushQueryQueue: (...args) => {
+                        const cb = args[args.length - 1];
+                        setImmediate(() => cb && cb(null, { ok: true }));
+                    },
+                },
+                adapter: { log: silentLog, config: { initializeOutputValues: false, usePresetValues: false } },
+            });
+            const device = (dSUID, hwInfo, channels, extra = {}) => ({
+                dSUID,
+                meterDSUID: 'm1',
+                zoneID: 5,
+                name: dSUID,
+                hwInfo,
+                isValid: true,
+                isPresent: true,
+                outputMode: 22,
+                outputChannels: channels.map((channelId, index) => ({
+                    channelId,
+                    channelType: channelId,
+                    channelIndex: index,
+                })),
+                ...extra,
+            });
+            const devices = [
+                device(
+                    'hue1',
+                    'Extended color light: LCG002',
+                    ['brightness', 'hue', 'saturation', 'colortemp', 'x', 'y'],
+                    {
+                        isVdcDevice: true,
+                    },
+                ),
+                device('lwv1', 'Dimmable light: LWV001', ['brightness'], { isVdcDevice: true }),
+                device('ge1', 'GE-KM200', ['brightness']),
+                device(
+                    'gr1',
+                    'GR-KL300',
+                    [
+                        'shadePositionOutside',
+                        'shadeOpeningAngleOutside',
+                        'shadePositionIndoor',
+                        'shadeOpeningAngleIndoor',
+                    ],
+                    { sensorInputCount: 1, sensors: [{ type: 4, valid: true, value: 3 }] },
+                ),
+                device('sw1', 'SW-KL200', ['powerLevel'], { buttonInputCount: 1 }),
+            ];
+            for (const dev of devices) {
+                await new Promise(resolve => struct.createDevice(dev, resolve));
+            }
+            const created = {};
+            const ctx = createContext({
+                dssStruct: struct,
+                objectHelper: {
+                    setOrUpdateObject: (id, obj, preserve, value, onChange) => {
+                        created[id] = { common: { ...obj.common }, onChange };
+                    },
+                },
+            });
+
+            Digitalstrom.prototype.registerObjects.call(ctx);
+
+            const write = id => created[`devices.m1.${id}`].common.write;
+            ['brightness', 'hue', 'saturation', 'colortemp', 'x', 'y'].forEach(channel =>
+                expect(write(`hue1.${channel}`), `multi channel vDC ${channel}`).to.equal(false),
+            );
+            expect(write('lwv1.brightness'), 'single channel device').to.equal(true);
+            expect(write('ge1.brightness'), 'light').to.equal(true);
+            expect(write('ge1.state')).to.equal(true);
+            expect(write('gr1.shadePositionOutside'), 'shade').to.equal(true);
+            expect(write('gr1.shadeOpeningAngleOutside')).to.equal(true);
+            expect(write('gr1.shadePositionIndoor'), 'no handler for the indoor channels').to.equal(false);
+            expect(write('gr1.shadeOpeningAngleIndoor')).to.equal(false);
+            expect(write('gr1.sensors.0'), 'device sensor').to.equal(false);
+            expect(write('sw1.powerLevel'), 'joker output without handler').to.equal(false);
+            expect(write('sw1.buttonClickType')).to.equal(false);
+
+            Object.keys(created)
+                .filter(id => struct.dssObjects[id].type === 'state')
+                .forEach(id => {
+                    const { common, onChange } = created[id];
+                    expect(common.write, `${id} needs an explicit flag`).to.be.a('boolean');
+                    // A writable state nobody handles would swallow every write silently
+                    if (common.write) {
+                        expect(onChange, `${id} is writable without a handler`).to.be.a('function');
+                    }
+                });
+            struct.clearTimeouts();
+        });
     });
 
     describe('setInitialValues', () => {

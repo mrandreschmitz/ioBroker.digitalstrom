@@ -237,7 +237,8 @@ Die Geräte sind als „Klemme/dSM"."Geräte-ID" strukturiert, darunter jeweils:
   unterhalb des Geräts. Die vollständige benannte Funktionalität gibt es für Licht und
   Rollladen/Jalousie; ein Joker (Schwarz) mit Ausgang — etwa eine geschaltete Steckdose — wird
   ebenfalls gelesen, und vDC-Geräte (Hue, Sonos) erreichen ihre Kanäle über den benannten
-  Kanal-Lesebefehl.
+  Kanal-Lesebefehl. Gerätesensoren und Ausgangskanäle ohne Schreibweg (z. B. Farbkanäle von
+  Hue-Lampen, Sonos) sind schreibgeschützt.
 * Taster und Binäreingänge, ebenfalls als States und schreibgeschützt
 
 ## Hinweise zum Verhalten
@@ -296,10 +297,12 @@ Die Geräte sind als „Klemme/dSM"."Geräte-ID" strukturiert, darunter jeweils:
   Zahl, die der DSS meldet, damit Verlaufsdaten vergleichbar bleiben, die Zahlen sind aber benannt:
   `inactive`/`active` bei einem normalen Binäreingang und `closed`/`open`/`tilted` bei einem
   Fenstergriff, der drei statt zwei Stellungen meldet.
-* Die vollständige benannte Ausgangsfunktionalität — Helligkeit, Position, Winkel und die
-  Farbkanäle — ist für Licht (Gelb) und Rollladen/Jalousie (Grau) umgesetzt. Ein Joker (Schwarz)
-  mit Ausgang wird ebenfalls gelesen und folgt seinen Szenen, sein Wert bleibt aber der reine
-  Ausgangswert ohne benannte Bedeutung.
+* Die vollständige benannte Ausgangsfunktionalität — Helligkeit, Position und Winkel — ist für
+  Licht (Gelb) und Rollladen/Jalousie (Grau) umgesetzt. Die Farbkanäle von vDC-Lampen werden
+  gelesen, aber nicht geschrieben, und bei einer Jalousie mit Innen- und Außenkanälen (GR-KL300)
+  lassen sich nur Position und Winkel außen setzen. Ein Joker (Schwarz) mit Ausgang wird ebenfalls
+  gelesen und folgt seinen Szenen, sein Wert bleibt aber der reine, schreibgeschützte Ausgangswert
+  ohne benannte Bedeutung.
 * vDC-Geräte (Hue-Lampen, Sonos-Player) lesen ihre Ausgangskanäle über den benannten Lesebefehl
   `device/getOutputChannelValue2` — gemessen an einem dSS20 1.19.13. Lautstärke und Ein-Zustand von
   Sonos-Playern sowie die Farbwerte von vDC-Lampen kommen mit und ohne Smart Home API an, und ein
@@ -350,6 +353,13 @@ Der vollständige Changelog inklusive der Historie von Apollon77 steht in der en
   Log. Ein solcher Zustand bleibt jetzt leer (null), bis der dSS active oder inactive meldet, und die Warnungen
   sind weg. Das gilt für jeden Ein/Aus-Zustand, den der dSS als unknown meldet. Ein null, das ein Skript in einen
   State schreibt, geht nicht mehr als „inactive“ an den dSS
+* **States, die der Adapter nicht schreiben kann, sind als schreibgeschützt markiert.** Das betrifft die Farb- und
+  Helligkeitskanäle mehrkanaliger vDC-Lampen (Hue), Lautstärke und Ein-Zustand von Sonos-Playern, die Innenkanäle
+  von GR-KL300-Jalousien, den Ausgangswert eines Jokers, alle Gerätesensoren, die Außensensoren und
+  `buttonClickType`. Diese States trugen bisher gar kein Schreib-Flag, der Admin bot sie deshalb zum Bearbeiten
+  an, obwohl eine Änderung nichts bewirkte. Die schreibbaren States (Szenen, Licht, Rollläden, einkanalige
+  Ausgänge, Raumsensoren, User-States, Sollwerte) bleiben, wie sie sind. Das Flag wird beim ersten Start
+  automatisch korrigiert
 
 ### 2.4.25 (2026-09-17)
 
