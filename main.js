@@ -25,6 +25,7 @@ const DSSStructure = require('./lib/dssStructure');
 const DSSSmartHome = require('./lib/dssSmartHome');
 const ActivityCounter = require('./lib/activityCounter');
 const configUtils = require('./lib/configUtils');
+const { performance } = require('node:perf_hooks');
 const dssConstants = require('./lib/constants');
 
 // Safety valve for the events parked during the startup, not a working limit: the busiest
@@ -185,8 +186,9 @@ class Digitalstrom extends utils.Adapter {
         this.dssRetryTimeout = null;
         // Overridable in tests so a retry does not take five minutes
         this.dssRetryDelay = DSS_RETRY_DELAY;
-        // The outage waitForDss() is riding out: since when, how many checks failed and which
-        // errors were already reported. null as long as the dSS answers.
+        // The outage waitForDss() is riding out: since when (performance.now(), a clock NTP
+        // does not set), how many checks failed and which errors were already reported. null
+        // as long as the dSS answers.
         /** @type {{since: number, failures: number, reported: Set<string>}|null} */
         this.dssOutage = null;
         this.stopping = false;
@@ -867,32 +869,52 @@ class Digitalstrom extends utils.Adapter {
      * is reported again - a dSS that accepts the connection but refuses the login needs
      * somebody to act, even in the middle of an outage.
      *
+     * A refused login is named as such. The dSS was reached then, and a line that starts
+     * with "Cannot reach" sends the user to the network, while a revoked App-Token never
+     * comes back by itself.
+     *
      * @param {unknown} err why the check failed
      */
     noteDssUnreachable(err) {
         const message = configUtils.errorMessage(err);
         const retryIn = Digitalstrom.formatDuration(this.dssRetryDelay || DSS_RETRY_DELAY);
+        // loginApplication answered without a session token (see DSS.getSessionToken()).
+        // dSS 1.19 answers a revoked App-Token and a full session table the same way.
+        const loginRefused = /^Login failed:/.test(message);
+        const tokenHint =
+            'Please check that the App-Token is still enabled on the DSS, or create a new one in the adapter settings';
         const outage = this.dssOutage;
         if (!outage) {
-            this.dssOutage = { since: Date.now(), failures: 1, reported: new Set([message]) };
+            this.dssOutage = { since: performance.now(), failures: 1, reported: new Set([message]) };
+            // The line for the answer is info: somebody running at warn must not wait for it
+            const howItGoesOn =
+                `The adapter asks again every ${retryIn}, reports a different error once more and logs at ` +
+                `info level when the DSS ${loginRefused ? 'accepts the login' : 'answers'} again`;
             this.log.error(
-                `Cannot reach the DSS at ${this.config.host} (getName): ${message}. Please check the host, the network ` +
-                    `and the App-Token in the adapter settings. The adapter asks again every ${retryIn} and only ` +
-                    'reports a different error or the moment the DSS answers again',
+                loginRefused
+                    ? `The DSS at ${this.config.host} refused the login with the App-Token (getName): ${message}. ` +
+                          `${tokenHint}. ${howItGoesOn}`
+                    : `Cannot reach the DSS at ${this.config.host} (getName): ${message}. Please check the host, ` +
+                          `the network and the App-Token in the adapter settings. ${howItGoesOn}`,
             );
             return;
         }
         outage.failures++;
         if (!outage.reported.has(message)) {
             outage.reported.add(message);
+            // A refused login is an answer of the dSS, so neither line claims it is silent
             this.log.error(
-                `The DSS at ${this.config.host} still does not answer, now with a different error: ${message}`,
+                loginRefused
+                    ? `The DSS at ${this.config.host} answers, but refuses the login with the App-Token - a ` +
+                          `different error: ${message}. ${tokenHint}`
+                    : `The connection check of the DSS at ${this.config.host} still fails, now with a different ` +
+                          `error: ${message}`,
             );
             return;
         }
         this.log.debug(
-            `DSS still not reachable (${outage.failures} failed checks in ${Digitalstrom.formatDuration(
-                Date.now() - outage.since,
+            `DSS connection check still fails (${outage.failures} failed checks in ${Digitalstrom.formatDuration(
+                performance.now() - outage.since,
             )}): ${message} - asking again in ${retryIn}`,
         );
     }
@@ -907,7 +929,7 @@ class Digitalstrom extends utils.Adapter {
         }
         this.dssOutage = null;
         this.log.info(
-            `The DSS answers again after ${Digitalstrom.formatDuration(Date.now() - outage.since)} (${
+            `The DSS answers again after ${Digitalstrom.formatDuration(performance.now() - outage.since)} (${
                 outage.failures
             } failed check${outage.failures === 1 ? '' : 's'}) - continuing the start`,
         );

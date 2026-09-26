@@ -291,7 +291,8 @@ Die Geräte sind als „Klemme/dSM"."Geräte-ID" strukturiert, darunter jeweils:
   steht als Fehler im Log, mit dem Hinweis, was zu prüfen ist. Weitere Prüfungen erscheinen nur auf
   debug, ein anderer Fehler wird noch einmal gemeldet. Eine Info-Zeile sagt, wann der dSS wieder
   antwortet und wie lange er nicht erreichbar war, danach läuft der Start weiter. Bis dahin bleibt
-  `info.connection` auf false.
+  `info.connection` auf false. Ein dSS, der antwortet, aber das App-Token ablehnt, erscheint als
+  abgelehnte Anmeldung mit dem Hinweis, das Token zu prüfen, und wird genauso erneut gefragt.
 
 ## Bekannte Einschränkungen und Systemeigenheiten
 
@@ -390,7 +391,8 @@ Der vollständige Changelog inklusive der Historie von Apollon77 steht in der en
   beendete der Adapter alle 5 Minuten seinen Prozess und startete neu: Eine Nacht auf einer echten Anlage brachte
   102 Neustarts, 204 Fehlerzeilen und 101 Warnungen. Jetzt läuft er weiter und fragt alle 5 Minuten erneut. Es gibt
   einen Fehler mit dem Hinweis, was zu prüfen ist, und eine Info-Zeile mit der Dauer, sobald der dSS wieder
-  antwortet. Ein anderer Fehler zwischendurch, etwa eine abgelehnte Anmeldung, wird noch einmal gemeldet
+  antwortet. Ein anderer Fehler zwischendurch, etwa eine abgelehnte Anmeldung, wird noch einmal gemeldet. Lehnt
+  der dSS das App-Token ab, meldet der Adapter eine abgelehnte Anmeldung und nicht „nicht erreichbar“
 * **Ein State des dSS, den der Adapter noch nicht kennt, wird einmal genannt.** `Unhandled State Change` für einen
   State ohne Objekt erschien bei jeder Änderung auf Info-Ebene: Ein Raum, der seine Schwelle für passive Kühlung
   überschritt, schrieb dieselbe Zeile viermal in fünf Stunden. Jetzt steht sie einmal pro Lauf auf Info-Ebene, mit

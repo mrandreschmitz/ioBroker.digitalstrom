@@ -1501,7 +1501,9 @@ describe('Adapter logic', () => {
             const errors = linesOf(ctx, 'error');
             expect(errors, 'one error for the whole outage').to.have.lengthOf(1);
             expect(errors[0]).to.contain('10.13.10.4').and.to.contain('ECONNREFUSED').and.to.contain('App-Token');
-            expect(linesOf(ctx, 'debug').filter(msg => msg.includes('still not reachable'))).to.have.lengthOf(2);
+            // The line for the answer is info: somebody running at warn must not wait for it
+            expect(errors[0]).to.contain('logs at info level when the DSS answers again');
+            expect(linesOf(ctx, 'debug').filter(msg => msg.includes('still fails'))).to.have.lengthOf(2);
             const infos = linesOf(ctx, 'info');
             expect(infos, 'one line when it is back').to.have.lengthOf(1);
             expect(infos[0]).to.match(/answers again after \d+ s \(3 failed checks\)/);
@@ -1518,8 +1520,56 @@ describe('Adapter logic', () => {
             const errors = linesOf(ctx, 'error');
             expect(errors).to.have.lengthOf(2);
             expect(errors[1]).to.contain('different error').and.to.contain('Login failed');
+            // A refused login is an answer of the dSS - the line must not claim it is silent
+            expect(errors[1]).to.contain('refuses the login').and.to.contain('App-Token');
+            expect(errors[1]).to.not.contain('does not answer');
             expect(linesOf(ctx, 'info')).to.have.lengthOf(1);
             expect(linesOf(ctx, 'info')[0]).to.contain('(4 failed checks)');
+        });
+
+        // loginApplication answered ok:false: the dSS was reached and refused the App-Token.
+        // "Cannot reach the DSS" sent the user to the network, and every later check said
+        // "still not reachable" - for a token that never comes back by itself.
+        it('names a refused App-Token as a refused login, not as an unreachable dSS', async () => {
+            const ctx = outageContext([loginFailed(), loginFailed(), loginFailed(), answer]);
+            /** @type {any[]} */
+            const started = [];
+            Digitalstrom.prototype.waitForDss.call(ctx, name => started.push(name));
+            await waitFor(() => started.length > 0);
+            const errors = linesOf(ctx, 'error');
+            expect(errors).to.have.lengthOf(1);
+            expect(errors[0]).to.contain('refused the login').and.to.contain('App-Token').and.to.contain('10.13.10.4');
+            expect(errors[0]).to.not.contain('Cannot reach');
+            const debug = linesOf(ctx, 'debug');
+            expect(debug.filter(msg => msg.includes('still fails'))).to.have.lengthOf(2);
+            expect(debug.join('\n')).to.not.contain('not reachable');
+        });
+
+        // A Raspberry Pi boots with the clock of its last shutdown (fake-hwclock), and NTP sets
+        // it forward once the network is up - between the failed check and the answer
+        it('measures the outage independent of a clock correction', async () => {
+            const ctx = outageContext([refused(), answer]);
+            const realNow = Date.now;
+            /** @type {any[]} */
+            const started = [];
+            try {
+                // The clock jumps right before the second check, which gets the answer
+                const ask = ctx.dss.requestAsync;
+                let asked = 0;
+                ctx.dss.requestAsync = (...args) => {
+                    if (asked++ === 1) {
+                        Date.now = () => realNow() + 3 * 3600 * 1000;
+                    }
+                    return ask(...args);
+                };
+                Digitalstrom.prototype.waitForDss.call(ctx, name => started.push(name));
+                await waitFor(() => started.length > 0);
+            } finally {
+                Date.now = realNow;
+            }
+            const infos = linesOf(ctx, 'info');
+            expect(infos).to.have.lengthOf(1);
+            expect(infos[0]).to.match(/answers again after \d+ s \(1 failed check\)/);
         });
 
         it('says nothing extra when the dSS answers right away', async () => {
