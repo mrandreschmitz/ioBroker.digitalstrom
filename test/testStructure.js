@@ -2751,3 +2751,112 @@ describe('DSSStructure', () => {
         });
     });
 });
+
+describe('DSSStructure names and meter values', () => {
+    it('shows a name the dSS still stores with HTML codes with the real characters', () => {
+        const struct = /** @type {any} */ (createStructure());
+        // Measured on a real installation with 2.4.26: three circuit folders kept
+        // "Büro &amp; Duschbad" after the start, because getCircuits itself still
+        // answered with the codes old firmware stored
+        struct.addFolderObject('devices.302ed89f43f0000000000e400000ff4300', 'Büro &amp; Duschbad');
+        struct.addFolderObject('apartment.0.5', 'Eltern&#039;s Zimmer', 'folder');
+        struct.addFolderObject('devices.m3', 'Küche');
+        expect(struct.dssObjects['devices.302ed89f43f0000000000e400000ff4300'].common.name).to.equal('Büro & Duschbad');
+        expect(struct.dssObjects['apartment.0.5'].common.name).to.equal("Eltern's Zimmer");
+        expect(struct.dssObjects['devices.m3'].common.name).to.equal('Küche');
+    });
+
+    it('decodes state names once and never touches the id', () => {
+        const struct = /** @type {any} */ (createStructure());
+        struct.addStateObject('apartment.userStates.1617871548', 'user.1617871548', {
+            name: 'Garten &amp;amp; Hof &lt;Süd&gt;',
+            type: 'string',
+            role: 'indicator',
+        });
+        const obj = struct.dssObjects['apartment.userStates.1617871548'];
+        expect(obj.common.name, 'one pass: a literal "&amp;" stays one').to.equal('Garten &amp; Hof <Süd>');
+        expect(struct.stateMap['user.1617871548']).to.equal('apartment.userStates.1617871548');
+    });
+
+    it('rounds the meter reading to whole watt hours', () => {
+        // 4009.7331175000004 kWh was written before, measured on a real installation
+        expect(DSSStructure.wattSecondsToKwh(14435039223)).to.equal(4009.733);
+        expect(DSSStructure.wattSecondsToKwh(637899639)).to.equal(177.194);
+        expect(DSSStructure.wattSecondsToKwh(3600000)).to.equal(1);
+        expect(DSSStructure.wattSecondsToKwh(0)).to.equal(0);
+        expect(String(DSSStructure.wattSecondsToKwh(1800)), 'half a watt hour rounds up').to.equal('0.001');
+    });
+
+    describe('meter polls', () => {
+        /**
+         * @param {Record<string, {consumption: number, meterValue: number}>} readings
+         * @returns {any} structure whose meter reads answer from readings
+         */
+        function meterStructure(readings) {
+            const writes = [];
+            const struct = /** @type {any} */ (
+                createStructure({
+                    dssQueue: {
+                        pushQueryQueue: (dSUID, entryId, entry, prio, callback) => {
+                            const reading = readings[dSUID];
+                            const result =
+                                entryId === 'getConsumption'
+                                    ? { consumption: reading.consumption }
+                                    : { meterValue: reading.meterValue };
+                            setImmediate(() => callback(null, { ok: true, result }));
+                        },
+                    },
+                    adapter: {
+                        log: silentLogger,
+                        config: {},
+                        setState: () => {},
+                        setDssState: (id, value) => {
+                            writes.push([id, value]);
+                            struct.notePublishedValue(id, value);
+                        },
+                    },
+                })
+            );
+            struct.apartmentCircuits = [{ hasMetering: true, dSUID: 'meter1' }];
+            struct.objectsReady = true;
+            struct.writes = writes;
+            return struct;
+        }
+
+        const poll = struct => new Promise(resolve => struct.updateMeterData(() => resolve(undefined)));
+
+        it('writes a reading once and skips the unchanged repeats', async () => {
+            const readings = { meter1: { consumption: 0, meterValue: 14435039223 } };
+            const struct = meterStructure(readings);
+            await poll(struct);
+            await poll(struct);
+            // 300 Ws more is less than a tenth of a watt hour - the rounded total stays
+            readings.meter1.meterValue += 300;
+            await poll(struct);
+            expect(struct.writes).to.deep.equal([
+                ['devices.meter1.PowerConsumption', 0],
+                ['devices.meter1.EnergyMeterValue', 4009.733],
+            ]);
+            readings.meter1.consumption = 120;
+            readings.meter1.meterValue += 3600;
+            await poll(struct);
+            expect(struct.writes.slice(2)).to.deep.equal([
+                ['devices.meter1.PowerConsumption', 120],
+                ['devices.meter1.EnergyMeterValue', 4009.734],
+            ]);
+        });
+
+        it('writes again when someone else changed the state in between', async () => {
+            const struct = meterStructure({ meter1: { consumption: 30, meterValue: 3600000 } });
+            await poll(struct);
+            // the acknowledged echo of a foreign write lands in publishedValues, under the id
+            // without namespace - onStateChange strips it, see testAdapter.js
+            struct.notePublishedValue('devices.meter1.PowerConsumption', 999);
+            await poll(struct);
+            expect(struct.writes.filter(w => w[0] === 'devices.meter1.PowerConsumption')).to.deep.equal([
+                ['devices.meter1.PowerConsumption', 30],
+                ['devices.meter1.PowerConsumption', 30],
+            ]);
+        });
+    });
+});

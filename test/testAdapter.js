@@ -54,6 +54,8 @@ function createContext(overrides = {}) {
         tokenConnections: new Set(),
         unmappedBooleanStates: new Set(),
         unhandledStateNames: new Set(),
+        unmappedSceneCalls: new Set(),
+        logUnmappedSceneCall: Digitalstrom.prototype.logUnmappedSceneCall,
         momentaryReleases: new Map(),
         momentaryReleaseDelay: 500,
         eventHandlersRegistered: false,
@@ -472,6 +474,69 @@ describe('Adapter logic', () => {
             });
             expect(ctx.handled, 'a real false still is a command').to.deep.equal([
                 ['digitalstrom.0.apartment.0.4.states.heating', false],
+            ]);
+        });
+
+        // Regression: the echo arrives as "digitalstrom.0.devices.X.PowerConsumption", the
+        // structure tracks "devices.X.PowerConsumption". Stored under the full id, a value
+        // another adapter wrote was never seen, and a skipped poll left it standing.
+        it('tracks a foreign write under the id the structure uses', async () => {
+            const DSSStructure = require('../lib/dssStructure');
+            const writes = [];
+            const struct = /** @type {any} */ (
+                new DSSStructure({
+                    dss: {},
+                    dssQueue: {
+                        pushQueryQueue: (dSUID, entryId, entry, prio, callback) =>
+                            setImmediate(() =>
+                                callback(null, { ok: true, result: { consumption: 0, meterValue: 3600000 } }),
+                            ),
+                    },
+                    adapter: {
+                        log: silentLog,
+                        config: {},
+                        setState: () => {},
+                        setDssState: (id, value) => {
+                            writes.push([id, value]);
+                            struct.notePublishedValue(id, value);
+                        },
+                    },
+                })
+            );
+            struct.apartmentCircuits = [{ hasMetering: true, dSUID: 'meter1' }];
+            struct.objectsReady = true;
+            const ctx = changeContext();
+            ctx.namespace = 'digitalstrom.0';
+            ctx.dssStruct = struct;
+            const poll = () => new Promise(resolve => struct.updateMeterData(() => resolve(undefined)));
+
+            await poll();
+            Digitalstrom.prototype.onStateChange.call(ctx, 'digitalstrom.0.devices.meter1.PowerConsumption', {
+                val: 999,
+                ack: true,
+            });
+            expect(struct.publishedValues.has('digitalstrom.0.devices.meter1.PowerConsumption')).to.equal(false);
+            await poll();
+            expect(writes.filter(w => w[0] === 'devices.meter1.PowerConsumption')).to.deep.equal([
+                ['devices.meter1.PowerConsumption', 0],
+                ['devices.meter1.PowerConsumption', 0],
+            ]);
+        });
+
+        it('logs a command at debug and an acknowledged value at silly', () => {
+            const ctx = changeContext();
+            /** @type {string[][]} */
+            const lines = [];
+            ctx.log = {
+                ...silentLog,
+                silly: msg => lines.push(['silly', String(msg)]),
+                debug: msg => lines.push(['debug', String(msg)]),
+            };
+            Digitalstrom.prototype.onStateChange.call(ctx, 'digitalstrom.0.x', { val: 5, ack: false });
+            Digitalstrom.prototype.onStateChange.call(ctx, 'digitalstrom.0.info.apiActivity', { val: '{}', ack: true });
+            expect(lines).to.deep.equal([
+                ['debug', 'state digitalstrom.0.x changed: 5 (ack = false)'],
+                ['silly', 'state digitalstrom.0.info.apiActivity changed: {} (ack = true)'],
             ]);
         });
 
@@ -1059,6 +1124,43 @@ describe('Adapter logic', () => {
         });
     });
 
+    describe('names the dSS still delivers with HTML codes', () => {
+        // Measured on a real installation with 2.4.26: the three circuit folders still read
+        // "Büro &amp; Duschbad" after the start and no "corrected" line was logged. The
+        // repair compared the stored name with what getCircuits answered - the very same
+        // escaped text - and found nothing to do.
+        it('repairs a stored name when getCircuits answers with the same codes', () => {
+            const DSSStructure = require('../lib/dssStructure');
+            const struct = /** @type {any} */ (
+                new DSSStructure({ dss: {}, dssQueue: {}, adapter: { log: silentLog, config: {} } })
+            );
+            struct.addFolderObject('devices.m1', 'Büro &amp; Duschbad');
+            struct.addFolderObject('devices.m2', 'Wohnen, Flur &amp; Garten');
+            const preserved = {};
+            const infos = [];
+            const ctx = createContext({
+                log: { ...silentLog, info: msg => infos.push(String(msg)) },
+                dssStruct: struct,
+                objectHelper: {
+                    existingStates: {
+                        'devices.m1': { type: 'folder', common: { name: 'Büro &amp; Duschbad' } },
+                        // renamed by the user - must survive
+                        'devices.m2': { type: 'folder', common: { name: 'Wohnzimmer' } },
+                    },
+                    setOrUpdateObject: (id, obj, keep) => (preserved[id] = [keep, obj.common.name]),
+                },
+            });
+
+            Digitalstrom.prototype.registerObjects.call(ctx);
+
+            expect(preserved).to.deep.equal({
+                'devices.m1': [[], 'Büro & Duschbad'],
+                'devices.m2': [['name'], 'Wohnen, Flur & Garten'],
+            });
+            expect(infos).to.contain('Name of devices.m1 corrected from "Büro &amp; Duschbad" to "Büro & Duschbad"');
+        });
+    });
+
     describe('isDssEscapedName', () => {
         it('decodes exactly what escapeHTML() of the dSS produced, in one pass', () => {
             expect(Digitalstrom.decodeDssEntities('Wohnen, Flur &amp; Garten')).to.equal('Wohnen, Flur & Garten');
@@ -1294,11 +1396,61 @@ describe('Adapter logic', () => {
                         scriptID: 'system-addon-user-defined-states-helper',
                     },
                 });
-                expect(infos.filter(msg => msg.includes('open-tilded'))).to.deep.equal([]);
-                expect(debugs.filter(msg => msg.startsWith('Unhandled State Change: '))).to.have.length(1);
+                // The climate control raises "queue-active" at each of its switch times
+                dss.emit('addonStateChange', {
+                    name: 'addonStateChange',
+                    properties: {
+                        statename: 'queue-active',
+                        state: 'active',
+                        scriptID: 'system-addon-heating-controller',
+                    },
+                });
+                expect(infos.filter(msg => msg.includes('Unhandled State Change'))).to.deep.equal([]);
+                expect(debugs.filter(msg => msg.startsWith('Unhandled State Change: '))).to.have.length(2);
                 dss.stop();
                 done();
             });
+        });
+
+        // Measured on a real installation: the climate control reported the mode of the
+        // bathroom as "operationmode.3.NotUsed" twice a day, and only a debug log showed it
+        it('names any other unknown addon state once at info', done => {
+            const { ctx, dss } = subscribedContext();
+            /** @type {string[]} */
+            const infos = [];
+            /** @type {string[]} */
+            const debugs = [];
+            ctx.log = {
+                ...silentLog,
+                info: msg => infos.push(String(msg)),
+                debug: msg => debugs.push(String(msg)),
+            };
+            Digitalstrom.prototype.initializeSubscriptions.call(ctx, () => {
+                const emit = state =>
+                    dss.emit('addonStateChange', {
+                        name: 'addonStateChange',
+                        properties: {
+                            statename: 'operationmode.3.NotUsed',
+                            state,
+                            scriptID: 'system-addon-heating-controller',
+                        },
+                    });
+                emit('active');
+                emit('inactive');
+                expect(infos.filter(msg => msg.includes('operationmode.3.NotUsed'))).to.have.length(1);
+                expect(debugs.filter(msg => msg === 'Unhandled State Change: operationmode.3.NotUsed')).to.have.length(
+                    1,
+                );
+                dss.stop();
+                done();
+            });
+        });
+
+        it('knows the helper states of the addons by name', () => {
+            expect(Digitalstrom.isAddonHelperState('9be5e52c9e465cd880b6b06494f9dcf600_open-tilded')).to.equal(true);
+            expect(Digitalstrom.isAddonHelperState('queue-active')).to.equal(true);
+            expect(Digitalstrom.isAddonHelperState('operationmode.3.NotUsed')).to.equal(false);
+            expect(Digitalstrom.isAddonHelperState('zone.zone4.group0.type9.passiveCooling')).to.equal(false);
         });
     });
 
@@ -2091,6 +2243,87 @@ describe('Adapter logic', () => {
                 dss.stop();
                 done();
             }, 40);
+        });
+
+        describe('a scene call without scene state', () => {
+            function loggingContext() {
+                /** @type {string[]} */
+                const infos = [];
+                /** @type {string[]} */
+                const debugs = [];
+                const { ctx, dss } = momentaryContext({
+                    log: {
+                        ...silentLog,
+                        info: msg => infos.push(String(msg)),
+                        debug: msg => debugs.push(String(msg)),
+                    },
+                    dssStruct: {
+                        stateMap: {
+                            'dev1.scenes.15': 'devices.m1.dev1.scenes.Stop',
+                            '5.48.scenes.10': 'apartment.0.5.48.scenes.CoolingNight',
+                            '2274.2.scenes.0': 'apartment.0.2274.2.scenes.Preset0',
+                        },
+                        dssObjects: {},
+                        zoneDevices: {},
+                        apartmentStructure: { zones: [] },
+                    },
+                });
+                const unmapped = () => debugs.filter(msg => msg.includes('without scene state'));
+                return { ctx, dss, infos, unmapped };
+            }
+
+            /**
+             * @param {any} dss
+             * @param {string} zoneID
+             * @param {string} groupID
+             * @param {string} sceneID
+             */
+            function groupScene(dss, zoneID, groupID, sceneID) {
+                dss.emit('callScene', {
+                    name: 'callScene',
+                    source: { isGroup: true, isDevice: false, isApartment: false },
+                    properties: { zoneID, groupID, sceneID, callOrigin: '1' },
+                });
+            }
+
+            // Measured on a real installation: at 05:00 the climate control called scene 0 of
+            // group 48 in every room, also in three without heating, and each call logged
+            // "INVALID scenecall" at info without saying which one
+            it('keeps a room without objects for the group at debug, with zone, group and scene', () => {
+                const { dss, infos, unmapped } = loggingContext();
+                groupScene(dss, '65534', '48', '0');
+                groupScene(dss, '2186', '48', '0');
+                expect(infos).to.deep.equal([]);
+                expect(unmapped()).to.deep.equal([
+                    'callScene without scene state: zone 65534, group 48, scene 0 - this room has no scene objects for that group',
+                    'callScene without scene state: zone 2186, group 48, scene 0 - this room has no scene objects for that group',
+                ]);
+                dss.stop();
+            });
+
+            // The same day: a wall switch stopped the blinds of a room, Stop (15) on group 2
+            it('keeps a command scene on group level at debug', () => {
+                const { dss, infos, unmapped } = loggingContext();
+                groupScene(dss, '2274', '2', '15');
+                expect(infos).to.deep.equal([]);
+                expect(unmapped()).to.deep.equal([
+                    'callScene without scene state: zone 2274, group 2, scene 15 - a command scene, only devices have a state for it',
+                ]);
+                dss.stop();
+            });
+
+            it('names any other one once at info, then at debug', () => {
+                const { dss, infos, unmapped } = loggingContext();
+                groupScene(dss, '5', '48', '2');
+                groupScene(dss, '5', '48', '2');
+                deviceScene(dss, '5');
+                expect(infos).to.have.lengthOf(2);
+                expect(infos[0]).to.contain('zone 5, group 48, scene 2');
+                expect(infos[1]).to.contain('device dev1, scene 5');
+                expect(unmapped()).to.deep.equal(['callScene without scene state: zone 5, group 48, scene 2']);
+                expect(infos.join('\n')).to.not.contain('INVALID');
+                dss.stop();
+            });
         });
 
         function callScene(dss, zoneID, groupID) {

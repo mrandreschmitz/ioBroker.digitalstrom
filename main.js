@@ -153,6 +153,13 @@ class Digitalstrom extends utils.Adapter {
         // see handleStateChange in registerEventHandlers().
         /** @type {Set<string>} */
         this.unhandledStateNames = new Set();
+        // Scene calls that found no scene state. Each one is named once per run at info,
+        // see logUnmappedSceneCall().
+        /** @type {Set<string>} */
+        this.unmappedSceneCalls = new Set();
+        // "<zone>.<group>" of every group that has scene states, see logUnmappedSceneCall()
+        /** @type {{stateMap: Record<string, string>, groups: Set<string>}|null} */
+        this.sceneGroupCache = null;
         // Scene states waiting to be released again, by state id - see handleScene()
         /** @type {Map<string, NodeJS.Timeout>} */
         this.momentaryReleases = new Map();
@@ -271,8 +278,14 @@ class Digitalstrom extends utils.Adapter {
             return;
         }
         if (state) {
-            // The state was changed
-            this.log.debug(`state ${id} changed: ${state.val} (ack = ${state.ack})`);
+            // The state was changed. A command (ack = false) is logged at debug. The
+            // confirmations are mostly this adapter's own writes - half of a debug log, one
+            // line per sensor value and every 30 s for info.apiActivity - and go to silly.
+            if (state.ack) {
+                this.log.silly(`state ${id} changed: ${state.val} (ack = true)`);
+            } else {
+                this.log.debug(`state ${id} changed: ${state.val} (ack = false)`);
+            }
 
             if (this.dssStruct && typeof this.dssStruct.notePublishedValue === 'function') {
                 // What is in the state now, no matter who wrote it and whether it was
@@ -282,7 +295,12 @@ class Digitalstrom extends utils.Adapter {
                 // Deliberately NOT limited to acknowledged writes: an unacknowledged one
                 // on a read-only state is a value nobody will confirm, and it is exactly
                 // the case the reconciliation has to notice.
-                this.dssStruct.notePublishedValue(id, state.val);
+                // The id arrives with the namespace, the structure keeps its ids without it -
+                // under the full id the value was stored next to the tracked one and never
+                // compared, so a foreign write on a polled state was never corrected.
+                const prefix = `${this.namespace}.`;
+                const ownId = this.namespace && id.startsWith(prefix) ? id.slice(prefix.length) : id;
+                this.dssStruct.notePublishedValue(ownId, state.val);
             }
 
             if (!state.ack && state.val === null) {
@@ -1067,6 +1085,77 @@ class Digitalstrom extends utils.Adapter {
     }
 
     /**
+     * True for the internal helper states of dSS addons, which have no object on purpose.
+     *
+     * Measured on a dSS20 1.19.13: the window-states addon keeps "<dsuid>_open-tilded" per
+     * window handle, the climate control "queue-active" while it works through its queue.
+     * Neither is anything a user would read.
+     *
+     * @param {string} statename name of the state in the dSS
+     * @returns {boolean} true if the state is logged at debug only
+     */
+    static isAddonHelperState(statename) {
+        return statename === 'queue-active' || /_open-tilded$/.test(statename);
+    }
+
+    /**
+     * Logs a scene call that found no scene state, with zone, group and scene.
+     *
+     * Two kinds are expected and go to debug: a room or group that has no scene objects at
+     * all - the climate control calls the scenes of group 48 in every room at its switch
+     * times, also in rooms without heating - and a command such as Stop on group level,
+     * which only exists as a device scene state. Anything else is named once per run at
+     * info, then at debug.
+     *
+     * @param {any} data the callScene or undoScene event
+     */
+    logUnmappedSceneCall(data) {
+        const props = data.properties || {};
+        const source = data.source || {};
+        const stateMap = (this.dssStruct && this.dssStruct.stateMap) || {};
+        let key;
+        let what;
+        let expected = false;
+        if (source.isDevice) {
+            key = `device ${source.dSUID}.${props.sceneID}`;
+            what = `device ${source.dSUID}, scene ${props.sceneID}`;
+        } else {
+            const zone = source.isApartment ? '0' : props.zoneID;
+            const group = source.isApartment ? '0' : props.groupID;
+            key = `${zone}.${group}.${props.sceneID}`;
+            what = `zone ${zone}, group ${group}, scene ${props.sceneID}`;
+            if (!this.sceneGroupCache || this.sceneGroupCache.stateMap !== stateMap) {
+                // Built once per structure, not per call: the climate control alone calls
+                // group 48 in every room at each of its switch times
+                const groups = new Set();
+                Object.keys(stateMap).forEach(id => {
+                    const match = /^(\d+)\.(\d+)\.scenes\./.exec(id);
+                    match && groups.add(`${match[1]}.${match[2]}`);
+                });
+                this.sceneGroupCache = { stateMap, groups };
+            }
+            if (!this.sceneGroupCache.groups.has(`${zone}.${group}`)) {
+                what += ' - this room has no scene objects for that group';
+                expected = true;
+            } else if (Digitalstrom.isMomentaryScene(props.sceneID, group)) {
+                what += ' - a command scene, only devices have a state for it';
+                expected = true;
+            }
+        }
+        if (!this.unmappedSceneCalls) {
+            this.unmappedSceneCalls = new Set();
+        }
+        if (expected || this.unmappedSceneCalls.has(key)) {
+            this.log.debug(`${data.name || 'Scene call'} without scene state: ${what}`);
+            return;
+        }
+        this.unmappedSceneCalls.add(key);
+        this.log.info(
+            `${data.name || 'Scene call'} without scene state: ${what}. The scene is not mapped to an object here; further calls of it are logged at debug level.`,
+        );
+    }
+
+    /**
      * Wraps an event handler so that it parks its event while the objects are being built.
      *
      * ONLY for handlers whose event carries a LEVEL - a sensor reading, a state, a binary
@@ -1638,14 +1727,16 @@ class Digitalstrom extends utils.Adapter {
             const sourceDeviceId = dssStruct.stateMap[statename];
             if (!sourceDeviceId) {
                 // Helper states of dSS addons (e.g. "<dsuid>_open-tilded" of the
-                // window-states addon) have no ioBroker object by design - the
-                // window state itself arrives via binary input and device state.
-                // Any other state is named once per run: the first line says what is
+                // window-states addon, "queue-active" of the climate control) have no
+                // ioBroker object by design - the window state itself arrives via binary
+                // input and device state. Any other state is named once per run, an addon
+                // state as well - "operationmode.3.NotUsed" of the climate control used to
+                // stay at debug although nothing maps it: the first line says what is
                 // missing, every repeat is noise. A room crossing its passive cooling
                 // threshold repeated the same line four times in five hours. stateMap is
                 // built at startup, so a state the dSS added since then (a new user state,
                 // a room put under regulation) only needs a restart, not an issue.
-                if (data.name === 'addonStateChange' || this.unhandledStateNames.has(statename)) {
+                if (Digitalstrom.isAddonHelperState(statename) || this.unhandledStateNames.has(statename)) {
                     this.log.debug(`Unhandled State Change: ${statename}`);
                 } else {
                     this.unhandledStateNames.add(statename);
@@ -1854,8 +1945,8 @@ class Digitalstrom extends utils.Adapter {
                     const operationModeState = dssStruct.stateMap[`${data.properties.zoneID}.48.operationMode`];
                     operationModeState && this.setDssState(operationModeState, data.properties.sceneID);
                 }
-            } else {
-                !forwarded && this.log.info('INVALID scenecall');
+            } else if (!forwarded) {
+                this.logUnmappedSceneCall(data);
             }
 
             // When Scene is called on zone level we also update all groups in that zone
@@ -2080,22 +2171,15 @@ class Digitalstrom extends utils.Adapter {
     }
 
     /**
-     * Undoes the HTML escaping that older dSS firmware applied to every name it stored.
-     *
-     * The dSS ran each name set through its JSON API through escapeHTML() and handed the
-     * stored text out unchanged, so getCircuits answered "Schlafen &amp; Bad" (dss-mainline
-     * src/util.cpp escapeHTML(), src/web/handler/circuitrequesthandler.cpp setName). Current
-     * firmware answers "Schlafen & Bad". One pass on purpose: escapeHTML() replaced "&"
-     * first, so "&amp;lt;" was a literal "&lt;" and has to stay one. "&#39;" is accepted as
-     * the short spelling of the same apostrophe.
+     * Undoes the HTML escaping that older dSS firmware applied to every name it stored, see
+     * DSSStructure.decodeDssEntities(). The structure applies it to every name it builds,
+     * so the names handed to registerObjects() are already decoded.
      *
      * @param {string} text name as it was stored
      * @returns {string} the name as it was typed in the dSS
      */
     static decodeDssEntities(text) {
-        /** @type {Record<string, string>} */
-        const entities = { amp: '&', quot: '"', '#039': "'", '#39': "'", lt: '<', gt: '>' };
-        return text.replace(/&(amp|quot|#0?39|lt|gt);/g, (match, entity) => entities[entity]);
+        return DSSStructure.decodeDssEntities(text);
     }
 
     /**
@@ -2149,7 +2233,9 @@ class Digitalstrom extends utils.Adapter {
             // The stored name normally wins, the user may have renamed the object. An object
             // created while the dSS still escaped its names kept "Schlafen &amp; Bad" that way
             // forever. That name is written ONCE - from the next start on both are equal and
-            // the stored name wins again.
+            // the stored name wins again. The dSS may still answer with the escaped name
+            // (it keeps what old firmware stored), so the wanted name is decoded by the
+            // structure first; otherwise both would be equal and nothing would be repaired.
             const storedName = existing[id] && existing[id].common ? existing[id].common.name : undefined;
             const repairName = Digitalstrom.isDssEscapedName(storedName, obj.common && obj.common.name);
             if (repairName) {

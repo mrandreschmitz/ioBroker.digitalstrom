@@ -358,6 +358,37 @@ wird unter derselben MIT-Lizenz veröffentlicht; der ursprüngliche Copyright-Hi
 Der vollständige Changelog inklusive der Historie von Apollon77 steht in der englischen Fassung:
 [README.md](README.md#changelog). Hier die Einträge der gepflegten Versionen auf Deutsch.
 
+### 2.4.27 (2026-10-09)
+
+* **Namen, die der dSS noch mit HTML-Codes gespeichert hat, erscheinen mit den richtigen Zeichen.** 2.4.26
+  korrigierte einen solchen Namen nur, wenn der dSS ihn heute ohne die Codes meldet. Der dSS behält einen Namen aber
+  so, wie ältere Firmware ihn gespeichert hat, bis er neu gesetzt wird – `getCircuits` kann also weiter
+  `Büro &amp; Duschbad` liefern. Auf einer echten Installation behielten drei Klemmen-Ordner diesen Namen nach dem
+  Update, ohne dass eine Korrektur im Log stand. Jetzt wird jeder Name des dSS decodiert, bevor das Objekt entsteht;
+  die einmalige Korrektur aus 2.4.26 greift damit beim ersten Start, und das Log meldet sie. Ein Name, den Sie selbst
+  geändert haben, bleibt, und keine ID ändert sich
+* **`INVALID scenecall` ist weg.** Ein Szenenaufruf ohne Szenen-State wird mit Raum, Gruppe und Szene geloggt. Zwei
+  Fälle sind erwartet und stehen auf Debug: Die Heizungssteuerung ruft zu ihren Schaltzeiten die Szenen der Gruppe 48
+  in jedem Raum auf, auch in Räumen ohne Heizung, und ein Befehl wie Stop auf Gruppenebene existiert nur als
+  Szenen-State eines Geräts. Jeder andere Fall wird einmal pro Lauf auf Info gemeldet, danach auf Debug
+* **Zählerstände werden auf ganze Wattstunden gerundet.** `EnergyMeterValue` hatte Werte wie
+  `4009.7331175000004` kWh, jetzt `4009.733`. Gerundet wird der Gesamtstand, nicht der Schritt, es summiert sich also
+  nichts auf
+* **Unveränderte Messwerte werden nicht erneut geschrieben.** `PowerConsumption` und `EnergyMeterValue` werden alle
+  100 s abgefragt und bisher jedes Mal geschrieben, obwohl zwei Drittel der Leistungs- und ein Drittel der
+  Zählerwerte den vorigen Wert wiederholten. Sie werden jetzt bei einer Änderung geschrieben, der Zeitstempel dieser
+  States bewegt sich also nur noch mit einer Änderung; `info.apiActivity` zeigt, dass weiter gelesen wird
+* **Ein Wert, den ein anderer Adapter oder ein Skript in einen abgefragten State schreibt, wird wieder korrigiert.**
+  Der Adapter merkt sich, was in jedem State steht, damit eine Abfrage einen unveränderten Wert überspringen, einen
+  fremden aber korrigieren kann. Die Bestätigung eines fremden Schreibzugriffs landete unter der ID mit Namespace,
+  verglichen wurde ohne – ein solcher Wert fiel also nie auf. Das betraf auch den Abgleich der Geräteausgänge
+* **Das Debug-Log ist etwa halb so lang.** Ein Befehl (`ack = false`) steht weiter auf Debug; die Bestätigungen,
+  meist die eigenen Schreibzugriffe des Adapters und `info.apiActivity` alle 30 s, stehen auf Silly
+* **Ein unbekannter Addon-State wird einmal auf Info gemeldet.** States von dSS-Addons ohne Objekt, etwa
+  `operationmode.3.NotUsed` der Heizungssteuerung, waren nur im Debug-Log zu sehen. Sie werden jetzt wie jeder
+  andere unbekannte State einmal pro Lauf gemeldet. Die internen Hilfs-States `<dsuid>_open-tilded` und
+  `queue-active` bleiben auf Debug
+
 ### 2.4.26 (2026-09-26)
 
 * **Räume melden die Heizung nicht mehr als aktiv, solange der dSS es nicht weiß.** Solange er keine Information

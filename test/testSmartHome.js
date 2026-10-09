@@ -690,6 +690,32 @@ describe('Meter values through the Smart Home API', () => {
         });
     });
 
+    it('rounds to whole watt hours and skips unchanged readings, like the classic path', done => {
+        const struct = createStructure({
+            smartHome: {
+                getMeteringValues: async () => ({
+                    values: [
+                        { id: 'dsm-dsm-a-power', attributes: { value: 0 } },
+                        { id: 'dsm-dsm-a-energy', attributes: { value: 14435039223 } },
+                        { id: 'dsm-dsm-b-power', attributes: { value: 21 } },
+                        { id: 'dsm-dsm-b-energy', attributes: { value: 7200000 } },
+                    ],
+                }),
+            },
+        });
+        const options = [];
+        struct.setStateSafe = (id, value, opts) => {
+            struct.written.push({ id, value });
+            options.push(opts);
+        };
+        struct.updateMeterData(() => {
+            expect(struct.written[1]).to.deep.equal({ id: 'devices.dsm-a.EnergyMeterValue', value: 4009.733 });
+            expect(options, 'every meter write is a poll').to.have.lengthOf(4);
+            options.forEach(opts => expect(opts).to.deep.equal({ skipUnchanged: true }));
+            done();
+        });
+    });
+
     it('falls back to the classic API when the request fails', done => {
         const struct = createStructure({
             smartHome: {

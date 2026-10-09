@@ -233,6 +233,34 @@ It is published under the same MIT license; the original copyright notice is kep
 
 ## Changelog
 
+### 2.4.27 (2026-10-09)
+
+* **Names the dSS still stores with HTML codes are shown with the real characters.** 2.4.26 corrected such a name
+  only when the dSS reported it without the codes today. A dSS keeps a name the way old firmware stored it until it
+  is set again, so `getCircuits` can still answer `Büro &amp; Duschbad` - on a real installation three circuit
+  folders kept that name after the update, and no correction was logged. Every name from the dSS is now decoded
+  before its object is created, so the one-time correction of 2.4.26 takes effect at the first start and the log
+  says so. A name you changed yourself is not touched, and no ID changes
+* **`INVALID scenecall` is gone.** A scene call that finds no scene state is logged with zone, group and scene. Two
+  kinds are expected and go to debug: the climate control calls the scenes of group 48 in every room at its switch
+  times, also in rooms without heating, and a command such as Stop on group level only exists as a device scene
+  state. Any other one is named once per run at info, then at debug
+* **Energy meter values are rounded to whole watt hours.** `EnergyMeterValue` carried values such as
+  `4009.7331175000004` kWh, now it is `4009.733`. The total is rounded, not the step, so nothing adds up
+* **Unchanged meter readings are not written again.** `PowerConsumption` and `EnergyMeterValue` are polled every 100 s
+  and were written every time, although two thirds of the power readings and a third of the meter readings repeated
+  the value before. They are now written when the value changes, so the timestamp of these states only moves with a
+  change; `info.apiActivity` shows that the meters are still read
+* **A value another adapter or a script writes into a polled state is corrected again.** The adapter remembers what
+  is in each state so that a poll can skip an unchanged value but still correct a foreign one. The acknowledged echo
+  of a foreign write was stored under the ID with the namespace, the polls compared the ID without it, so such a
+  value was never noticed. This affected the reconciliation of the device outputs as well
+* **The debug log is about half as long.** A command (`ack = false`) is still logged at debug; the confirmations, mostly
+  the adapter's own writes and `info.apiActivity` every 30 s, are logged at silly
+* **An unknown addon state is named once at info.** States of dSS addons that have no object, such as
+  `operationmode.3.NotUsed` of the climate control, were only visible in a debug log. They are now reported once per
+  run like any other unknown state. The internal helper states `<dsuid>_open-tilded` and `queue-active` stay at debug
+
 ### 2.4.26 (2026-09-26)
 
 * **Rooms no longer report heating as active while the dSS does not know.** As long as it has no information,
